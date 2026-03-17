@@ -101,12 +101,18 @@ export default function Dashboard() {
               {myLog.map((r, i) => {
                 const won = r.winnerId === userTeamId;
                 const opp = won ? r.loserName : r.winnerName;
+                const mapsLabel = r.mapResults
+                  ? r.mapResults.map(m => m.short).join(" · ")
+                  : null;
                 return (
                   <tr key={i}>
                     <td className="muted">{r.stage}</td>
                     <td className={won ? "win" : "loss"}>{won ? `W vs ${opp}` : `L vs ${opp}`}</td>
-                    <td>{r.score}</td>
-                    <td>{r.standoutName ?? "—"}</td>
+                    <td>{r.score}{mapsLabel && <span className="muted" style={{fontSize:11,marginLeft:6}}>{mapsLabel}</span>}</td>
+                    <td>
+                      {r.standoutName ?? "—"}
+                      {r.standoutKD > 0 && <span className="muted" style={{fontSize:11,marginLeft:4}}>({r.standoutKD.toFixed(2)} K/D)</span>}
+                    </td>
                   </tr>
                 );
               })}
