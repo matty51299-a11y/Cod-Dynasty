@@ -176,17 +176,6 @@ export default function Dashboard({ setTab }) {
         </div>
       </div>
 
-      {/* ── Major Event Panel (shown before user enters tournament) ── */}
-      {isMajor && !isEntered && bracket && (
-        <MajorEventPanel
-          major={activeMajor}
-          majorIdx={majorIdx}
-          schedule={schedule}
-          userTeamId={userTeamId}
-          onEnter={enterTournament}
-        />
-      )}
-
       {/* ── Pre-Champs seeding preview ── */}
       {isPreChamps && (
         <div className="prechamps-info-box">
@@ -332,74 +321,6 @@ export default function Dashboard({ setTab }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-// ── Major Event Announcement Panel ────────────────────────────────────────────
-function MajorEventPanel({ major, majorIdx, schedule, userTeamId, onEnter }) {
-  const bracket = major.bracket;
-  if (!bracket) return null;
-
-  const seedStandings = majorIdx === 4
-    ? (schedule.standings ?? {})
-    : (schedule.stageStandings ?? schedule.standings ?? {});
-
-  const userSeed = bracket.seeds?.indexOf(userTeamId) ?? -1;
-  const userQF   = bracket.rounds?.[0]?.matches?.find(m => m.a === userTeamId || m.b === userTeamId);
-  const userOpp  = userQF ? (userQF.a === userTeamId ? userQF.b : userQF.a) : null;
-
-  return (
-    <div className="major-event-panel">
-      <div className="mep-header">
-        <div className="mep-badge-row">
-          <span className="mep-badge">TOURNAMENT</span>
-          {majorIdx === 4 && <span className="mep-badge mep-badge-champs">CHAMPIONSHIP</span>}
-        </div>
-        <h2 className="mep-title">{major.name.toUpperCase()}</h2>
-        <span className="mep-season muted">Season {schedule.season}</span>
-      </div>
-
-      {userSeed >= 0 && (
-        <div className="mep-user-matchup">
-          <div className="mep-um-label">YOUR OPENING MATCH</div>
-          <div className="mep-um-teams">
-            <span style={{ color: teamColor(userTeamId) }}>
-              #{userSeed + 1} {teamTag(userTeamId)}
-            </span>
-            <span className="mep-um-vs">vs</span>
-            {userOpp
-              ? <span style={{ color: teamColor(userOpp) }}>
-                  #{(bracket.seeds.indexOf(userOpp) + 1)} {teamTag(userOpp)}
-                </span>
-              : <span className="muted">TBD</span>
-            }
-          </div>
-        </div>
-      )}
-
-      <div className="mep-seeds">
-        <div className="mep-seeds-label">QUALIFIED TEAMS</div>
-        <div className="mep-seeds-grid">
-          {bracket.seeds.map((id, i) => {
-            const rec    = seedStandings[id] ?? { wins: 0, losses: 0, points: 0 };
-            const isUser = id === userTeamId;
-            return (
-              <div key={id} className={`mep-seed-row ${isUser ? "mep-seed-you" : ""}`}>
-                <span className="mep-seed-num">{i + 1}</span>
-                <span className="mep-seed-dot" style={{ background: teamColor(id) }} />
-                <span className="mep-seed-name">{teamName(id)}</span>
-                <span className="mep-seed-rec muted">{rec.wins}W–{rec.losses}L · {rec.points}pts</span>
-                {isUser && <span className="you-badge">YOU</span>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <button className="btn-primary mep-enter-btn" onClick={onEnter}>
-        Enter Tournament →
-      </button>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import FreeAgency from "./components/FreeAgency.jsx";
 import Prospects from "./components/Prospects.jsx";
 import MatchLog from "./components/MatchLog.jsx";
 import MajorBracket from "./components/MajorBracket.jsx";
+import MajorEntryOverlay from "./components/MajorEntryOverlay.jsx";
 import OffseasonReport from "./components/OffseasonReport.jsx";
 import { CDL_TEAMS } from "./data/teams.js";
 
@@ -122,6 +123,9 @@ export default function App() {
           );
         })}
       </nav>
+
+      {/* Major tournament entry overlay — always rendered above everything */}
+      <MajorEntryOverlay setTab={setTab} />
 
       {/* Page content */}
       <main className="main-content">

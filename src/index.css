@@ -2450,3 +2450,413 @@ body { margin: 0; }
   margin-bottom: 3px;
   font-size: 20px;
 }
+
+/* ── MAJOR ENTRY OVERLAY ─────────────────────────────────────────────────────── */
+
+.meo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(5, 5, 10, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: meo-backdrop-in 0.3s ease both;
+}
+
+@keyframes meo-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.meo-card {
+  background: linear-gradient(155deg, #1c1d2e 0%, #0e0f14 70%);
+  border: 1px solid #2e3048;
+  border-radius: 18px;
+  width: min(560px, 92vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 40px 36px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  animation: meo-card-in 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.meo-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 40%, #a78bfa 60%, transparent);
+  border-radius: 0 0 4px 4px;
+}
+
+@keyframes meo-card-in {
+  from { opacity: 0; transform: scale(0.86) translateY(24px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Staggered fade-up animation driven by --stagger index */
+.anim-stagger {
+  animation: meo-fade-up 0.4s ease both;
+  animation-delay: calc(var(--stagger, 0) * 70ms + 100ms);
+}
+
+@keyframes meo-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Badge row */
+.meo-badges {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.meo-badge-event {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: var(--accent);
+  background: rgba(79, 142, 247, 0.12);
+  border: 1px solid rgba(79, 142, 247, 0.28);
+  padding: 4px 13px;
+  border-radius: 20px;
+}
+
+.meo-badge-champs {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: var(--yellow);
+  background: rgba(255, 235, 59, 0.1);
+  border: 1px solid rgba(255, 235, 59, 0.28);
+  padding: 4px 13px;
+  border-radius: 20px;
+}
+
+/* Title */
+.meo-title {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: var(--text-head);
+  text-align: center;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.meo-season {
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+/* Opening match box */
+.meo-user-match {
+  width: 100%;
+  background: rgba(79, 142, 247, 0.05);
+  border: 1px solid rgba(79, 142, 247, 0.22);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 22px;
+}
+
+.meo-um-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: var(--accent);
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.meo-um-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.meo-um-team {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+}
+
+.meo-um-team-opp {
+  justify-content: flex-end;
+}
+
+.meo-um-seed {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.meo-um-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.meo-um-you {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  background: rgba(79, 142, 247, 0.15);
+  border: 1px solid rgba(79, 142, 247, 0.25);
+  padding: 2px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.meo-um-vs {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Seeds block */
+.meo-seeds-block {
+  width: 100%;
+  margin-bottom: 26px;
+}
+
+.meo-seeds-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.meo-seeds-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 14px;
+}
+
+.meo-seed-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+
+.meo-seed-you {
+  background: rgba(79, 142, 247, 0.08);
+  border: 1px solid rgba(79, 142, 247, 0.18);
+}
+
+.meo-seed-num {
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 11px;
+  width: 14px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.meo-seed-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.meo-seed-name {
+  flex: 1;
+  color: var(--text-head);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meo-seed-rec {
+  color: var(--text-dim);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* Enter CTA */
+.meo-enter-btn {
+  width: 100%;
+  padding: 15px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #4f8ef7 0%, #7c3aed 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+  box-shadow: 0 4px 24px rgba(79, 142, 247, 0.25);
+}
+
+.meo-enter-btn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 30px rgba(79, 142, 247, 0.35);
+}
+
+.meo-enter-btn:active { transform: translateY(0); }
+
+
+/* ── CINEMATIC MAJOR VIEW (post-entry) ───────────────────────────────────────── */
+
+.mv-hero {
+  background: linear-gradient(160deg, #141025 0%, #0f0f18 50%, #0e0f14 100%);
+  border: 1px solid #2a2b42;
+  border-radius: 14px;
+  padding: 34px 28px 28px;
+  margin-bottom: 18px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.mv-hero::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 15%; right: 15%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 40%, #a78bfa 60%, transparent);
+}
+
+/* Subtle glow radial behind text */
+.mv-hero::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  height: 140px;
+  background: radial-gradient(ellipse, rgba(79, 142, 247, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.mv-hero-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  color: var(--green);
+  background: rgba(0, 230, 118, 0.08);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+  padding: 4px 13px;
+  border-radius: 20px;
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.mv-hero-live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+  animation: pulse 1.5s ease infinite;
+}
+
+.mv-hero-name {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: var(--text-head);
+  line-height: 1;
+  margin-bottom: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.mv-hero-round {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  position: relative;
+  z-index: 1;
+}
+
+.mv-hero-count {
+  font-size: 12px;
+  color: var(--text-dim);
+  position: relative;
+  z-index: 1;
+}
+
+/* Seedings collapse at bottom of major view */
+.mv-seedings-collapse {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mv-seedings-summary {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  cursor: pointer;
+  background: var(--bg2);
+  user-select: none;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.mv-seedings-summary::-webkit-details-marker { display: none; }
+.mv-seedings-collapse[open] .mv-seedings-summary { border-bottom: 1px solid var(--border); }
+
+.mv-seedings-collapse .seed-list {
+  background: var(--bg2);
+  border: none;
+  border-radius: 0;
+  margin: 0;
+}
+
+/* Make NextMatchCard more prominent in tournament mode */
+.major-page .next-match-card {
+  border-width: 1px;
+  margin-bottom: 20px;
+}
+
+.major-page .nmc-matchup {
+  padding: 20px 0;
+}
+
+.major-page .nmc-name {
+  font-size: 22px;
+}
+
+/* Bracket round sections: cleaner spacing */
+.bracket-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

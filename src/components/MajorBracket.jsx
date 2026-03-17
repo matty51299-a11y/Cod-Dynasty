@@ -112,17 +112,17 @@ function MajorIntro({ major, majorIdx, schedule, userTeamId, onEnter }) {
   );
 }
 
-// ── Event banner (shown when major is live) ───────────────────────────────────
-function EventBanner({ major, roundName }) {
+// ── Cinematic hero header (shown when major is live) ──────────────────────────
+const TEAMS_REMAINING = [8, 4, 2];
+
+function MvHero({ major, roundName, curRound }) {
+  const remaining = curRound >= 0 ? (TEAMS_REMAINING[curRound] ?? null) : null;
   return (
-    <div className="major-event-banner">
-      <div className="meb-left">
-        <span className="meb-live">▶ LIVE</span>
-        <div className="meb-text">
-          <span className="meb-name">{major.name.toUpperCase()}</span>
-          {roundName && <span className="meb-round">{roundName}</span>}
-        </div>
-      </div>
+    <div className="mv-hero">
+      <div className="mv-hero-live">LIVE</div>
+      <div className="mv-hero-name">{major.name.toUpperCase()}</div>
+      {roundName && <div className="mv-hero-round">{roundName}</div>}
+      {remaining && <div className="mv-hero-count">{remaining} teams remain</div>}
     </div>
   );
 }
@@ -338,11 +338,15 @@ function MajorView({ major, majorIdx, isActive, schedule, userTeamId, dispatch, 
     );
   }
 
+  const seedStandings = majorIdx === 4
+    ? (schedule.standings ?? {})
+    : (schedule.stageStandings ?? schedule.standings ?? {});
+
   return (
     <div className="major-view">
-      {/* Event banner — only while live */}
+      {/* Cinematic hero — only while live */}
       {isActive && !major.completed && (
-        <EventBanner major={major} roundName={roundName} />
+        <MvHero major={major} roundName={roundName} curRound={curRound} />
       )}
 
       {/* Next match spotlight with integrated sim controls — only while live */}
@@ -363,18 +367,6 @@ function MajorView({ major, majorIdx, isActive, schedule, userTeamId, dispatch, 
         </div>
       )}
 
-      {/* Seedings — use stageStandings for regular Majors, cumulative for Champs */}
-      {bracket.seeds && (
-        <SeedList
-          seeds={bracket.seeds}
-          standings={
-            schedule.majorIdx === 4
-              ? (schedule.standings ?? {})
-              : (schedule.stageStandings ?? schedule.standings ?? {})
-          }
-        />
-      )}
-
       {/* Rounds */}
       <div className="bracket-rounds">
         {bracket.rounds.map((round, ri) => (
@@ -390,6 +382,14 @@ function MajorView({ major, majorIdx, isActive, schedule, userTeamId, dispatch, 
           />
         ))}
       </div>
+
+      {/* Seedings — demoted to secondary section at bottom */}
+      {bracket.seeds && (
+        <details className="mv-seedings-collapse">
+          <summary className="mv-seedings-summary">Seedings ▾</summary>
+          <SeedList seeds={bracket.seeds} standings={seedStandings} />
+        </details>
+      )}
     </div>
   );
 }
