@@ -11,6 +11,7 @@
 import { simMatch } from "./matchSim.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import { runProgression } from "./progression.js";
+import { runAIMajorRosterWindow, runAIOffseasonRosterWindow } from "./rosterAI.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
 function seededRng(seed) {
@@ -164,6 +165,9 @@ function _simOneMajorMatch(schedule, gameState) {
 // Internal: advance season phase after a major completes
 function _advanceMajorPhase(schedule, gameState) {
   const majorIdx = schedule.currentStage;
+  let nextState = gameState;
+
+  if (majorIdx <= 1) nextState = runAIMajorRosterWindow(nextState, majorIdx);
   if (majorIdx === 0) {
     // Major 1 → Stage 2
     schedule.phase = "stage";
@@ -178,6 +182,8 @@ function _advanceMajorPhase(schedule, gameState) {
     // Championship → Offseason
     schedule.phase = "offseason";
   }
+
+  return nextState;
 }
 
 // ── PUBLIC: Simulate one major match ─────────────────────────────────────────
@@ -189,9 +195,10 @@ export function simNextMajorMatch(gameState) {
   if (!major || major.completed) return gameState;
 
   const { allComplete } = _simOneMajorMatch(schedule, gameState);
-  if (allComplete) _advanceMajorPhase(schedule, gameState);
+  let nextState = gameState;
+  if (allComplete) nextState = _advanceMajorPhase(schedule, gameState);
 
-  return { ...gameState, schedule: { ...schedule } };
+  return { ...nextState, schedule: { ...schedule } };
 }
 
 // ── PUBLIC: Simulate all remaining matches in the current round ───────────────
@@ -221,7 +228,7 @@ export function simMajorRound(gameState) {
 
     const { allComplete } = _simOneMajorMatch(schedule, gameState);
     if (allComplete) {
-      _advanceMajorPhase(schedule, gameState);
+      gameState = _advanceMajorPhase(schedule, gameState);
       break;
     }
   }
@@ -242,7 +249,7 @@ export function simMajor(gameState) {
   while (!schedule.majors[targetIdx].completed && safety++ < 100) {
     const { allComplete } = _simOneMajorMatch(schedule, gameState);
     if (allComplete) {
-      _advanceMajorPhase(schedule, gameState);
+      gameState = _advanceMajorPhase(schedule, gameState);
       break;
     }
   }
@@ -368,7 +375,7 @@ export function advanceOffseason(gameState) {
   const { updatedPlayers, updatedProspects, progressionLog } =
     runProgression(agedPlayers, agedProspects, standings, newSeason);
 
-  return {
+  const withProgression = {
     ...gameState,
     players:        updatedPlayers,
     prospects:      updatedProspects,
@@ -376,6 +383,8 @@ export function advanceOffseason(gameState) {
     schedule:       buildSeason(newSeason),
     season:         newSeason,
   };
+
+  return runAIOffseasonRosterWindow(withProgression);
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
