@@ -51,6 +51,13 @@
 - Components: role balance (0–25), teamwork average (0–25), ego clash penalty (0 to −20), experience bonus (0–20), leadership bonus (0–10)
 - `chemLabel()` returns text ("Toxic", "Low", "OK", "Good", "Great", "Elite")
 
+### AI Roster Engine (`src/engine/rosterAI.js`)
+- Team contexts are persisted in save state (`teamContexts`) with philosophy + behavior traits: `win_now`, `youth_upside`, `chemistry_stability`, `balanced_value`, `high_risk_gamble`
+- Team evaluation computes pressure from standings rank, major placement, roster chemistry, average age, average overall, and upside (`potential - overall`)
+- Decision model chooses no move / 1 / 2 / rare 3-player reset with philosophy and loyalty/volatility variance so bad teams do not react identically
+- Candidate selection weights role fit, chemistry delta, age, upside, and philosophy boosts; under-pressure/aging/low-upside teams get stronger Challengers call-up bias
+- Logs window activity to `rosterMovesLog` for debugging and multi-season verification
+
 ### Season Engine (`src/engine/seasonEngine.js`)
 - `buildSeason(n)` — creates stage + major schedule for season n
 - `simNextMatch`, `simMatchday` (up to 6 matches, no team plays twice per matchday), `simStage`
@@ -177,9 +184,10 @@
 ## 3. Known Issues / Rough Edges
 
 ### Simulation
-- **AI roster management is non-existent**: CPU teams never sign free agents, never release players, never adjust their rosters. Over multiple seasons, teams keep the same players regardless of age/decline. This becomes increasingly unrealistic.
 - **Form stat does nothing during seasons**: `form` is read by `teamStrength()` but never updated during stage play. It resets to 70 at every offseason. Hot/cold streaks don't exist.
 - **No CPU/AI major bracket representation**: All 12 teams' players age and develop, but only the user manages their roster. No concept of CPU team building or budget.
+- **AI roster movement now exists**: CPU teams evaluate results after Major 1, Major 2, and in the offseason, then decide no move / 1 move / 2 moves / rare reset based on pressure + team philosophy + volatility.
+- **Challengers call-ups are now integrated**: AI teams can sign real Challengers prospects directly, with scoring based on role fit, age, potential/upside, chemistry impact, and philosophy fit (not just overall).
 
 ### League / Season Structure
 - **No relegation or promotion system**: The same 12 teams compete every season forever.
@@ -235,41 +243,3 @@
 - `src/engine/seasonEngine.js` — `advanceOffseason()` must age players BEFORE calling `runProgression()`, not after
 
 ### State Shape (key fields)
-```
-state = {
-  userTeamId: string,
-  season: number,
-  players: Player[],       // all signed pros + moved prospects
-  prospects: Prospect[],   // unsigned challengers only
-  schedule: {
-    season, phase, currentStage, currentMatchday,
-    stages: [{ name, matches: [{ a, b, played, result }] }],
-    majors: [{ name, bracket, completed }],
-    standings: { [teamId]: { wins, losses, points } },
-    matchLog: Result[],
-  },
-  progressionLog: ProgressionEntry[] | undefined,
-  notifications: string[],
-}
-```
-
-### Seeded PRNG
-- All randomness uses the same LCG: `s = (s * 1664525 + 1013904223) & 0xffffffff`
-- Match seeds are deterministic from season/stage/match index — same seed = same result
-- Progression seed: `season * 77777 + 13`
-- Prospect generation seed: passed in from `Date.now() % 999983` at new game
-
-### CSS Variables (do not rename)
-```
---bg, --bg2, --bg3          (dark backgrounds, light to dark)
---border                    (subtle dividers)
---text, --text-dim, --text-head
---accent                    (#4f8ef7 blue)
---green (#00e676), --red (#ef5350), --yellow (#ffeb3b)
-```
-
-### Deployment
-- `npm run build` → outputs to `dist/`
-- Vercel: configured via `vercel.json` (framework: vite, outputDirectory: dist)
-- Netlify: configured via `netlify.toml` (publish: dist, SPA redirect rule)
-- No environment variables required; everything runs client-side
