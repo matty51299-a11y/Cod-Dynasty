@@ -1,33 +1,78 @@
 // src/components/Standings.jsx
-// Shows full league standings table sorted by points,
-// plus the major bracket results when available.
+// Shows league standings table sorted by points.
+// During stage play → stageStandings (per-stage, resets each stage).
+// During offseason / Champs seeding → cumulative standings.
 
+import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 
 export default function Standings() {
   const { state } = useGame();
+  const [showCumulative, setShowCumulative] = useState(false);
   if (!state) return null;
 
   const { schedule, userTeamId } = state;
-  const standings = schedule.standings ?? {};
+  const phase = schedule.phase;
+
+  // During stage/major: default to per-stage standings; toggle to season total.
+  // During preChamps/offseason: always use cumulative.
+  const isStagePhase = phase === "stage" || phase === "major";
+  const useStage = isStagePhase && !showCumulative;
+
+  const displayStandings = useStage
+    ? (schedule.stageStandings ?? schedule.standings ?? {})
+    : (schedule.standings ?? {});
 
   const sorted = CDL_TEAMS
     .map(team => ({
       team,
-      record: standings[team.id] ?? { wins: 0, losses: 0, points: 0 },
+      record: displayStandings[team.id] ?? { wins: 0, losses: 0, points: 0 },
     }))
     .sort((a, b) => b.record.points - a.record.points);
 
+  const stageIdx  = schedule.stageIdx  ?? schedule.currentStage ?? 0;
+  const majorIdx  = schedule.majorIdx  ?? 0;
+  const phaseLabel =
+    phase === "stage"       ? schedule.stages?.[stageIdx]?.name
+    : phase === "major"     ? schedule.majors?.[majorIdx]?.name
+    : phase === "preChamps" ? "Pre-Championship Window"
+    : "Offseason";
+
   return (
     <div className="standings-page">
-      <h2>League Standings – Season {state.season}</h2>
-      <p className="muted">Phase: {
-        schedule.phase === "stage"     ? schedule.stages?.[schedule.stageIdx ?? schedule.currentStage ?? 0]?.name
-        : schedule.phase === "major"   ? schedule.majors?.[schedule.majorIdx ?? schedule.currentStage ?? 0]?.name
-        : schedule.phase === "preChamps" ? "Pre-Championship Window"
-        : "Offseason"
-      }</p>
+      <div className="standings-header-row">
+        <div>
+          <h2>League Standings – Season {state.season}</h2>
+          <p className="muted">Phase: {phaseLabel}</p>
+        </div>
+        {isStagePhase && (
+          <div className="standings-toggle">
+            <button
+              className={`stg-toggle-btn ${!showCumulative ? "active" : ""}`}
+              onClick={() => setShowCumulative(false)}
+            >
+              {phase === "major"
+                ? `${schedule.stages?.[stageIdx]?.name ?? "Stage"} (seeding)`
+                : "This Stage"}
+            </button>
+            <button
+              className={`stg-toggle-btn ${showCumulative ? "active" : ""}`}
+              onClick={() => setShowCumulative(true)}
+            >
+              Season Total
+            </button>
+          </div>
+        )}
+      </div>
+
+      {useStage && (
+        <p className="muted standings-note">
+          {phase === "major"
+            ? "Showing the stage standings used to seed this bracket. Season total is used for Champs seeding."
+            : "Per-stage record — resets between stages. Cumulative season pts seed the Championship."}
+        </p>
+      )}
 
       <table className="standings-table">
         <thead>
@@ -59,13 +104,13 @@ export default function Standings() {
       {/* Show major bracket results */}
       {schedule.majors?.map((major, i) => {
         if (!major.bracket) return null;
-        return <MajorBracket key={i} major={major} />;
+        return <MajorBracketSummary key={i} major={major} />;
       })}
     </div>
   );
 }
 
-function MajorBracket({ major }) {
+function MajorBracketSummary({ major }) {
   const { bracket } = major;
   if (!bracket?.rounds) return null;
 

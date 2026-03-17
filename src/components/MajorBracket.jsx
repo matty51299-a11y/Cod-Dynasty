@@ -35,9 +35,14 @@ function currentRoundIdx(bracket) {
 }
 
 // ── Major Intro (tournament start screen) ─────────────────────────────────────
-function MajorIntro({ major, schedule, userTeamId, onEnter }) {
+function MajorIntro({ major, majorIdx, schedule, userTeamId, onEnter }) {
   const bracket = major.bracket;
   if (!bracket) return null;
+
+  // Regular Majors (0-3) seeded by stageStandings; Champs by cumulative standings
+  const seedingStandings = majorIdx === 4
+    ? (schedule.standings ?? {})
+    : (schedule.stageStandings ?? schedule.standings ?? {});
 
   return (
     <div className="major-intro">
@@ -54,7 +59,7 @@ function MajorIntro({ major, schedule, userTeamId, onEnter }) {
           <div className="mi-section-label">QUALIFIED TEAMS</div>
           <div className="mi-seeds">
             {bracket.seeds.map((id, i) => {
-              const rec    = schedule.standings[id] ?? { wins: 0, losses: 0, points: 0 };
+              const rec    = seedingStandings[id] ?? { wins: 0, losses: 0, points: 0 };
               const isUser = id === userTeamId;
               return (
                 <div key={id} className={`mi-seed-row ${isUser ? "mi-seed-user" : ""}`}>
@@ -292,7 +297,7 @@ function RoundSection({ round, bracket, isCurrentRound, userTeamId, expandedKey,
 }
 
 // ── MajorView ─────────────────────────────────────────────────────────────────
-function MajorView({ major, isActive, schedule, userTeamId, dispatch, isEntered, onEnter }) {
+function MajorView({ major, majorIdx, isActive, schedule, userTeamId, dispatch, isEntered, onEnter }) {
   const [expandedKey, setExpandedKey] = useState(null);
   const bracket = major.bracket;
 
@@ -314,6 +319,7 @@ function MajorView({ major, isActive, schedule, userTeamId, dispatch, isEntered,
     return (
       <MajorIntro
         major={major}
+        majorIdx={majorIdx}
         schedule={schedule}
         userTeamId={userTeamId}
         onEnter={onEnter}
@@ -345,9 +351,16 @@ function MajorView({ major, isActive, schedule, userTeamId, dispatch, isEntered,
         </div>
       )}
 
-      {/* Seedings */}
+      {/* Seedings — use stageStandings for regular Majors, cumulative for Champs */}
       {bracket.seeds && (
-        <SeedList seeds={bracket.seeds} standings={schedule.standings} />
+        <SeedList
+          seeds={bracket.seeds}
+          standings={
+            schedule.majorIdx === 4
+              ? (schedule.standings ?? {})
+              : (schedule.stageStandings ?? schedule.standings ?? {})
+          }
+        />
       )}
 
       {/* Rounds */}
