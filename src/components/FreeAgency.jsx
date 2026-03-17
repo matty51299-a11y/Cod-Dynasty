@@ -1,0 +1,124 @@
+// src/components/FreeAgency.jsx
+// Lists all players currently without a team (free agents from the pro pool).
+// Player can sign them to their team as a starter or sub.
+
+import { useState } from "react";
+import { useGame } from "../store/gameStore.jsx";
+
+const RATING_KEYS = ["gunny","awareness","objective","searchIQ","clutch","teamwork","composure","adaptability"];
+
+function ratingColor(v) {
+  if (v >= 90) return "#00e676";
+  if (v >= 80) return "#69f0ae";
+  if (v >= 70) return "#ffeb3b";
+  if (v >= 60) return "#ffa726";
+  return "#ef5350";
+}
+
+export default function FreeAgency() {
+  const { state, dispatch } = useGame();
+  const [sortKey, setSortKey] = useState("overall");
+  const [roleFilter, setRoleFilter] = useState("All");
+  const [signAs, setSignAs] = useState({}); // playerId -> "starter" | "sub"
+
+  if (!state) return null;
+
+  const { players, userTeamId } = state;
+
+  // Free agents = no team from the pro roster
+  const freeAgents = players
+    .filter(p => !p.teamId && !p.isProspect)
+    .sort((a, b) => b[sortKey] - a[sortKey]);
+
+  const roles = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];
+  const filtered = roleFilter === "All" ? freeAgents : freeAgents.filter(p => p.primary === roleFilter);
+
+  const myRoster = players.filter(p => p.teamId === userTeamId);
+  const starterCount = myRoster.filter(p => !p.isSub).length;
+  const subCount = myRoster.filter(p => p.isSub).length;
+
+  function handleSign(playerId) {
+    const slot = signAs[playerId] || "starter";
+    dispatch({ type: "SIGN_PLAYER", playerId, slotType: slot });
+  }
+
+  return (
+    <div className="fa-page">
+      <h2>Free Agency</h2>
+      <p className="muted">
+        Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub.
+      </p>
+
+      <div className="filters">
+        <div className="filter-group">
+          <label>Role:</label>
+          {roles.map(r => (
+            <button key={r} className={`filter-btn ${roleFilter === r ? "active" : ""}`}
+              onClick={() => setRoleFilter(r)}>{r}</button>
+          ))}
+        </div>
+        <div className="filter-group">
+          <label>Sort:</label>
+          {["overall","gunny","clutch","searchIQ","teamwork"].map(k => (
+            <button key={k} className={`filter-btn ${sortKey === k ? "active" : ""}`}
+              onClick={() => setSortKey(k)}>{k}</button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="muted">No free agents available.</p>
+      ) : (
+        <table className="roster-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Age</th>
+              <th>Primary Role</th>
+              <th>OVR</th>
+              <th>POT</th>
+              <th>Gunny</th>
+              <th>Clutch</th>
+              <th>S.IQ</th>
+              <th>T.Work</th>
+              <th>Salary</th>
+              <th>Sign As</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(p => (
+              <tr key={p.id}>
+                <td className="player-name">{p.name}</td>
+                <td>{p.age}</td>
+                <td><span className="role-pill">{p.primary}</span></td>
+                <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
+                <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
+                <td style={{ color: ratingColor(p.gunny) }}>{p.gunny}</td>
+                <td style={{ color: ratingColor(p.clutch) }}>{p.clutch}</td>
+                <td style={{ color: ratingColor(p.searchIQ) }}>{p.searchIQ}</td>
+                <td style={{ color: ratingColor(p.teamwork) }}>{p.teamwork}</td>
+                <td className="salary">${(p.salary / 1000).toFixed(0)}k</td>
+                <td>
+                  <select
+                    value={signAs[p.id] || "starter"}
+                    onChange={e => setSignAs({ ...signAs, [p.id]: e.target.value })}
+                    className="slot-select"
+                  >
+                    <option value="starter">Starter</option>
+                    <option value="sub">Sub</option>
+                  </select>
+                </td>
+                <td>
+                  <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>
+                    Sign
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
