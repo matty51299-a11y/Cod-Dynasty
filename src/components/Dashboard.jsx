@@ -60,6 +60,14 @@ export default function Dashboard({ setTab }) {
         .slice(0, 5)
     : [];
 
+  // Next unplayed match for user's team in current stage
+  const nextMatchInStage = isStage && currentStage
+    ? currentStage.matches.find(m => !m.played && (m.a === userTeamId || m.b === userTeamId))
+    : null;
+  const nextOppId   = nextMatchInStage ? (nextMatchInStage.a === userTeamId ? nextMatchInStage.b : nextMatchInStage.a) : null;
+  const nextOppTeam = nextOppId ? CDL_TEAMS.find(t => t.id === nextOppId) : null;
+  const nextOppRec  = nextOppId ? (stageStandings[nextOppId] ?? { wins: 0, losses: 0 }) : null;
+
   const myLog = [...(schedule.matchLog || [])]
     .reverse()
     .filter(r => r.winnerId === userTeamId || r.loserId === userTeamId)
@@ -231,11 +239,29 @@ export default function Dashboard({ setTab }) {
         </div>
       )}
 
+      {/* ── Your Next Match preview (stage only) ── */}
+      {isStage && nextOppTeam && (
+        <div className="next-match-preview">
+          <div className="nmp-label">YOUR NEXT MATCH · {stageName}</div>
+          <div className="nmp-row">
+            <div className="nmp-team-side">
+              <span className="nmp-you-name" style={{ color: team?.color }}>{team?.name}</span>
+              <span className="nmp-record-you muted">{myStage.wins}W–{myStage.losses}L</span>
+            </div>
+            <span className="nmp-vs">vs</span>
+            <div className="nmp-team-side nmp-team-right">
+              <span className="nmp-opp-name" style={{ color: nextOppTeam.color }}>{nextOppTeam.name}</span>
+              <span className="nmp-record-opp muted">{nextOppRec.wins}W–{nextOppRec.losses}L</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Recent Results ── */}
       <div className="section">
         <h3>
           Recent Results
-          <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}> — click for series detail</span>
+          <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}> — click for breakdown</span>
         </h3>
         {myLog.length === 0 ? (
           <p className="muted">No matches played yet.</p>
@@ -244,25 +270,44 @@ export default function Dashboard({ setTab }) {
             {myLog.map((r, i) => {
               const won    = r.winnerId === userTeamId;
               const opp    = won ? r.loserName : r.winnerName;
+              const oppId  = won ? r.loserId : r.winnerId;
               const isOpen = expandedIdx === i;
-              const maps   = r.mapResults?.map(m => m.short).join(" · ") ?? null;
               return (
                 <div
                   key={i}
-                  className={`recent-result-card ${won ? "rr-win" : "rr-loss"} ${isOpen ? "rr-open" : ""}`}
+                  className={`result-card ${won ? "rc-user-win" : "rc-user-loss"}`}
                   onClick={() => toggleRow(i)}
                 >
-                  <div className="rr-summary">
-                    <span className={`rr-wl ${won ? "win" : "loss"}`}>{won ? "W" : "L"}</span>
-                    <span className="rr-opp">vs {opp}</span>
-                    <span className="rr-score">{r.score}</span>
-                    {maps && <span className="rr-maps muted">{maps}</span>}
-                    <span className="rr-standout muted">
-                      ⭐ {r.standoutName ?? "—"}
-                      {r.standoutKD > 0 && ` · ${r.standoutKD.toFixed(2)} K/D`}
-                    </span>
-                    <span className="rr-stage muted">{r.stage}</span>
-                    <span className="rr-chevron">{isOpen ? "▲" : "▼"}</span>
+                  <div className="rc-main">
+                    <div className="rc-row-top">
+                      <span className={`rc-outcome ${won ? "rco-win" : "rco-loss"}`}>{won ? "W" : "L"}</span>
+                      <div className="rc-teams">
+                        <span className="rc-winner" style={{ color: won ? (team?.color ?? "#fff") : teamColor(oppId) }}>
+                          {won ? (team?.name ?? userTeamId) : opp}
+                        </span>
+                        <span className="rc-score">{r.score}</span>
+                        <span className="rc-loser" style={{ color: won ? teamColor(oppId) : (team?.color ?? "#fff"), opacity: 0.7 }}>
+                          {won ? opp : (team?.name ?? userTeamId)}
+                        </span>
+                      </div>
+                      <span className="rc-chevron">{isOpen ? "▲" : "▼"}</span>
+                    </div>
+                    <div className="rc-row-meta">
+                      <span className="rc-context">{r.stage}</span>
+                      {r.standoutName && (
+                        <span className="rc-standout">
+                          ⭐ <strong>{r.standoutName}</strong>
+                          {r.standoutKD > 0 && <span className="rc-standout-kd"> {r.standoutKD.toFixed(2)} K/D</span>}
+                        </span>
+                      )}
+                      {r.mapResults && r.mapResults.length > 0 && (
+                        <span className="rc-map-chips">
+                          {r.mapResults.map((m, mi) => (
+                            <span key={mi} className="rc-map-chip">{m.short}</span>
+                          ))}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {isOpen && (
                     <div onClick={e => e.stopPropagation()}>

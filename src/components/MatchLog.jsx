@@ -1,14 +1,14 @@
 // src/components/MatchLog.jsx
-// Full season match log as expandable cards.
-// Click any card header to show/hide the series breakdown + player stats.
+// Full season match log as result cards.
+// Click any card to show/hide the full series breakdown + player stats.
 
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 
-function tag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
-function color(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; }
+function nameOf(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
+function colorOf(id){ return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; }
 
 export default function MatchLog() {
   const { state } = useGame();
@@ -16,69 +16,78 @@ export default function MatchLog() {
 
   if (!state) return null;
 
-  const log = [...(state.schedule.matchLog || [])].reverse();
+  const log    = [...(state.schedule.matchLog || [])].reverse();
+  const userId = state.userTeamId;
 
-  function toggle(i) {
-    setExpanded(prev => (prev === i ? null : i));
-  }
+  function toggle(i) { setExpanded(prev => (prev === i ? null : i)); }
 
   return (
     <div className="matchlog-page">
       <h2>Match Log – Season {state.season}</h2>
-      <p className="muted" style={{ marginBottom: 14 }}>
-        {log.length} match{log.length !== 1 ? "es" : ""} · click any row to expand the full series breakdown and player stats
+      <p className="muted log-subtitle">
+        {log.length} match{log.length !== 1 ? "es" : ""} · click a card to expand the full series
       </p>
 
       {log.length === 0 ? (
-        <p className="muted">No matches played yet. Simulate a matchday to see results here.</p>
+        <p className="muted" style={{ marginTop: 16 }}>No matches played yet.</p>
       ) : (
         <div className="log-list">
           {log.map((r, i) => {
-            const isUser  = r.winnerId === state.userTeamId || r.loserId === state.userTeamId;
-            const userWon = r.winnerId === state.userTeamId;
+            const isUser  = r.winnerId === userId || r.loserId === userId;
+            const userWon = r.winnerId === userId;
             const isOpen  = expanded === i;
 
             return (
               <div
                 key={i}
-                className={`log-entry ${isUser ? (userWon ? "user-win" : "user-loss") : ""}`}
+                className={`result-card ${isUser ? (userWon ? "rc-user-win" : "rc-user-loss") : "rc-neutral"}`}
               >
                 {/* ── Clickable header ── */}
-                <div className="log-summary" onClick={() => toggle(i)}>
+                <div className="rc-main" onClick={() => toggle(i)}>
 
-                  <span className="log-num muted">#{log.length - i}</span>
+                  <div className="rc-row-top">
+                    {isUser && (
+                      <span className={`rc-outcome ${userWon ? "rco-win" : "rco-loss"}`}>
+                        {userWon ? "W" : "L"}
+                      </span>
+                    )}
 
-                  <span className="log-stage muted">{r.stage}</span>
+                    <div className="rc-teams">
+                      <span className="rc-winner" style={{ color: colorOf(r.winnerId) }}>
+                        {nameOf(r.winnerId)}
+                      </span>
+                      <span className="rc-score">{r.score}</span>
+                      <span className="rc-loser" style={{ color: colorOf(r.loserId) }}>
+                        {nameOf(r.loserId)}
+                      </span>
+                    </div>
 
-                  {/* Winner vs Loser with team colors */}
-                  <span className="log-teams">
-                    <span style={{ color: color(r.winnerId), fontWeight: 700 }}>
-                      {tag(r.winnerId)}
-                    </span>
-                    <span className="log-score">&nbsp;{r.score}&nbsp;</span>
-                    <span style={{ color: color(r.loserId) }}>
-                      {tag(r.loserId)}
-                    </span>
-                  </span>
+                    <button
+                      className="rc-toggle"
+                      onClick={e => { e.stopPropagation(); toggle(i); }}
+                    >
+                      {isOpen ? "Hide ▲" : "Details ▼"}
+                    </button>
+                  </div>
 
-                  {/* Map sequence if available */}
-                  {r.mapResults && (
-                    <span className="log-maps muted">
-                      {r.mapResults.map(m => m.short).join(" · ")}
-                    </span>
-                  )}
-
-                  {/* Standout player */}
-                  <span className="log-standout muted">
-                    ⭐ {r.standoutName ?? "—"}
-                    {r.standoutKD > 0 && ` (${r.standoutKD.toFixed(2)} K/D)`}
-                  </span>
-
-                  {/* Expand/collapse cue — always visible */}
-                  <button className="log-expand-btn" onClick={e => { e.stopPropagation(); toggle(i); }}>
-                    {isOpen ? "Hide ▲" : "Details ▼"}
-                  </button>
-
+                  <div className="rc-row-meta">
+                    <span className="rc-context">{r.stage}</span>
+                    {r.standoutName && (
+                      <span className="rc-standout">
+                        ⭐ <strong>{r.standoutName}</strong>
+                        {r.standoutKD > 0 && (
+                          <span className="rc-standout-kd"> {r.standoutKD.toFixed(2)} K/D</span>
+                        )}
+                      </span>
+                    )}
+                    {r.mapResults && r.mapResults.length > 0 && (
+                      <span className="rc-map-chips">
+                        {r.mapResults.map((m, mi) => (
+                          <span key={mi} className="rc-map-chip">{m.short}</span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* ── Expanded series detail ── */}

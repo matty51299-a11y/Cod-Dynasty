@@ -1,12 +1,6 @@
 // src/components/SeriesDetail.jsx
-// Shared component that renders the full breakdown of one simulated series.
-// Used by both Dashboard (inline row expansion) and MatchLog (card expansion).
-//
-// A result object must contain:
-//   mapResults   – array of per-map objects from matchSim
-//   playerStats  – { [playerId]: { name, teamId, kills, deaths, kd } }
-//   teamAId / teamAName / teamBId / teamBName
-//   winnerId / winnerName / score
+// Shared component: full breakdown of one simulated series.
+// Used by Dashboard recent results, MatchLog, and MajorBracket match cards.
 
 import { CDL_TEAMS } from "../data/teams.js";
 
@@ -21,13 +15,24 @@ function kdColor(kd) {
   return "#ef5350";
 }
 
-// ── Player stats table for one team ──────────────────────────────────────────
-function StatsTable({ label, stats, won }) {
+function modeColor(short) {
+  if (short === "HP")  return "#4f8ef7";
+  if (short === "S&D") return "#ef5350";
+  if (short === "CTL") return "#00e676";
+  return "#888";
+}
+
+// ── Player stats table ───────────────────────────────────────────────────────
+function StatsTable({ teamId, teamName: tName, stats, won }) {
+  const sorted = [...stats].sort((a, b) => (b.kd ?? 0) - (a.kd ?? 0));
+
   return (
     <div className="stats-team-block">
-      <div className="stats-team-header" style={{ color: color(label.id) }}>
-        {label.name}
-        <span className={`result-badge ${won ? "win-badge" : "loss-badge"}`}>{won ? "W" : "L"}</span>
+      <div className="stats-team-header" style={{ color: color(teamId) }}>
+        {tName}
+        <span className={`result-badge ${won ? "win-badge" : "loss-badge"}`}>
+          {won ? "W" : "L"}
+        </span>
       </div>
       <table className="stats-table">
         <thead>
@@ -39,17 +44,21 @@ function StatsTable({ label, stats, won }) {
           </tr>
         </thead>
         <tbody>
-          {stats.length === 0 ? (
-            <tr><td colSpan={4} className="muted" style={{ padding: "6px 8px" }}>No stats recorded</td></tr>
+          {sorted.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="muted" style={{ padding: "6px 8px" }}>
+                No stats recorded
+              </td>
+            </tr>
           ) : (
-            stats.map((s, i) => (
+            sorted.map((s, i) => (
               <tr key={i}>
                 <td className="player-name">{s.name}</td>
                 <td>{s.kills}</td>
                 <td>{s.deaths}</td>
-                <td style={{ color: kdColor(s.kd), fontWeight: 600 }}>{
-                  typeof s.kd === "number" ? s.kd.toFixed(2) : "—"
-                }</td>
+                <td style={{ color: kdColor(s.kd ?? 0), fontWeight: 600 }}>
+                  {typeof s.kd === "number" ? s.kd.toFixed(2) : "—"}
+                </td>
               </tr>
             ))
           )}
@@ -63,55 +72,85 @@ function StatsTable({ label, stats, won }) {
 export default function SeriesDetail({ result }) {
   if (!result) return null;
 
-  const { mapResults, playerStats, teamAId, teamAName, teamBId, teamBName, winnerId, winnerName, score } = result;
+  const {
+    mapResults, playerStats,
+    teamAId, teamAName, teamBId, teamBName,
+    winnerId, winnerName, score,
+    standoutName, standoutKD,
+  } = result;
 
-  // Old saves (pre-map-sim update) won't have mapResults — show clear message.
   if (!mapResults || mapResults.length === 0) {
     return (
       <div className="series-detail">
         <p className="muted" style={{ fontSize: 12 }}>
-          No map detail for this match — simulate new matches to see series breakdowns.
+          No map detail for this match — simulate new matches to see full breakdowns.
         </p>
       </div>
     );
   }
 
-  // Split player stats by team
   const rawStats = Object.values(playerStats || {});
-  const statsA = rawStats.filter(s => s.teamId === teamAId).sort((a, b) => b.kills - a.kills);
-  const statsB = rawStats.filter(s => s.teamId === teamBId).sort((a, b) => b.kills - a.kills);
-
-  const teamAMeta = { id: teamAId, name: teamAName };
-  const teamBMeta = { id: teamBId, name: teamBName };
+  const statsA   = rawStats.filter(s => s.teamId === teamAId);
+  const statsB   = rawStats.filter(s => s.teamId === teamBId);
 
   return (
     <div className="series-detail">
 
+      {/* ── MVP / standout callout ── */}
+      {standoutName && standoutKD > 0 && (
+        <div className="sd-standout">
+          <span className="sd-so-icon">⭐</span>
+          <div className="sd-so-body">
+            <span className="sd-so-name">{standoutName}</span>
+            <span className="sd-so-kd" style={{ color: kdColor(standoutKD) }}>
+              {standoutKD.toFixed(2)} K/D
+            </span>
+          </div>
+          <span className="sd-so-label">MVP</span>
+        </div>
+      )}
+
       {/* ── Map-by-map breakdown ── */}
       <div className="map-breakdown">
-        <div className="breakdown-title">Series Breakdown</div>
+        <div className="breakdown-title">Map Breakdown</div>
 
         {mapResults.map((m) => {
           const aWon = m.winnerId === teamAId;
           return (
             <div key={m.mapNum} className="map-row">
               <span className="map-num">Map {m.mapNum}</span>
-              <span className="map-mode">{m.mode}</span>
 
-              {/* Team A score */}
-              <span className={`map-team ${aWon ? "win" : "loss"}`} style={{ color: color(teamAId) }}>
+              <span
+                className="map-mode-badge"
+                style={{
+                  background: modeColor(m.short) + "22",
+                  color: modeColor(m.short),
+                  borderColor: modeColor(m.short) + "55",
+                }}
+              >
+                {m.short}
+              </span>
+
+              <span
+                className={`map-team-tag ${aWon ? "mtag-win" : "mtag-loss"}`}
+                style={{ color: color(teamAId) }}
+              >
                 {tag(teamAId)}
               </span>
-              <span className="map-score">
-                <span style={{ fontWeight: 700, color: aWon ? "#00e676" : "#ef5350" }}>{m.scoreA}</span>
-                <span style={{ color: "#555" }}> – </span>
-                <span style={{ fontWeight: 700, color: aWon ? "#ef5350" : "#00e676" }}>{m.scoreB}</span>
+
+              <span className="map-score-block">
+                <span className={aWon ? "mscore-win" : "mscore-loss"}>{m.scoreA}</span>
+                <span className="map-score-sep">–</span>
+                <span className={aWon ? "mscore-loss" : "mscore-win"}>{m.scoreB}</span>
               </span>
-              <span className={`map-team ${!aWon ? "win" : "loss"}`} style={{ color: color(teamBId) }}>
+
+              <span
+                className={`map-team-tag ${!aWon ? "mtag-win" : "mtag-loss"}`}
+                style={{ color: color(teamBId) }}
+              >
                 {tag(teamBId)}
               </span>
 
-              {/* Who won this map */}
               <span className="map-winner-label" style={{ color: color(m.winnerId) }}>
                 {tag(m.winnerId)} win
               </span>
@@ -119,11 +158,10 @@ export default function SeriesDetail({ result }) {
           );
         })}
 
-        {/* Series result line */}
         <div className="series-result-row">
           <span style={{ color: color(winnerId), fontWeight: 700 }}>{winnerName}</span>
           {" wins "}
-          <span style={{ fontWeight: 700, color: "#eceef5" }}>{score}</span>
+          <span style={{ fontWeight: 700, color: "var(--text-head)" }}>{score}</span>
         </div>
       </div>
 
@@ -131,8 +169,18 @@ export default function SeriesDetail({ result }) {
       <div className="stats-section">
         <div className="breakdown-title" style={{ marginBottom: 8 }}>Player Stats</div>
         <div className="stats-teams">
-          <StatsTable label={teamAMeta} stats={statsA} won={teamAId === winnerId} />
-          <StatsTable label={teamBMeta} stats={statsB} won={teamBId === winnerId} />
+          <StatsTable
+            teamId={teamAId}
+            teamName={teamAName}
+            stats={statsA}
+            won={teamAId === winnerId}
+          />
+          <StatsTable
+            teamId={teamBId}
+            teamName={teamBName}
+            stats={statsB}
+            won={teamBId === winnerId}
+          />
         </div>
       </div>
 

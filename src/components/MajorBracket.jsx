@@ -116,28 +116,26 @@ function MajorIntro({ major, majorIdx, schedule, userTeamId, onEnter }) {
 function EventBanner({ major, roundName }) {
   return (
     <div className="major-event-banner">
-      <span className="meb-live">▶ LIVE</span>
-      <span className="meb-sep" />
-      <span className="meb-name">{major.name.toUpperCase()}</span>
-      {roundName && (
-        <>
-          <span className="meb-sep" />
-          <span className="meb-round">{roundName.toUpperCase()}</span>
-        </>
-      )}
+      <div className="meb-left">
+        <span className="meb-live">▶ LIVE</span>
+        <div className="meb-text">
+          <span className="meb-name">{major.name.toUpperCase()}</span>
+          {roundName && <span className="meb-round">{roundName}</span>}
+        </div>
+      </div>
     </div>
   );
 }
 
 // ── Next match spotlight ──────────────────────────────────────────────────────
-function NextMatchCard({ bracket, roundIdx, userTeamId }) {
+function NextMatchCard({ bracket, roundIdx, userTeamId, dispatch, roundName }) {
   if (roundIdx < 0) return null;
   const round = bracket.rounds[roundIdx];
   const next  = round?.matches.find(m => !m.played);
   if (!next) return null;
 
-  const seedA = getSeedNum(bracket, next.a, next.seedA);
-  const seedB = getSeedNum(bracket, next.b, next.seedB);
+  const seedA  = getSeedNum(bracket, next.a, next.seedA);
+  const seedB  = getSeedNum(bracket, next.b, next.seedB);
   const userIn = next.a === userTeamId || next.b === userTeamId;
 
   return (
@@ -146,16 +144,29 @@ function NextMatchCard({ bracket, roundIdx, userTeamId }) {
       <div className="nmc-matchup">
         <div className="nmc-team">
           {seedA && <span className="nmc-seed">#{seedA}</span>}
-          <span className="nmc-tag" style={{ color: teamColor(next.a) }}>{teamTag(next.a)}</span>
+          <span className="nmc-name" style={{ color: teamColor(next.a) }}>{teamName(next.a)}</span>
           {next.a === userTeamId && <span className="nmc-you">YOUR TEAM</span>}
         </div>
         <span className="nmc-vs">vs</span>
         <div className="nmc-team nmc-team-b">
-          {seedB && <span className="nmc-seed">#{seedB}</span>}
-          <span className="nmc-tag" style={{ color: teamColor(next.b) }}>{teamTag(next.b)}</span>
           {next.b === userTeamId && <span className="nmc-you">YOUR TEAM</span>}
+          <span className="nmc-name" style={{ color: teamColor(next.b) }}>{teamName(next.b)}</span>
+          {seedB && <span className="nmc-seed">#{seedB}</span>}
         </div>
       </div>
+      {dispatch && (
+        <div className="nmc-actions">
+          <button className="btn-primary nmc-sim-btn" onClick={() => dispatch({ type: "SIM_NEXT_MAJOR_MATCH" })}>
+            ▶ Sim This Match
+          </button>
+          <button className="btn-secondary nmc-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR_ROUND" })}>
+            ▶▶ Sim {roundName ?? "Round"}
+          </button>
+          <button className="btn-secondary nmc-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR" })}>
+            ▶▶▶ Sim Entire {round.name === "Grand Final" ? "Final" : "Major"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -334,14 +345,15 @@ function MajorView({ major, majorIdx, isActive, schedule, userTeamId, dispatch, 
         <EventBanner major={major} roundName={roundName} />
       )}
 
-      {/* Sim controls — only while live */}
-      {isActive && !major.completed && (
-        <TournamentControls dispatch={dispatch} roundName={roundName} />
-      )}
-
-      {/* Next match spotlight — only while live */}
+      {/* Next match spotlight with integrated sim controls — only while live */}
       {isActive && !major.completed && curRound >= 0 && (
-        <NextMatchCard bracket={bracket} roundIdx={curRound} userTeamId={userTeamId} />
+        <NextMatchCard
+          bracket={bracket}
+          roundIdx={curRound}
+          userTeamId={userTeamId}
+          dispatch={dispatch}
+          roundName={roundName}
+        />
       )}
 
       {/* Champion banner */}
