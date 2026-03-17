@@ -14,12 +14,14 @@ const FILTER_OPTIONS = [
   { id: "prospects",label: "Challengers" },
   { id: "improved", label: "Improved" },
   { id: "declined", label: "Declined" },
+  { id: "breakouts",label: "Breakouts" },
+  { id: "falloffs", label: "Fall-offs" },
 ];
 
 export default function OffseasonReport() {
   const { state } = useGame();
   const [filter, setFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("delta"); // "delta" | "new" | "age" | "name"
+  const [sortBy, setSortBy] = useState("delta");
 
   const log = state?.progressionLog;
 
@@ -36,10 +38,12 @@ export default function OffseasonReport() {
   }
 
   // Summary counts
-  const improved  = log.filter(e => e.delta > 0).length;
-  const declined  = log.filter(e => e.delta < 0).length;
-  const flat      = log.filter(e => e.delta === 0).length;
-  const prosCount = log.filter(e => !e.isProspect).length;
+  const improved   = log.filter(e => e.delta > 0).length;
+  const declined   = log.filter(e => e.delta < 0).length;
+  const flat       = log.filter(e => e.delta === 0).length;
+  const breakouts  = log.filter(e => e.eventType === "breakout").length;
+  const falloffs   = log.filter(e => e.eventType === "collapse").length;
+  const prosCount  = log.filter(e => !e.isProspect).length;
 
   const biggestGain    = [...log].sort((a, b) => b.delta - a.delta)[0];
   const biggestDecline = [...log].sort((a, b) => a.delta - b.delta)[0];
@@ -51,6 +55,8 @@ export default function OffseasonReport() {
     if (filter === "prospects") return !!e.isProspect;
     if (filter === "improved")  return e.delta > 0;
     if (filter === "declined")  return e.delta < 0;
+    if (filter === "breakouts") return e.eventType === "breakout";
+    if (filter === "falloffs")  return e.eventType === "collapse";
     return true;
   });
 
@@ -63,12 +69,6 @@ export default function OffseasonReport() {
     return 0;
   });
 
-  function deltaLabel(d) {
-    if (d > 0) return `+${d}`;
-    if (d < 0) return `${d}`;
-    return "—";
-  }
-
   function teamTag(teamId) {
     if (!teamId) return "FA";
     return TEAM_MAP[teamId]?.tag ?? teamId;
@@ -78,6 +78,21 @@ export default function OffseasonReport() {
     if (!teamId) return "var(--text-dim)";
     return TEAM_MAP[teamId]?.color ?? "var(--text)";
   }
+
+  function deltaLabel(e) {
+    const d = e.delta;
+    const base = d > 0 ? `+${d}` : d < 0 ? `${d}` : "—";
+    if (e.eventType === "breakout") return `${base} ⚡`;
+    if (e.eventType === "collapse") return `${base} ↘`;
+    return base;
+  }
+
+  const standoutGainLabel = biggestGain?.eventType === "breakout"
+    ? "Breakout Season"
+    : "Biggest Leap";
+  const standoutDecLabel  = biggestDecline?.eventType === "collapse"
+    ? "Sharp Decline"
+    : "Biggest Drop";
 
   return (
     <div className="page-shell">
@@ -100,22 +115,36 @@ export default function OffseasonReport() {
           <span className="dev-sum-label">Declined</span>
         </div>
         <div className="dev-summary-stat">
+          <span className="dev-sum-val" style={{ color: "var(--yellow)" }}>{breakouts}</span>
+          <span className="dev-sum-label">Breakouts ⚡</span>
+        </div>
+        <div className="dev-summary-stat">
+          <span className="dev-sum-val" style={{ color: "var(--red)" }}>{falloffs}</span>
+          <span className="dev-sum-label">Fall-offs ↘</span>
+        </div>
+        <div className="dev-summary-stat">
           <span className="dev-sum-val" style={{ color: "var(--accent)" }}>{prosCount}</span>
           <span className="dev-sum-label">Pros tracked</span>
         </div>
 
         {biggestGain && biggestGain.delta > 0 && (
           <div className="dev-standout dev-standout--green">
-            <span className="dev-standout-label">Biggest Leap</span>
+            <span className="dev-standout-label">{standoutGainLabel}</span>
             <span className="dev-standout-name">{biggestGain.name}</span>
-            <span className="dev-standout-delta">+{biggestGain.delta} OVR</span>
+            <span className="dev-standout-delta">
+              +{biggestGain.delta} OVR
+              {biggestGain.eventType === "breakout" && " ⚡"}
+            </span>
           </div>
         )}
         {biggestDecline && biggestDecline.delta < 0 && (
           <div className="dev-standout dev-standout--red">
-            <span className="dev-standout-label">Biggest Drop</span>
+            <span className="dev-standout-label">{standoutDecLabel}</span>
             <span className="dev-standout-name">{biggestDecline.name}</span>
-            <span className="dev-standout-delta">{biggestDecline.delta} OVR</span>
+            <span className="dev-standout-delta">
+              {biggestDecline.delta} OVR
+              {biggestDecline.eventType === "collapse" && " ↘"}
+            </span>
           </div>
         )}
       </div>
@@ -130,6 +159,12 @@ export default function OffseasonReport() {
               onClick={() => setFilter(f.id)}
             >
               {f.label}
+              {f.id === "breakouts" && breakouts > 0 && (
+                <span className="dev-filter-count">{breakouts}</span>
+              )}
+              {f.id === "falloffs" && falloffs > 0 && (
+                <span className="dev-filter-count">{falloffs}</span>
+              )}
             </button>
           ))}
         </div>
@@ -168,11 +203,20 @@ export default function OffseasonReport() {
           </thead>
           <tbody>
             {sorted.map(e => {
+              const isBreakout = e.eventType === "breakout";
+              const isCollapse = e.eventType === "collapse";
               const deltaClass = e.delta > 0 ? "delta-pos"
                                : e.delta < 0 ? "delta-neg"
                                : "delta-zero";
+              const rowClass = [
+                "dev-row",
+                e.teamId === state.userTeamId ? "dev-row--myteam" : "",
+                isBreakout ? "dev-row--breakout" : "",
+                isCollapse ? "dev-row--collapse" : "",
+              ].filter(Boolean).join(" ");
+
               return (
-                <tr key={e.id} className={`dev-row ${e.teamId === state.userTeamId ? "dev-row--myteam" : ""}`}>
+                <tr key={e.id} className={rowClass}>
                   <td className="dev-name">{e.name}</td>
                   <td style={{ color: teamColor(e.teamId), fontWeight: 600, fontSize: 12 }}>
                     {teamTag(e.teamId)}
@@ -184,7 +228,7 @@ export default function OffseasonReport() {
                   <td className="dev-old">{e.oldOverall}</td>
                   <td className="dev-new">{e.newOverall}</td>
                   <td className={`dev-delta ${deltaClass}`}>
-                    {deltaLabel(e.delta)}
+                    {deltaLabel(e)}
                   </td>
                 </tr>
               );
