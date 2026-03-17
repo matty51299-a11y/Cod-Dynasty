@@ -76,9 +76,9 @@ export default function Dashboard() {
           </>
         )}
         {isMajor && (
-          <button className="btn-primary" onClick={() => { dispatch({ type: "SIM_MAJOR" }); setExpandedIdx(null); }}>
-            Simulate {majorName}
-          </button>
+          <p className="muted" style={{ fontSize: 13, alignSelf: "center" }}>
+            ▶ {majorName} is live — go to the <strong>Major</strong> tab to simulate
+          </p>
         )}
         {isOffseason && (
           <button className="btn-accent" onClick={() => dispatch({ type: "ADVANCE_OFFSEASON" })}>

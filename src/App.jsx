@@ -11,11 +11,13 @@ import Roster from "./components/Roster.jsx";
 import FreeAgency from "./components/FreeAgency.jsx";
 import Prospects from "./components/Prospects.jsx";
 import MatchLog from "./components/MatchLog.jsx";
+import MajorBracket from "./components/MajorBracket.jsx";
 import { CDL_TEAMS } from "./data/teams.js";
 
 const TABS = [
   { id: "dashboard", label: "Dashboard" },
   { id: "standings", label: "Standings" },
+  { id: "major",     label: "Major" },
   { id: "roster",    label: "Roster" },
   { id: "fa",        label: "Free Agency" },
   { id: "prospects", label: "Challengers" },
@@ -101,21 +103,27 @@ export default function App() {
 
       {/* Navigation tabs */}
       <nav className="nav-tabs">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            className={`nav-tab ${tab === t.id ? "active" : ""}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+        {TABS.map(t => {
+          // Add a live indicator dot on the Major tab when a major is active
+          const isMajorLive = t.id === "major" && state.schedule?.phase === "major";
+          return (
+            <button
+              key={t.id}
+              className={`nav-tab ${tab === t.id ? "active" : ""}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+              {isMajorLive && <span className="tab-live-dot" />}
+            </button>
+          );
+        })}
       </nav>
 
       {/* Page content */}
       <main className="main-content">
         {tab === "dashboard" && <Dashboard />}
         {tab === "standings" && <Standings />}
+        {tab === "major"     && <MajorBracket />}
         {tab === "roster"    && <Roster />}
         {tab === "fa"        && <FreeAgency />}
         {tab === "prospects" && <Prospects />}
