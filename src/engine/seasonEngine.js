@@ -1,12 +1,16 @@
 // src/engine/seasonEngine.js
 // Drives the CDL season structure:
-//   Stage 1 → Major 1 → Stage 2 → Major 2 → Championship → Offseason
+//   Stage 1 → Major 1 → Stage 2 → Major 2 → Stage 3 → Major 3 →
+//   Stage 4 → Major 4 → Pre-Champs Window → Champs → Offseason
 //
-// Major bracket is single-elimination, 8 teams seeded by standings points.
-// Three levels of major simulation are exposed:
-//   simNextMajorMatch  – one match at a time
-//   simMajorRound      – all matches in the current round
-//   simMajor           – the full remaining bracket
+// schedule.stageIdx  — index into stages[] (0–3), meaningful during phase "stage"
+// schedule.majorIdx  — index into majors[] (0–4), meaningful during phase "major"
+// schedule.standings      — cumulative season W/L/pts (never reset mid-season)
+// schedule.stageStandings — per-stage W/L/pts; snapshot kept during active Major,
+//                           reset when transitioning Major → next Stage
+//
+// Regular Majors (1–4) seeded by stageStandings.points
+// Champs seeded by standings.points (cumulative season total)
 
 import { simMatch } from "./matchSim.js";
 import { CDL_TEAMS } from "../data/teams.js";
@@ -53,29 +57,40 @@ export function initStandings(teamIds) {
 export function buildSeason(season) {
   const teamIds = CDL_TEAMS.map(t => t.id);
   const rng = seededRng(season * 9999 + 1);
+  const mkStage = name => ({
+    name,
+    matches: shuffle(buildRoundRobin(teamIds), rng)
+      .map(([a, b]) => ({ a, b, played: false, result: null })),
+  });
 
   return {
     season,
     stages: [
-      { name: "Stage 1", matches: shuffle(buildRoundRobin(teamIds), rng).map(([a, b]) => ({ a, b, played: false, result: null })) },
-      { name: "Stage 2", matches: shuffle(buildRoundRobin(teamIds), rng).map(([a, b]) => ({ a, b, played: false, result: null })) },
+      mkStage("Stage 1"),
+      mkStage("Stage 2"),
+      mkStage("Stage 3"),
+      mkStage("Stage 4"),
     ],
     majors: [
-      { name: "Major 1",      bracket: null, completed: false },
-      { name: "Major 2",      bracket: null, completed: false },
-      { name: "Championship", bracket: null, completed: false },
+      { name: "Major 1", bracket: null, completed: false },
+      { name: "Major 2", bracket: null, completed: false },
+      { name: "Major 3", bracket: null, completed: false },
+      { name: "Major 4", bracket: null, completed: false },
+      { name: "Champs",  bracket: null, completed: false },
     ],
-    standings: initStandings(teamIds),
-    currentStage: 0,
+    standings:      initStandings(teamIds),  // cumulative season W/L/pts
+    stageStandings: initStandings(teamIds),  // per-stage; kept as bracket snapshot, reset on Major→Stage
+    stageIdx:        0,     // current stage index (0–3)
+    majorIdx:        null,  // current major index (0–4); null when not in major phase
+    phase:           "stage",  // "stage" | "major" | "preChamps" | "offseason"
     currentMatchday: 0,
-    phase: "stage",   // "stage" | "major" | "offseason"
-    matchLog: [],
+    matchLog:        [],
   };
 }
 
 // ── Build major bracket ───────────────────────────────────────────────────────
-// Seeds top 8 teams by standings points into a single-elim bracket.
-// Seeding: 1v8, 2v7, 3v6, 4v5
+// Accepts any standings object with { [teamId]: { points, ... } }.
+// Regular Majors pass stageStandings; Champs passes cumulative standings.
 function buildMajorBracket(standings) {
   const sorted = Object.entries(standings)
     .sort((a, b) => b[1].points - a[1].points)
@@ -83,7 +98,7 @@ function buildMajorBracket(standings) {
     .map(([id]) => id);
 
   return {
-    seeds: sorted,   // index 0 = seed 1, index 7 = seed 8
+    seeds: sorted,
     rounds: [
       {
         name: "Quarterfinals",
@@ -98,15 +113,14 @@ function buildMajorBracket(standings) {
       { name: "Grand Final", matches: [] },
     ],
     completed: false,
-    champion: null,
+    champion:  null,
   };
 }
 
 // ── Internal: play exactly ONE unplayed major match ───────────────────────────
-// Mutates schedule in place (consistent with the rest of the engine).
-// Returns { roundIdx, allComplete }
+// Mutates schedule in place. Returns { roundIdx, allComplete }.
 function _simOneMajorMatch(schedule, gameState) {
-  const majorIdx = schedule.currentStage;
+  const majorIdx = schedule.majorIdx;
   const major    = schedule.majors[majorIdx];
   const bracket  = major.bracket;
 
@@ -138,13 +152,11 @@ function _simOneMajorMatch(schedule, gameState) {
     stage: `${major.name} – ${round.name}`,
   });
 
-  // If this round is now fully played, wire up the next round
+  // If this round is fully played, wire up the next round
   const roundDone = round.matches.every(m => m.played);
   if (roundDone) {
     const winners = round.matches.map(m => m.result.winnerId);
-
     if (roundIdx + 1 < bracket.rounds.length) {
-      // Build next round matchups from this round's winners
       const nextMatches = [];
       for (let w = 0; w < winners.length; w += 2) {
         if (w + 1 < winners.length)
@@ -162,36 +174,56 @@ function _simOneMajorMatch(schedule, gameState) {
   return { roundIdx, allComplete: false };
 }
 
-// Internal: advance season phase after a major completes
+// ── Internal: advance season phase after a major completes ────────────────────
 function _advanceMajorPhase(schedule, gameState) {
-  const majorIdx = schedule.currentStage;
+  const majorIdx = schedule.majorIdx;
   let nextState = gameState;
 
-  if (majorIdx <= 1) nextState = runAIMajorRosterWindow(nextState, majorIdx);
-  if (majorIdx === 0) {
-    // Major 1 → Stage 2
-    schedule.phase = "stage";
-    schedule.currentStage = 1;
+  // AI roster window after each regular major (not after Champs)
+  if (majorIdx <= 3) nextState = runAIMajorRosterWindow(nextState, majorIdx);
+
+  const teamIds = CDL_TEAMS.map(t => t.id);
+
+  if (majorIdx <= 2) {
+    // Major 1/2/3 → next Stage
+    // Reset stageStandings now (entering new stage, not when building the bracket)
+    schedule.stageStandings = initStandings(teamIds);
+    schedule.phase    = "stage";
+    schedule.stageIdx = majorIdx + 1;
+    schedule.majorIdx = null;
     schedule.currentMatchday = 0;
-  } else if (majorIdx === 1) {
-    // Major 2 → Championship
-    schedule.phase = "major";
-    schedule.currentStage = 2;
-    schedule.majors[2].bracket = buildMajorBracket(schedule.standings);
+  } else if (majorIdx === 3) {
+    // Major 4 → Pre-Champs roster window
+    schedule.stageStandings = initStandings(teamIds);
+    schedule.phase    = "preChamps";
+    schedule.majorIdx = null;
   } else {
-    // Championship → Offseason
-    schedule.phase = "offseason";
+    // Champs → Offseason
+    schedule.phase    = "offseason";
+    schedule.majorIdx = null;
   }
 
   return nextState;
 }
 
-// ── PUBLIC: Simulate one major match ─────────────────────────────────────────
+// ── PUBLIC: Begin Championship (triggered by user from preChamps window) ───────
+export function beginChamps(gameState) {
+  const schedule = gameState.schedule;
+  if (schedule.phase !== "preChamps") return gameState;
+
+  // Champs bracket seeded by cumulative season standings.points
+  schedule.phase    = "major";
+  schedule.majorIdx = 4;
+  schedule.majors[4].bracket = buildMajorBracket(schedule.standings);
+  return { ...gameState, schedule: { ...schedule } };
+}
+
+// ── PUBLIC: Simulate one major match ──────────────────────────────────────────
 export function simNextMajorMatch(gameState) {
   const schedule = gameState.schedule;
   if (schedule.phase !== "major") return gameState;
 
-  const major = schedule.majors[schedule.currentStage];
+  const major = schedule.majors[schedule.majorIdx];
   if (!major || major.completed) return gameState;
 
   const { allComplete } = _simOneMajorMatch(schedule, gameState);
@@ -206,7 +238,7 @@ export function simMajorRound(gameState) {
   const schedule = gameState.schedule;
   if (schedule.phase !== "major") return gameState;
 
-  const major = schedule.majors[schedule.currentStage];
+  const major = schedule.majors[schedule.majorIdx];
   if (!major || major.completed) return gameState;
 
   // Snapshot which round we're starting in so we stop after it finishes
@@ -222,7 +254,7 @@ export function simMajorRound(gameState) {
 
   let safety = 0;
   while (safety++ < 20) {
-    const bracket = schedule.majors[schedule.currentStage].bracket;
+    const bracket = schedule.majors[schedule.majorIdx].bracket;
     const rnd     = bracket.rounds[startRound];
     if (!rnd || rnd.matches.every(m => m.played)) break;
 
@@ -241,7 +273,7 @@ export function simMajor(gameState) {
   const schedule  = gameState.schedule;
   if (schedule.phase !== "major") return gameState;
 
-  const targetIdx = schedule.currentStage;   // the major we want to complete
+  const targetIdx = schedule.majorIdx;
   const major     = schedule.majors[targetIdx];
   if (!major || major.completed) return gameState;
 
@@ -257,23 +289,24 @@ export function simMajor(gameState) {
   return { ...gameState, schedule: { ...schedule } };
 }
 
-// ── Stage simulation (unchanged) ──────────────────────────────────────────────
-
+// ── Stage simulation ───────────────────────────────────────────────────────────
 export function simNextMatch(gameState) {
   const schedule = gameState.schedule;
-  if (!schedule || schedule.phase === "offseason") return gameState;
+  if (!schedule || schedule.phase !== "stage") return gameState;
 
-  const stage    = schedule.stages[schedule.currentStage];
+  const stage    = schedule.stages[schedule.stageIdx];
   const unplayed = stage.matches.findIndex(m => !m.played);
 
   if (unplayed === -1) {
-    schedule.phase = "major";
-    schedule.majors[schedule.currentStage].bracket = buildMajorBracket(schedule.standings);
+    // Stage done → build Major bracket from stageStandings (keep snapshot intact)
+    schedule.phase    = "major";
+    schedule.majorIdx = schedule.stageIdx;  // Stage N → Major N (indices align)
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings);
     return { ...gameState, schedule: { ...schedule } };
   }
 
   const match = stage.matches[unplayed];
-  const seed  = schedule.season * 100_000 + schedule.currentStage * 10_000 + unplayed;
+  const seed  = schedule.season * 100_000 + schedule.stageIdx * 10_000 + unplayed;
   const teamA = buildTeamObj(match.a, gameState);
   const teamB = buildTeamObj(match.b, gameState);
   const result = simMatch(teamA, teamB, seed);
@@ -281,10 +314,17 @@ export function simNextMatch(gameState) {
   match.played = true;
   match.result = result;
 
+  // Update cumulative season standings
   schedule.standings[result.winnerId].wins++;
   schedule.standings[result.winnerId].points += 3;
   schedule.standings[result.loserId].losses++;
   schedule.standings[result.loserId].points += 1;
+
+  // Update per-stage standings
+  schedule.stageStandings[result.winnerId].wins++;
+  schedule.stageStandings[result.winnerId].points += 3;
+  schedule.stageStandings[result.loserId].losses++;
+  schedule.stageStandings[result.loserId].points += 1;
 
   schedule.matchLog.push({ ...result, stage: stage.name });
   schedule.currentMatchday++;
@@ -296,12 +336,12 @@ export function simMatchday(gameState) {
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "stage") return gameState;
 
-  const stage           = schedule.stages[schedule.currentStage];
+  const stage           = schedule.stages[schedule.stageIdx];
   const unplayedIndices = stage.matches.map((m, i) => !m.played ? i : -1).filter(i => i !== -1);
 
   if (unplayedIndices.length === 0) return simNextMatch(gameState);
 
-  const usedTeams   = new Set();
+  const usedTeams    = new Set();
   const todayIndices = [];
   for (const idx of unplayedIndices) {
     const { a, b } = stage.matches[idx];
@@ -318,7 +358,7 @@ export function simMatchday(gameState) {
   for (const idx of todayIndices) {
     const match  = stage.matches[idx];
     if (match.played) continue;
-    const seed   = schedule.season * 100_000 + schedule.currentStage * 10_000 + idx;
+    const seed   = schedule.season * 100_000 + schedule.stageIdx * 10_000 + idx;
     const teamA  = buildTeamObj(match.a, gameState);
     const teamB  = buildTeamObj(match.b, gameState);
     const result = simMatch(teamA, teamB, seed);
@@ -326,17 +366,26 @@ export function simMatchday(gameState) {
     match.played = true;
     match.result = result;
 
+    // Cumulative season standings
     schedule.standings[result.winnerId].wins++;
     schedule.standings[result.winnerId].points += 3;
     schedule.standings[result.loserId].losses++;
     schedule.standings[result.loserId].points += 1;
 
+    // Per-stage standings
+    schedule.stageStandings[result.winnerId].wins++;
+    schedule.stageStandings[result.winnerId].points += 3;
+    schedule.stageStandings[result.loserId].losses++;
+    schedule.stageStandings[result.loserId].points += 1;
+
     schedule.matchLog.push({ ...result, stage: stage.name });
   }
 
   if (stage.matches.every(m => m.played)) {
-    schedule.phase = "major";
-    schedule.majors[schedule.currentStage].bracket = buildMajorBracket(schedule.standings);
+    // Stage done → build bracket from stageStandings, keep snapshot intact
+    schedule.phase    = "major";
+    schedule.majorIdx = schedule.stageIdx;
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings);
   }
 
   schedule.currentMatchday++;
@@ -353,10 +402,29 @@ export function simStage(gameState) {
 
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
-  const standings = gameState.schedule?.standings ?? {};
-  const newSeason = (gameState.schedule?.season ?? 1) + 1;
+  const standings      = gameState.schedule?.standings ?? {};
+  const newSeason      = (gameState.schedule?.season ?? 1) + 1;
+  const outgoingSeason = gameState.schedule?.season ?? 1;
+  const matchLog       = gameState.schedule?.matchLog ?? [];
 
-  // Step 1: age up all players and prospects, reset form
+  // Accumulate this season's matchLog into per-player season stats before wiping
+  const playerSeasonStats = { ...(gameState.playerSeasonStats ?? {}) };
+  for (const result of matchLog) {
+    if (!result.playerStats) continue;
+    for (const [playerId, stats] of Object.entries(result.playerStats)) {
+      if (!playerSeasonStats[playerId]) playerSeasonStats[playerId] = [];
+      let entry = playerSeasonStats[playerId].find(e => e.season === outgoingSeason);
+      if (!entry) {
+        entry = { season: outgoingSeason, kills: 0, deaths: 0, matches: 0 };
+        playerSeasonStats[playerId].push(entry);
+      }
+      entry.kills   += stats.kills  ?? 0;
+      entry.deaths  += stats.deaths ?? 0;
+      entry.matches += 1;
+    }
+  }
+
+  // Age up all players and prospects, reset form
   const agedPlayers = (gameState.players || []).map(p => ({
     ...p,
     age:        (p.age || 18) + 1,
@@ -371,17 +439,18 @@ export function advanceOffseason(gameState) {
     form:       65,
   }));
 
-  // Step 2: run progression/regression on the aged players
+  // Run progression/regression on the aged players
   const { updatedPlayers, updatedProspects, progressionLog } =
     runProgression(agedPlayers, agedProspects, standings, newSeason);
 
   const withProgression = {
     ...gameState,
-    players:        updatedPlayers,
-    prospects:      updatedProspects,
-    progressionLog,                  // stored for OffseasonReport
-    schedule:       buildSeason(newSeason),
-    season:         newSeason,
+    players:          updatedPlayers,
+    prospects:        updatedProspects,
+    progressionLog,
+    playerSeasonStats,
+    schedule:         buildSeason(newSeason),
+    season:           newSeason,
   };
 
   return runAIOffseasonRosterWindow(withProgression);

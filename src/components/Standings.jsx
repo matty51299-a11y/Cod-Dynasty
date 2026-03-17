@@ -22,11 +22,12 @@ export default function Standings() {
   return (
     <div className="standings-page">
       <h2>League Standings – Season {state.season}</h2>
-      <p className="muted">Phase: {schedule.phase === "stage"
-        ? schedule.stages?.[schedule.currentStage]?.name
-        : schedule.phase === "major"
-        ? schedule.majors?.[schedule.currentStage]?.name
-        : "Offseason"}</p>
+      <p className="muted">Phase: {
+        schedule.phase === "stage"     ? schedule.stages?.[schedule.stageIdx ?? schedule.currentStage ?? 0]?.name
+        : schedule.phase === "major"   ? schedule.majors?.[schedule.majorIdx ?? schedule.currentStage ?? 0]?.name
+        : schedule.phase === "preChamps" ? "Pre-Championship Window"
+        : "Offseason"
+      }</p>
 
       <table className="standings-table">
         <thead>

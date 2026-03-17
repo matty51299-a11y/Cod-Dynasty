@@ -121,7 +121,12 @@ export default function Roster() {
                 {expandedPlayer === p.id && (
                   <tr key={`${p.id}-expand`} className="expand-row">
                     <td colSpan={selectedTeam === userTeamId ? 15 : 14}>
-                      <PlayerDetail player={p} isUserTeam={selectedTeam === userTeamId} />
+                      <PlayerDetail
+                        player={p}
+                        isUserTeam={selectedTeam === userTeamId}
+                        matchLog={state?.schedule?.matchLog}
+                        playerSeasonStats={state?.playerSeasonStats}
+                      />
                     </td>
                   </tr>
                 )}
@@ -134,8 +139,30 @@ export default function Roster() {
   );
 }
 
-// Expanded detail panel shows hidden traits (visible since they're on your team or you're scouting)
-function PlayerDetail({ player, isUserTeam }) {
+// Expanded detail panel: traits (user-team only) + K/D stats for all
+function PlayerDetail({ player, isUserTeam, matchLog, playerSeasonStats }) {
+  // ── Current season K/D from live matchLog ──────────────────────────────────
+  let curKills = 0, curDeaths = 0, curMatches = 0;
+  for (const result of (matchLog ?? [])) {
+    const ps = result.playerStats?.[player.id];
+    if (ps) {
+      curKills   += ps.kills  ?? 0;
+      curDeaths  += ps.deaths ?? 0;
+      curMatches += 1;
+    }
+  }
+  const curKD = curDeaths > 0
+    ? (curKills / curDeaths).toFixed(2)
+    : curMatches > 0 ? curKills.toFixed(2) : "—";
+
+  // ── Career stats from completed seasons ───────────────────────────────────
+  const history = ((playerSeasonStats ?? {})[player.id] ?? [])
+    .slice()
+    .sort((a, b) => a.season - b.season);
+  const careerKills  = history.reduce((s, e) => s + e.kills,  0);
+  const careerDeaths = history.reduce((s, e) => s + e.deaths, 0);
+  const careerKD = careerDeaths > 0 ? (careerKills / careerDeaths).toFixed(2) : "—";
+
   const traits = [
     { label: "Ego",             key: "ego",             desc: "High ego = ego clashes, volatile", invert: true },
     { label: "Work Ethic",      key: "workEthic",        desc: "Higher = faster development" },
@@ -176,6 +203,41 @@ function PlayerDetail({ player, isUserTeam }) {
           ))}
         </div>
       )}
+
+      {/* ── K/D Stats ── */}
+      <div className="detail-col detail-kd">
+        <strong>K/D Stats</strong>
+        <div className="kd-summary">
+          <span>Current Season: <strong>{curKD}</strong> <span className="muted">({curMatches}G)</span></span>
+          {history.length > 0 && (
+            <span>Career: <strong>{careerKD}</strong></span>
+          )}
+        </div>
+        {history.length > 0 && (
+          <table className="kd-history-table">
+            <thead>
+              <tr><th>S</th><th>G</th><th>K</th><th>D</th><th>K/D</th></tr>
+            </thead>
+            <tbody>
+              {history.map(e => {
+                const kd = e.deaths > 0 ? (e.kills / e.deaths).toFixed(2) : "—";
+                return (
+                  <tr key={e.season}>
+                    <td>{e.season}</td>
+                    <td>{e.matches}</td>
+                    <td>{e.kills}</td>
+                    <td>{e.deaths}</td>
+                    <td className={parseFloat(kd) >= 1 ? "kd-pos" : "kd-neg"}>{kd}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        {history.length === 0 && curMatches === 0 && (
+          <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>No matches played yet.</p>
+        )}
+      </div>
     </div>
   );
 }

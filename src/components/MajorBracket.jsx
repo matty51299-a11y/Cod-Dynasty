@@ -377,7 +377,7 @@ export default function MajorBracket() {
 
   const { schedule, userTeamId, season } = state;
   const majors        = schedule.majors ?? [];
-  const activeMajorIdx= schedule.phase === "major" ? schedule.currentStage : null;
+  const activeMajorIdx= schedule.phase === "major" ? (schedule.majorIdx ?? schedule.currentStage ?? null) : null;
   const [viewIdx, setViewIdx] = useState(activeMajorIdx ?? 0);
   const isLive        = schedule.phase === "major";
   const activeMajor   = activeMajorIdx !== null ? majors[activeMajorIdx] : null;

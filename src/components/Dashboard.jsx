@@ -24,9 +24,11 @@ export default function Dashboard() {
   const myStanding = standings[userTeamId] ?? { wins: 0, losses: 0, points: 0 };
 
   const phase    = schedule.phase;
-  const stageIdx = schedule.currentStage ?? 0;
+  // backward-compat: fall back to legacy currentStage if new fields absent
+  const stageIdx  = schedule.stageIdx  ?? schedule.currentStage ?? 0;
+  const majorIdx  = schedule.majorIdx  ?? (phase === "major" ? (schedule.currentStage ?? 0) : 0);
   const stageName = schedule.stages?.[stageIdx]?.name ?? "—";
-  const majorName = schedule.majors?.[stageIdx]?.name ?? "Major";
+  const majorName = schedule.majors?.[majorIdx]?.name ?? "Major";
 
   // Last 5 matches involving the user's team, newest first
   const myLog = [...(schedule.matchLog || [])]
@@ -34,12 +36,13 @@ export default function Dashboard() {
     .filter(r => r.winnerId === userTeamId || r.loserId === userTeamId)
     .slice(0, 5);
 
-  const currentStage = schedule.stages?.[stageIdx];
+  const currentStage = phase === "stage" ? schedule.stages?.[stageIdx] : null;
   const remaining    = currentStage ? currentStage.matches.filter(m => !m.played).length : 0;
 
   const isOffseason = phase === "offseason";
   const isMajor     = phase === "major";
   const isStage     = phase === "stage";
+  const isPreChamps = phase === "preChamps";
 
   function toggleRow(i) {
     setExpandedIdx(prev => (prev === i ? null : i));
@@ -52,7 +55,7 @@ export default function Dashboard() {
         <div>
           <h2 style={{ color: team?.color ?? "#fff" }}>{team?.name ?? userTeamId}</h2>
           <p className="muted">
-            Season {season} · {isOffseason ? "Offseason" : isMajor ? majorName : stageName}
+            Season {season} · {isOffseason ? "Offseason" : isMajor ? majorName : isPreChamps ? "Pre-Champs Window" : stageName}
           </p>
         </div>
         <div className="stat-row">
@@ -84,6 +87,18 @@ export default function Dashboard() {
                 <div className="mmc-hint">Tournament is in progress — use the <strong>Major</strong> tab to simulate</div>
               </div>
             </div>
+          </div>
+        )}
+        {isPreChamps && (
+          <div className="prechamps-callout">
+            <div className="pc-header">
+              <span className="pc-badge">PRE-CHAMPS</span>
+              <span className="pc-title">Roster Window</span>
+            </div>
+            <p className="pc-hint">Make your final roster moves. Championship bracket seeds from cumulative season points.</p>
+            <button className="btn-accent" onClick={() => dispatch({ type: "BEGIN_CHAMPS" })}>
+              Begin Championship →
+            </button>
           </div>
         )}
         {isOffseason && (

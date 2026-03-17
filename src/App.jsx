@@ -2,7 +2,7 @@
 // Root application component.
 // Handles: save/load lifecycle, navigation, notifications.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGame, saveGame, loadGame, deleteSave } from "./store/gameStore.jsx";
 import TeamSelect from "./components/TeamSelect.jsx";
 import Dashboard from "./components/Dashboard.jsx";
@@ -30,6 +30,16 @@ export default function App() {
   const { state, dispatch } = useGame();
   const [tab, setTab] = useState("dashboard");
   const [confirmNew, setConfirmNew] = useState(false);
+  const prevPhaseRef = useRef(null);
+
+  // Auto-navigate to Major tab on stage → major transition only (not on initial load)
+  useEffect(() => {
+    const phase = state?.schedule?.phase;
+    if (prevPhaseRef.current === "stage" && phase === "major") {
+      setTab("major");
+    }
+    prevPhaseRef.current = phase ?? null;
+  }, [state?.schedule?.phase]);
 
   // On mount: auto-load a save if one exists
   useEffect(() => {

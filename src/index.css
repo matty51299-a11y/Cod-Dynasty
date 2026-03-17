@@ -1316,3 +1316,84 @@ body { margin: 0; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── PLAYER DETAIL K/D STATS ─────────────────────────────────────────────── */
+.detail-kd { min-width: 200px; }
+
+.kd-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 6px 0 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.kd-summary strong { color: var(--text); }
+
+.kd-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.kd-history-table th {
+  padding: 4px 8px;
+  text-align: right;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.kd-history-table th:first-child { text-align: left; }
+.kd-history-table td {
+  padding: 4px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.kd-history-table td:first-child { text-align: left; color: var(--text); }
+.kd-history-table tbody tr:last-child td { border-bottom: none; }
+.kd-history-table tbody tr:hover td { background: var(--bg2); }
+
+.kd-pos { color: var(--green) !important; font-weight: 600; }
+.kd-neg { color: var(--red)   !important; font-weight: 600; }
+
+/* ── PRE-CHAMPS CALLOUT ──────────────────────────────────────────────────── */
+.prechamps-callout {
+  background: linear-gradient(135deg, rgba(79,142,247,0.08) 0%, rgba(130,80,255,0.08) 100%);
+  border: 1px solid rgba(130,80,255,0.35);
+  border-radius: 10px;
+  padding: 16px 20px;
+  max-width: 480px;
+}
+
+.pc-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.pc-badge {
+  background: linear-gradient(90deg, #4f8ef7, #8250ff);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.pc-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-head);
+}
+
+.pc-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}

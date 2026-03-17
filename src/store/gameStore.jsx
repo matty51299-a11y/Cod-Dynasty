@@ -5,7 +5,7 @@
 import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
-import { buildSeason, simNextMatch, simMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps } from "../engine/seasonEngine.js";
 
 const SAVE_KEY = "cdl_manager_save";
 
@@ -21,7 +21,8 @@ function newGameState(userTeamId) {
     schedule: buildSeason(1),
     notifications: [],
     saveExists: true,
-    enteredMajorIdx: null,  // tracks which major the user has "entered" past the intro gate
+    enteredMajorIdx:   null,  // tracks which major the user has "entered" past the intro gate
+    playerSeasonStats: {},    // { [playerId]: [{ season, kills, deaths, matches }, ...] }
   };
 }
 
@@ -48,6 +49,9 @@ function reducer(state, action) {
 
     case "ENTER_MAJOR":
       return { ...state, enteredMajorIdx: action.majorIdx };
+
+    case "BEGIN_CHAMPS":
+      return beginChamps({ ...state });
 
     case "SIM_NEXT_MAJOR_MATCH":
       return simNextMajorMatch({ ...state });
