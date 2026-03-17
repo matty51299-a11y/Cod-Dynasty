@@ -292,9 +292,8 @@ function RoundSection({ round, bracket, isCurrentRound, userTeamId, expandedKey,
 }
 
 // ── MajorView ─────────────────────────────────────────────────────────────────
-function MajorView({ major, isActive, schedule, userTeamId, dispatch }) {
+function MajorView({ major, isActive, schedule, userTeamId, dispatch, isEntered, onEnter }) {
   const [expandedKey, setExpandedKey] = useState(null);
-  const [enteredMajor, setEnteredMajor] = useState(false);
   const bracket = major.bracket;
 
   if (!bracket) {
@@ -309,15 +308,15 @@ function MajorView({ major, isActive, schedule, userTeamId, dispatch }) {
   const roundName   = curRound >= 0 ? bracket.rounds[curRound].name : null;
   const champTeam   = bracket.champion ? CDL_TEAMS.find(t => t.id === bracket.champion) : null;
 
-  // Show intro when: active major, no matches played yet, user hasn't clicked "Enter"
+  // Show intro when: active major, no matches played yet, user hasn't entered this major
   const noMatchesPlayed = bracket.rounds[0]?.matches.every(m => !m.played);
-  if (isActive && !major.completed && noMatchesPlayed && !enteredMajor) {
+  if (isActive && !major.completed && noMatchesPlayed && !isEntered) {
     return (
       <MajorIntro
         major={major}
         schedule={schedule}
         userTeamId={userTeamId}
-        onEnter={() => setEnteredMajor(true)}
+        onEnter={onEnter}
       />
     );
   }
@@ -382,6 +381,7 @@ export default function MajorBracket() {
   const [viewIdx, setViewIdx] = useState(activeMajorIdx ?? 0);
   const isLive        = schedule.phase === "major";
   const activeMajor   = activeMajorIdx !== null ? majors[activeMajorIdx] : null;
+  const isEntered     = activeMajorIdx !== null && (state.enteredMajorIdx ?? null) === activeMajorIdx;
 
   return (
     <div className={`major-page ${isLive ? "major-page-live" : ""}`}>
@@ -431,6 +431,8 @@ export default function MajorBracket() {
         schedule={schedule}
         userTeamId={userTeamId}
         dispatch={dispatch}
+        isEntered={isEntered}
+        onEnter={() => dispatch({ type: "ENTER_MAJOR", majorIdx: activeMajorIdx })}
       />
     </div>
   );

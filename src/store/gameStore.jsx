@@ -21,6 +21,7 @@ function newGameState(userTeamId) {
     schedule: buildSeason(1),
     notifications: [],
     saveExists: true,
+    enteredMajorIdx: null,  // tracks which major the user has "entered" past the intro gate
   };
 }
 
@@ -45,6 +46,9 @@ function reducer(state, action) {
     case "SIM_MAJOR":
       return simMajor({ ...state });
 
+    case "ENTER_MAJOR":
+      return { ...state, enteredMajorIdx: action.majorIdx };
+
     case "SIM_NEXT_MAJOR_MATCH":
       return simNextMajorMatch({ ...state });
 
@@ -52,7 +56,7 @@ function reducer(state, action) {
       return simMajorRound({ ...state });
 
     case "ADVANCE_OFFSEASON":
-      return advanceOffseason({ ...state });
+      return { ...advanceOffseason({ ...state }), enteredMajorIdx: null };
 
     // ── SIGN PLAYER ───────────────────────────────────────────────────────────
     // Prospects live in state.prospects; pros live in state.players.
