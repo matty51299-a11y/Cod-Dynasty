@@ -50,6 +50,9 @@ function reducer(state, action) {
     case "ENTER_MAJOR":
       return { ...state, enteredMajorIdx: action.majorIdx };
 
+    case "DISMISS_MAJOR":
+      return { ...state, enteredMajorIdx: null };
+
     case "BEGIN_CHAMPS":
       return beginChamps({ ...state });
 

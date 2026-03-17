@@ -10,7 +10,7 @@ function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 
-export default function MajorEntryOverlay({ setTab }) {
+export default function MajorEntryOverlay() {
   const { state, dispatch } = useGame();
   if (!state) return null;
 
@@ -38,7 +38,7 @@ export default function MajorEntryOverlay({ setTab }) {
 
   function enter() {
     dispatch({ type: "ENTER_MAJOR", majorIdx });
-    if (setTab) setTab("major");
+    // No tab navigation — MajorTournamentOverlay takes over when isEntered becomes true
   }
 
   return (

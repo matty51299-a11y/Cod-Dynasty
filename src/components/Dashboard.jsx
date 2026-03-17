@@ -151,11 +151,10 @@ export default function Dashboard({ setTab }) {
               </button>
             </>
           )}
-          {isMajor && isEntered && (
-            <button className="btn-primary pc-cta" onClick={() => setTab?.("major")}>
-              ▶ Continue Tournament
-              <span className="pc-cta-badge">LIVE</span>
-            </button>
+          {isMajor && !isEntered && (
+            <div className="pc-major-hint muted" style={{ fontSize: 12, padding: "8px 0" }}>
+              A tournament event is starting — enter it via the overlay above.
+            </div>
           )}
           {isPreChamps && (
             <button
