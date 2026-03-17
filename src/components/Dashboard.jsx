@@ -1,77 +1,82 @@
 // src/components/Dashboard.jsx
-// Main control panel showing:
-//   - Current season / phase
-//   - Your team summary
-//   - Simulation action buttons
-//   - Recent match log (last 5 results)
+// Main hub: team summary, sim controls, clickable Recent Results.
+// Clicking a result row expands a full series breakdown inline.
 
+import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
+import SeriesDetail from "./SeriesDetail.jsx";
 
 export default function Dashboard() {
   const { state, dispatch } = useGame();
+  // Index (into myLog) of the currently expanded result row, or null
+  const [expandedIdx, setExpandedIdx] = useState(null);
+
   if (!state) return null;
 
   const { schedule, userTeamId, season, players } = state;
-  const team = CDL_TEAMS.find(t => t.id === userTeamId);
+  const team     = CDL_TEAMS.find(t => t.id === userTeamId);
   const myPlayers = players.filter(p => p.teamId === userTeamId);
-  const chem = calcChemistry(myPlayers);
-  const chemText = chemLabel(chem);
+  const chem      = calcChemistry(myPlayers);
 
-  const standings = schedule.standings ?? {};
+  const standings  = schedule.standings ?? {};
   const myStanding = standings[userTeamId] ?? { wins: 0, losses: 0, points: 0 };
 
-  const phase = schedule.phase;
+  const phase    = schedule.phase;
   const stageIdx = schedule.currentStage ?? 0;
   const stageName = schedule.stages?.[stageIdx]?.name ?? "—";
   const majorName = schedule.majors?.[stageIdx]?.name ?? "Major";
 
-  // Recent log – last 5 involving user team
+  // Last 5 matches involving the user's team, newest first
   const myLog = [...(schedule.matchLog || [])]
     .reverse()
     .filter(r => r.winnerId === userTeamId || r.loserId === userTeamId)
     .slice(0, 5);
 
-  // Count remaining matches
   const currentStage = schedule.stages?.[stageIdx];
-  const remaining = currentStage
-    ? currentStage.matches.filter(m => !m.played).length
-    : 0;
+  const remaining    = currentStage ? currentStage.matches.filter(m => !m.played).length : 0;
 
   const isOffseason = phase === "offseason";
-  const isMajor = phase === "major";
-  const isStage = phase === "stage";
+  const isMajor     = phase === "major";
+  const isStage     = phase === "stage";
+
+  function toggleRow(i) {
+    setExpandedIdx(prev => (prev === i ? null : i));
+  }
 
   return (
     <div className="dashboard">
+      {/* ── Header ── */}
       <div className="dashboard-header">
         <div>
           <h2 style={{ color: team?.color ?? "#fff" }}>{team?.name ?? userTeamId}</h2>
-          <p className="muted">Season {season} · {isOffseason ? "Offseason" : isMajor ? majorName : stageName}</p>
+          <p className="muted">
+            Season {season} · {isOffseason ? "Offseason" : isMajor ? majorName : stageName}
+          </p>
         </div>
         <div className="stat-row">
-          <Stat label="Record" value={`${myStanding.wins}W – ${myStanding.losses}L`} />
-          <Stat label="Points" value={myStanding.points} />
-          <Stat label="Chemistry" value={`${chem} (${chemText})`} />
-          <Stat label="Roster Size" value={myPlayers.length} />
+          <Stat label="Record"    value={`${myStanding.wins}W – ${myStanding.losses}L`} />
+          <Stat label="Points"    value={myStanding.points} />
+          <Stat label="Chemistry" value={`${chem} (${chemLabel(chem)})`} />
+          <Stat label="Roster"    value={`${myPlayers.length} players`} />
         </div>
       </div>
 
-      {/* Simulation buttons */}
+      {/* ── Sim controls ── */}
       <div className="sim-controls">
         {isStage && (
           <>
-            <button className="btn-primary" onClick={() => dispatch({ type: "SIM_MATCHDAY" })}>
+            <button className="btn-primary" onClick={() => { dispatch({ type: "SIM_MATCHDAY" }); setExpandedIdx(null); }}>
               Simulate Matchday <span className="badge">{remaining} left</span>
             </button>
-            <button className="btn-secondary" onClick={() => dispatch({ type: "SIM_STAGE" })}>
+            <button className="btn-secondary" onClick={() => { dispatch({ type: "SIM_STAGE" }); setExpandedIdx(null); }}>
               Sim Rest of {stageName}
             </button>
           </>
         )}
         {isMajor && (
-          <button className="btn-primary" onClick={() => dispatch({ type: "SIM_MAJOR" })}>
+          <button className="btn-primary" onClick={() => { dispatch({ type: "SIM_MAJOR" }); setExpandedIdx(null); }}>
             Simulate {majorName}
           </button>
         )}
@@ -82,52 +87,61 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Recent results */}
+      {/* ── Recent Results ── */}
       <div className="section">
-        <h3>Recent Results</h3>
+        <h3>Recent Results <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}>— click a row for full breakdown</span></h3>
+
         {myLog.length === 0 ? (
           <p className="muted">No matches played yet.</p>
         ) : (
-          <table className="results-table">
-            <thead>
-              <tr>
-                <th>Stage</th>
-                <th>Result</th>
-                <th>Score</th>
-                <th>Standout</th>
-              </tr>
-            </thead>
-            <tbody>
-              {myLog.map((r, i) => {
-                const won = r.winnerId === userTeamId;
-                const opp = won ? r.loserName : r.winnerName;
-                const mapsLabel = r.mapResults
-                  ? r.mapResults.map(m => m.short).join(" · ")
-                  : null;
-                return (
-                  <tr key={i}>
-                    <td className="muted">{r.stage}</td>
-                    <td className={won ? "win" : "loss"}>{won ? `W vs ${opp}` : `L vs ${opp}`}</td>
-                    <td>{r.score}{mapsLabel && <span className="muted" style={{fontSize:11,marginLeft:6}}>{mapsLabel}</span>}</td>
-                    <td>
-                      {r.standoutName ?? "—"}
-                      {r.standoutKD > 0 && <span className="muted" style={{fontSize:11,marginLeft:4}}>({r.standoutKD.toFixed(2)} K/D)</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="recent-results-list">
+            {myLog.map((r, i) => {
+              const won    = r.winnerId === userTeamId;
+              const opp    = won ? r.loserName : r.winnerName;
+              const isOpen = expandedIdx === i;
+              const maps   = r.mapResults?.map(m => m.short).join(" · ") ?? null;
+
+              return (
+                <div
+                  key={i}
+                  className={`recent-result-card ${won ? "rr-win" : "rr-loss"} ${isOpen ? "rr-open" : ""}`}
+                  onClick={() => toggleRow(i)}
+                >
+                  {/* ── Compact summary row ── */}
+                  <div className="rr-summary">
+                    <span className={`rr-wl ${won ? "win" : "loss"}`}>{won ? "W" : "L"}</span>
+                    <span className="rr-opp">{won ? `vs ${opp}` : `vs ${opp}`}</span>
+                    <span className="rr-score">{r.score}</span>
+                    {maps && <span className="rr-maps muted">{maps}</span>}
+                    <span className="rr-standout muted">
+                      ⭐ {r.standoutName ?? "—"}
+                      {r.standoutKD > 0 && ` · ${r.standoutKD.toFixed(2)} K/D`}
+                    </span>
+                    <span className="rr-stage muted">{r.stage}</span>
+                    <span className="rr-chevron">{isOpen ? "▲" : "▼"}</span>
+                  </div>
+
+                  {/* ── Expanded series detail ── */}
+                  {isOpen && (
+                    <div onClick={e => e.stopPropagation()}>
+                      <SeriesDetail result={r} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* Championship results if available */}
+      {/* ── Champion banners ── */}
       {schedule.majors?.map((major, i) => {
         if (!major.completed || !major.bracket?.champion) return null;
         const champ = CDL_TEAMS.find(t => t.id === major.bracket.champion);
         return (
           <div key={i} className="champion-banner" style={{ borderColor: champ?.color }}>
-            🏆 {major.name} Champion: <strong style={{ color: champ?.color }}>{champ?.name ?? major.bracket.champion}</strong>
+            🏆 {major.name} Champion:{" "}
+            <strong style={{ color: champ?.color }}>{champ?.name ?? major.bracket.champion}</strong>
           </div>
         );
       })}

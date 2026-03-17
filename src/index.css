@@ -204,6 +204,43 @@ body { margin: 0; }
 .section h3 { font-size: 14px; color: var(--text-dim); text-transform: uppercase;
   letter-spacing: 1px; margin-bottom: 10px; }
 
+/* ── DASHBOARD RECENT RESULTS CARDS ─────────────────────────────────────────── */
+.recent-results-list { display: flex; flex-direction: column; gap: 4px; }
+
+.recent-result-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg2);
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.1s;
+}
+.recent-result-card:hover { background: var(--bg3); }
+.recent-result-card.rr-win  { border-left-color: var(--green); }
+.recent-result-card.rr-loss { border-left-color: var(--red); }
+.recent-result-card.rr-open { background: var(--bg3); }
+
+.rr-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  flex-wrap: wrap;
+}
+
+.rr-wl {
+  font-weight: 800;
+  font-size: 13px;
+  min-width: 16px;
+}
+.rr-opp   { font-size: 13px; color: var(--text-head); min-width: 140px; }
+.rr-score { font-weight: 700; color: var(--text-head); font-size: 14px; }
+.rr-maps  { font-size: 11px; }
+.rr-standout { font-size: 12px; flex: 1; }
+.rr-stage { font-size: 11px; margin-left: auto; white-space: nowrap; }
+.rr-chevron { font-size: 11px; color: var(--text-dim); padding-left: 8px; }
+
 .muted { color: var(--text-dim); font-size: 13px; }
 
 .champion-banner {
@@ -592,8 +629,23 @@ body { margin: 0; }
 .log-stage { min-width: 120px; font-size: 12px; white-space: nowrap; }
 .log-teams { display: flex; align-items: center; gap: 6px; font-size: 14px; flex: 1; }
 .log-score { color: var(--text-head); font-weight: 700; }
-.log-standout { font-size: 12px; min-width: 160px; }
-.log-expand-icon { color: var(--text-dim); font-size: 11px; margin-left: auto; }
+.log-maps     { font-size: 11px; }
+.log-standout { font-size: 12px; flex: 1; }
+
+/* Explicit expand/collapse button — always visible so user knows it's clickable */
+.log-expand-btn {
+  margin-left: auto;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 2px 9px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.log-expand-btn:hover { color: var(--text-head); border-color: var(--accent); }
 
 /* Series detail panel */
 .series-detail {
