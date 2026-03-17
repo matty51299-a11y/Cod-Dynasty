@@ -10,6 +10,7 @@
 
 import { simMatch } from "./matchSim.js";
 import { CDL_TEAMS } from "../data/teams.js";
+import { runProgression } from "./progression.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
 function seededRng(seed) {
@@ -345,18 +346,36 @@ export function simStage(gameState) {
 
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
-  const players = gameState.players.map(p => ({
+  const standings = gameState.schedule?.standings ?? {};
+  const newSeason = (gameState.schedule?.season ?? 1) + 1;
+
+  // Step 1: age up all players and prospects, reset form
+  const agedPlayers = (gameState.players || []).map(p => ({
     ...p,
-    age:        p.age + 1,
-    experience: p.experience + 1,
+    age:        (p.age || 18) + 1,
+    experience: (p.experience || 0) + 1,
     form:       70,
-    overall:    p.age < 23
-      ? Math.min(p.potential, p.overall + Math.floor(Math.random() * 3))
-      : p.overall,
   }));
 
-  const newSeason = (gameState.schedule?.season ?? 1) + 1;
-  return { ...gameState, players, schedule: buildSeason(newSeason), season: newSeason };
+  const agedProspects = (gameState.prospects || []).map(p => ({
+    ...p,
+    age:        (p.age || 18) + 1,
+    experience: (p.experience || 0),
+    form:       65,
+  }));
+
+  // Step 2: run progression/regression on the aged players
+  const { updatedPlayers, updatedProspects, progressionLog } =
+    runProgression(agedPlayers, agedProspects, standings, newSeason);
+
+  return {
+    ...gameState,
+    players:        updatedPlayers,
+    prospects:      updatedProspects,
+    progressionLog,                  // stored for OffseasonReport
+    schedule:       buildSeason(newSeason),
+    season:         newSeason,
+  };
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────

@@ -91,11 +91,25 @@ export function generateProspects(seed = 42) {
     const tag = LAST_NAMES_TAGS[Math.floor(rng() * LAST_NAMES_TAGS.length)];
     const name = `${firstName}${rng() > 0.5 ? tag : ""}`;
 
-    const age = ri(17, 22, rng);
+    // Age range 18–23. Minimum is 18 (no underage prospects).
+    const age = ri(18, 23, rng);
     const primary = arch.roles[Math.floor(rng() * arch.roles.length)];
     const secondary = ROLES[Math.floor(rng() * ROLES.length)];
-    const overall = ri(arch.overallMin, arch.overallMax, rng);
-    const potential = clamp(overall + ri(arch.potentialBonus - 3, arch.potentialBonus + 5, rng));
+
+    // Young players are raw: apply an age-based penalty to current overall.
+    // This makes 18-year-olds weak raw prospects and 22-23yr olds near their ceiling.
+    const baseOverall = ri(arch.overallMin, arch.overallMax, rng);
+    const agePenalty = age === 18 ? ri(10, 18, rng)
+                     : age === 19 ? ri(5,  12, rng)
+                     : age === 20 ? ri(1,   6, rng)
+                     : 0;
+    const overall = clamp(baseOverall - agePenalty, 40, 99);
+
+    // Young players have wider potential gap (more upside if raw).
+    const potBonus = age <= 19 ? ri(arch.potentialBonus + 2, arch.potentialBonus + 10, rng)
+                   : age <= 20 ? ri(arch.potentialBonus,     arch.potentialBonus + 6,  rng)
+                   : ri(arch.potentialBonus - 3, arch.potentialBonus + 4, rng);
+    const potential = clamp(overall + potBonus);
 
     // Build individual ratings around overall with archetype bias
     const isSmg = primary === "Entry SMG" || primary === "Slayer SMG";

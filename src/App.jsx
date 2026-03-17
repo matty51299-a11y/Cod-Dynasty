@@ -12,6 +12,7 @@ import FreeAgency from "./components/FreeAgency.jsx";
 import Prospects from "./components/Prospects.jsx";
 import MatchLog from "./components/MatchLog.jsx";
 import MajorBracket from "./components/MajorBracket.jsx";
+import OffseasonReport from "./components/OffseasonReport.jsx";
 import { CDL_TEAMS } from "./data/teams.js";
 
 const TABS = [
@@ -21,6 +22,7 @@ const TABS = [
   { id: "roster",    label: "Roster" },
   { id: "fa",        label: "Free Agency" },
   { id: "prospects", label: "Challengers" },
+  { id: "devreport", label: "Dev Report" },
   { id: "log",       label: "Match Log" },
 ];
 
@@ -106,6 +108,7 @@ export default function App() {
         {TABS.map(t => {
           // Add a live indicator dot on the Major tab when a major is active
           const isMajorLive = t.id === "major" && state.schedule?.phase === "major";
+          const hasDevData  = t.id === "devreport" && state.progressionLog?.length > 0;
           return (
             <button
               key={t.id}
@@ -114,6 +117,7 @@ export default function App() {
             >
               {t.label}
               {isMajorLive && <span className="tab-live-dot" />}
+              {hasDevData   && <span className="tab-dev-dot" />}
             </button>
           );
         })}
@@ -127,6 +131,7 @@ export default function App() {
         {tab === "roster"    && <Roster />}
         {tab === "fa"        && <FreeAgency />}
         {tab === "prospects" && <Prospects />}
+        {tab === "devreport" && <OffseasonReport />}
         {tab === "log"       && <MatchLog />}
       </main>
     </div>

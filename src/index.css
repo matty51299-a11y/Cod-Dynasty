@@ -928,6 +928,130 @@ body { margin: 0; }
   overflow-x: auto;
 }
 
+/* ── DEV REPORT TAB DOT ─────────────────────────────────────────────────────── */
+.tab-dev-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--yellow);
+  margin-left: 5px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+/* ── OFFSEASON DEVELOPMENT REPORT ───────────────────────────────────────────── */
+.dev-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.dev-summary-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 60px;
+}
+.dev-sum-val   { font-size: 22px; font-weight: 700; line-height: 1; }
+.dev-sum-label { font-size: 11px; color: var(--text-dim); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.dev-standout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  min-width: 130px;
+}
+.dev-standout--green { border-color: rgba(0,230,118,0.3); background: rgba(0,230,118,0.05); }
+.dev-standout--red   { border-color: rgba(239,83,80,0.3);  background: rgba(239,83,80,0.05); }
+.dev-standout-label  { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.dev-standout-name   { font-size: 13px; font-weight: 600; color: var(--text-head); margin-top: 2px; }
+.dev-standout-delta  { font-size: 12px; font-weight: 700; margin-top: 1px; }
+.dev-standout--green .dev-standout-delta { color: var(--green); }
+.dev-standout--red   .dev-standout-delta { color: var(--red); }
+
+.dev-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dev-filter-row, .dev-sort-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.dev-filter-btn, .dev-sort-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+.dev-filter-btn:hover, .dev-sort-btn:hover { color: var(--text); }
+.dev-filter-btn.active, .dev-sort-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(79,142,247,0.08);
+}
+
+.dev-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dev-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.dev-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  white-space: nowrap;
+}
+.dev-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+.dev-table tbody tr:last-child td { border-bottom: none; }
+
+.dev-row { background: var(--bg); transition: background 0.1s; }
+.dev-row:hover { background: var(--bg2); }
+.dev-row--myteam { background: rgba(79,142,247,0.04); }
+.dev-row--myteam:hover { background: rgba(79,142,247,0.10); }
+
+.dev-name  { font-weight: 600; color: var(--text-head); }
+.dev-age   { color: var(--text-dim); text-align: center; }
+.dev-old   { color: var(--text-dim); text-align: center; }
+.dev-new   { font-weight: 600; text-align: center; }
+.dev-delta { font-weight: 700; text-align: center; min-width: 40px; }
+
+.delta-pos  { color: var(--green); }
+.delta-neg  { color: var(--red); }
+.delta-zero { color: var(--text-dim); }
+
 /* ── SCROLLBAR ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
