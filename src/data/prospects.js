@@ -16,7 +16,7 @@ function ri(min, max, rng) {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
-function clamp(v, min = 40, max = 99) {
+function clamp(v, min = 41, max = 99) {
   return Math.max(min, Math.min(max, Math.round(v)));
 }
 
