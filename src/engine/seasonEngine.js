@@ -316,15 +316,13 @@ export function simNextMatch(gameState) {
 
   // Update cumulative season standings
   schedule.standings[result.winnerId].wins++;
-  schedule.standings[result.winnerId].points += 3;
+  schedule.standings[result.winnerId].points += 10;
   schedule.standings[result.loserId].losses++;
-  schedule.standings[result.loserId].points += 1;
 
   // Update per-stage standings
   schedule.stageStandings[result.winnerId].wins++;
-  schedule.stageStandings[result.winnerId].points += 3;
+  schedule.stageStandings[result.winnerId].points += 10;
   schedule.stageStandings[result.loserId].losses++;
-  schedule.stageStandings[result.loserId].points += 1;
 
   schedule.matchLog.push({ ...result, stage: stage.name });
   schedule.currentMatchday++;
@@ -368,15 +366,13 @@ export function simMatchday(gameState) {
 
     // Cumulative season standings
     schedule.standings[result.winnerId].wins++;
-    schedule.standings[result.winnerId].points += 3;
+    schedule.standings[result.winnerId].points += 10;
     schedule.standings[result.loserId].losses++;
-    schedule.standings[result.loserId].points += 1;
 
     // Per-stage standings
     schedule.stageStandings[result.winnerId].wins++;
-    schedule.stageStandings[result.winnerId].points += 3;
+    schedule.stageStandings[result.winnerId].points += 10;
     schedule.stageStandings[result.loserId].losses++;
-    schedule.stageStandings[result.loserId].points += 1;
 
     schedule.matchLog.push({ ...result, stage: stage.name });
   }
@@ -455,14 +451,12 @@ export function simUserMatchday(gameState) {
     match.result = result;
 
     schedule.standings[result.winnerId].wins++;
-    schedule.standings[result.winnerId].points += 3;
+    schedule.standings[result.winnerId].points += 10;
     schedule.standings[result.loserId].losses++;
-    schedule.standings[result.loserId].points += 1;
 
     schedule.stageStandings[result.winnerId].wins++;
-    schedule.stageStandings[result.winnerId].points += 3;
+    schedule.stageStandings[result.winnerId].points += 10;
     schedule.stageStandings[result.loserId].losses++;
-    schedule.stageStandings[result.loserId].points += 1;
 
     schedule.matchLog.push({ ...result, stage: stage.name });
   }

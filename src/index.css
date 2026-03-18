@@ -3395,6 +3395,82 @@ body { margin: 0; }
   font-size: 12px;
 }
 
+/* ── Elimination banner ──────────────────────────────────────────────────────── */
+.mto-elim-banner {
+  background: linear-gradient(135deg, rgba(220,53,69,0.15) 0%, rgba(220,53,69,0.05) 100%);
+  border: 1px solid rgba(220,53,69,0.35);
+  border-radius: 12px;
+  padding: 20px 24px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.mto-elim-outcome {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #dc3545;
+  margin-bottom: 4px;
+}
+
+.mto-elim-round {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.mto-elim-matchup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.mto-elim-score {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.mto-elim-mvp {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.mto-elim-mvp strong { color: var(--yellow, #f59e0b); }
+
+.mto-elim-mvp-kd {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.mto-elim-sim-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+/* ── MatchCard expanded MVP callout ─────────────────────────────────────────── */
+.mto-bc-mvp {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 8px 12px 4px;
+}
+
+.mto-bc-mvp strong { color: var(--yellow, #f59e0b); }
+
+.mto-bc-mvp-kd {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 /* Return to Season CTA */
 .mto-return-btn {
   padding: 15px 40px;

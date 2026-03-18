@@ -17,6 +17,29 @@ function teamTag(id)  { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 function teamColor(id){ return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Returns { result, roundName } if user was eliminated, otherwise null.
+function getUserElimination(bracket, userTeamId) {
+  if (!bracket) return null;
+  let lastUserMatch = null;
+  let lastRoundName = null;
+  for (const round of bracket.rounds) {
+    for (const m of round.matches) {
+      if (m.played && (m.a === userTeamId || m.b === userTeamId)) {
+        lastUserMatch = m;
+        lastRoundName = round.name;
+      }
+    }
+  }
+  if (!lastUserMatch || lastUserMatch.result?.winnerId === userTeamId) return null;
+  // Confirm no unplayed match still includes them
+  const stillIn = bracket.rounds.some(rnd =>
+    rnd.matches.some(m => !m.played && (m.a === userTeamId || m.b === userTeamId))
+  );
+  if (stillIn) return null;
+  return { result: lastUserMatch.result, roundName: lastRoundName };
+}
+
 function getSeedNum(bracket, teamId, fallback) {
   if (fallback != null) return fallback;
   const idx = bracket.seeds?.indexOf(teamId) ?? -1;
@@ -95,6 +118,29 @@ function MvHero({ major, roundName, curRound }) {
       <div className="mto-hero-name">{major.name.toUpperCase()}</div>
       {roundName && <div className="mto-hero-round">{roundName}</div>}
       {remaining != null && <div className="mto-hero-count">{remaining} teams remain</div>}
+    </div>
+  );
+}
+
+// ── Elimination result banner ─────────────────────────────────────────────────
+function EliminatedBanner({ elimination, userTeamId }) {
+  const { result, roundName } = elimination;
+  const oppId = result.winnerId === userTeamId ? result.loserId : result.winnerId;
+  return (
+    <div className="mto-elim-banner">
+      <div className="mto-elim-outcome">ELIMINATED</div>
+      <div className="mto-elim-round">Fell in the {roundName}</div>
+      <div className="mto-elim-matchup">
+        <span style={{ color: teamColor(result.winnerId) }}>{teamTag(result.winnerId)}</span>
+        <span className="mto-elim-score">{result.score}</span>
+        <span style={{ color: teamColor(result.loserId), opacity: 0.55 }}>{teamTag(result.loserId)}</span>
+      </div>
+      {result.standoutName && result.standoutKD > 0 && (
+        <div className="mto-elim-mvp">
+          ⭐ <strong>{result.standoutName}</strong>
+          <span className="mto-elim-mvp-kd"> {result.standoutKD.toFixed(2)} K/D · Series MVP</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -186,6 +232,12 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
       )}
       {isOpen && isPlayed && (
         <div className="mto-bc-expand">
+          {result.standoutName && result.standoutKD > 0 && (
+            <div className="mto-bc-mvp">
+              ⭐ <strong>{result.standoutName}</strong>
+              <span className="mto-bc-mvp-kd"> {result.standoutKD.toFixed(2)} K/D · Series MVP</span>
+            </div>
+          )}
           <SeriesDetail result={result} />
         </div>
       )}
@@ -270,10 +322,11 @@ export default function MajorTournamentOverlay() {
   }
 
   // ── Live tournament view ─────────────────────────────────────────────────
-  const major     = schedule.majors[activeMajorIdx];
-  const bracket   = major.bracket;
-  const curRound  = currentRoundIdx(bracket);
-  const roundName = curRound >= 0 ? bracket.rounds[curRound].name : null;
+  const major      = schedule.majors[activeMajorIdx];
+  const bracket    = major.bracket;
+  const curRound   = currentRoundIdx(bracket);
+  const roundName  = curRound >= 0 ? bracket.rounds[curRound].name : null;
+  const elimination = getUserElimination(bracket, userTeamId);
 
   return (
     <div className="mto-backdrop">
@@ -283,8 +336,13 @@ export default function MajorTournamentOverlay() {
           {/* Hero header */}
           <MvHero major={major} roundName={roundName} curRound={curRound} />
 
-          {/* Featured next match — centerpiece */}
-          {curRound >= 0 && (
+          {/* Elimination result — shown when user has been knocked out */}
+          {elimination && (
+            <EliminatedBanner elimination={elimination} userTeamId={userTeamId} />
+          )}
+
+          {/* Featured next match — centerpiece (hidden if user is eliminated) */}
+          {curRound >= 0 && !elimination && (
             <NextMatchCard
               bracket={bracket}
               roundIdx={curRound}
@@ -292,6 +350,18 @@ export default function MajorTournamentOverlay() {
               dispatch={dispatch}
               roundName={roundName}
             />
+          )}
+
+          {/* Sim controls when eliminated — still let them advance the rest */}
+          {curRound >= 0 && elimination && (
+            <div className="mto-elim-sim-controls">
+              <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR_ROUND" })}>
+                ▶▶ Sim {roundName ?? "Round"}
+              </button>
+              <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR" })}>
+                ▶▶▶ Finish {major.name}
+              </button>
+            </div>
           )}
 
           {/* Bracket */}
