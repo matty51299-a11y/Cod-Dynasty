@@ -5,7 +5,7 @@
 import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 
 const SAVE_KEY = "cdl_manager_save";
@@ -66,8 +66,24 @@ function reducer(state, action) {
     case "SIM_MAJOR_ROUND":
       return simMajorRound({ ...state });
 
+    case "ENTER_CONTRACT_PHASE":
+      return enterContractPhase({ ...state });
+
     case "ADVANCE_OFFSEASON":
       return { ...advanceOffseason({ ...state }), enteredMajorIdx: null };
+
+    // ── RE-SIGN PLAYER ────────────────────────────────────────────────────────
+    // Extends a player's contract during the contract review phase.
+    // `years` is the NEW contractYears value (before the offseason decrement).
+    case "RESIGN_PLAYER": {
+      const { playerId, years } = action;
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id === playerId ? { ...p, contractYears: years } : p
+        ),
+      };
+    }
 
     // ── SIGN PLAYER ───────────────────────────────────────────────────────────
     // Prospects live in state.prospects; pros live in state.players.
@@ -106,7 +122,7 @@ function reducer(state, action) {
 
       if (prospect) {
         // Move prospect out of prospects array, into players array
-        const signed = { ...prospect, teamId: userTeam, isSub: slotType === "sub", scouted: true };
+        const signed = { ...prospect, teamId: userTeam, isSub: slotType === "sub", scouted: true, contractYears: 2 };
         return addNotif({
           ...state,
           players: [...state.players, signed],
@@ -114,14 +130,14 @@ function reducer(state, action) {
         }, `${signed.name} signed!`);
       }
 
-      // Pro free agent already in players — just update teamId
+      // Pro free agent already in players — just update teamId; give fresh 2-year deal
       const target = state.players.find(p => p.id === playerId);
       if (!target) return addNotif(state, "Player not found.");
 
       return addNotif({
         ...state,
         players: state.players.map(p =>
-          p.id === playerId ? { ...p, teamId: userTeam, isSub: slotType === "sub", scouted: true } : p
+          p.id === playerId ? { ...p, teamId: userTeam, isSub: slotType === "sub", scouted: true, contractYears: 2 } : p
         ),
       }, `${target.name} signed!`);
     }

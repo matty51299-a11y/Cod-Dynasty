@@ -3,6 +3,13 @@
 // Each player has a full stat block used by the match sim and chemistry engine.
 // Ratings are 1–99. Hidden traits use a 1–5 scale (stored here as seeds; scouting reveals them).
 
+// Deterministic hash for assigning initial contract lengths without RNG
+function nameHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffff;
+  return h;
+}
+
 // Helper to build a player object
 function mkPlayer(name, teamId, age, primary, secondary, ratings, hidden) {
   return {
@@ -25,6 +32,8 @@ function mkPlayer(name, teamId, age, primary, secondary, ratings, hidden) {
     // seasons of shared experience (per team, increments each season together)
     experience: 1,
     isProspect: false,
+    // contract years remaining (decrements each offseason; 0 = expires → free agent)
+    contractYears: (nameHash(name) % 3) + 1,  // 1–3 years, deterministic per player
   };
 }
 

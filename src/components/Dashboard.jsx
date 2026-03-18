@@ -40,6 +40,7 @@ export default function Dashboard({ setScreen }) {
   const isMajor     = phase === "major";
   const isPreChamps = phase === "preChamps";
   const isOffseason = phase === "offseason";
+  const isContracts = phase === "contracts";
 
   // Major entry state
   const activeMajor = isMajor ? (schedule.majors?.[majorIdx] ?? null) : null;
@@ -82,7 +83,8 @@ export default function Dashboard({ setScreen }) {
     // Navigation is handled by MajorEntryOverlay / MajorTournamentOverlay overlays
   }
 
-  const phaseLabel = isOffseason ? "Offseason"
+  const phaseLabel = isOffseason  ? "Offseason"
+    : isContracts  ? "Contract Period"
     : isMajor      ? majorName
     : isPreChamps   ? "Pre-Champs Window"
     : stageName;
@@ -114,7 +116,7 @@ export default function Dashboard({ setScreen }) {
                 <Stat label="Season Pts"    value={mySeason.points} />
               </>
             )}
-            {isOffseason && (
+            {(isOffseason || isContracts) && (
               <Stat label="Final Record" value={`${mySeason.wins}W – ${mySeason.losses}L`} />
             )}
             <Stat label="Chemistry" value={`${chem} (${chemLabel(chem)})`} />
@@ -163,9 +165,17 @@ export default function Dashboard({ setScreen }) {
           {isOffseason && (
             <button
               className="btn-accent pc-cta"
+              onClick={() => dispatch({ type: "ENTER_CONTRACT_PHASE" })}
+            >
+              Review Contracts →
+            </button>
+          )}
+          {isContracts && (
+            <button
+              className="btn-accent pc-cta"
               onClick={() => dispatch({ type: "ADVANCE_OFFSEASON" })}
             >
-              Start Season {season + 1} →
+              Advance Offseason →
             </button>
           )}
         </div>
@@ -198,6 +208,11 @@ export default function Dashboard({ setScreen }) {
             }
           </div>
         </div>
+      )}
+
+      {/* ── Contract review panel ── */}
+      {isContracts && (
+        <ContractReviewPanel players={myPlayers} dispatch={dispatch} season={season} />
       )}
 
       {/* ── Stage mini-standings ── */}
@@ -351,6 +366,129 @@ function Stat({ label, value }) {
     <div className="stat-box">
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
+    </div>
+  );
+}
+
+// ── Contract Review Panel ─────────────────────────────────────────────────────
+// Shown during "contracts" phase. Players with contractYears === 1 are expiring
+// this offseason. User can extend (sets contractYears to 2/3/4 before decrement)
+// or let them walk (they'll automatically become free agents when offseason runs).
+function ContractReviewPanel({ players, dispatch, season }) {
+  const starters  = players.filter(p => !p.isSub);
+  const subs      = players.filter(p => p.isSub);
+  const expiring  = starters.filter(p => (p.contractYears ?? 2) === 1);
+  const locked    = starters.filter(p => (p.contractYears ?? 2) > 1);
+
+  return (
+    <div className="contract-panel">
+      <div className="cp-header">
+        <span className="cp-icon">📋</span>
+        <div>
+          <div className="cp-title">Contract Review — End of Season {season}</div>
+          <div className="cp-note muted">
+            Extend expiring contracts now or let players walk to free agency.
+          </div>
+        </div>
+      </div>
+
+      {expiring.length === 0 && locked.length === 0 && (
+        <p className="muted" style={{ padding: "8px 0" }}>
+          No players on your roster. Sign players from Free Agency.
+        </p>
+      )}
+
+      {expiring.length > 0 && (
+        <div className="cp-section">
+          <div className="cp-section-label">Expiring Contracts</div>
+          {expiring.map(p => (
+            <div key={p.id} className="cp-row cp-row--expiring">
+              <div className="cp-player-info">
+                <span className="cp-name">{p.name}</span>
+                <span className="cp-role">{p.primary}</span>
+                <span className="cp-ovr" style={{ color: p.overall >= 90 ? "#00e676" : p.overall >= 80 ? "#69f0ae" : "#ffeb3b" }}>
+                  {p.overall} OVR
+                </span>
+              </div>
+              <div className="cp-actions">
+                <span className="cp-badge cp-badge--expiring">Contract Ending</span>
+                <button
+                  className="btn-secondary-sm"
+                  title="Extend 1 more year"
+                  onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 2 })}
+                >
+                  +1 yr
+                </button>
+                <button
+                  className="btn-secondary-sm"
+                  title="Extend 2 more years"
+                  onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 3 })}
+                >
+                  +2 yr
+                </button>
+                <button
+                  className="btn-secondary-sm"
+                  title="Extend 3 more years"
+                  onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 4 })}
+                >
+                  +3 yr
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {locked.length > 0 && (
+        <div className="cp-section">
+          <div className="cp-section-label">Under Contract</div>
+          {locked.map(p => {
+            const remaining = (p.contractYears ?? 2) - 1;  // years left after offseason decrement
+            return (
+              <div key={p.id} className="cp-row">
+                <div className="cp-player-info">
+                  <span className="cp-name">{p.name}</span>
+                  <span className="cp-role">{p.primary}</span>
+                  <span className="cp-ovr" style={{ color: p.overall >= 90 ? "#00e676" : p.overall >= 80 ? "#69f0ae" : "#ffeb3b" }}>
+                    {p.overall} OVR
+                  </span>
+                </div>
+                <span className="cp-years-remaining">
+                  {remaining} yr{remaining !== 1 ? "s" : ""} remaining
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {subs.length > 0 && (
+        <div className="cp-section">
+          <div className="cp-section-label">Sub</div>
+          {subs.map(p => {
+            const years = p.contractYears ?? 2;
+            const expiresSoon = years === 1;
+            return (
+              <div key={p.id} className={`cp-row ${expiresSoon ? "cp-row--expiring" : ""}`}>
+                <div className="cp-player-info">
+                  <span className="cp-name">{p.name}</span>
+                  <span className="cp-role">SUB</span>
+                  <span className="cp-ovr">{p.overall} OVR</span>
+                </div>
+                {expiresSoon ? (
+                  <div className="cp-actions">
+                    <span className="cp-badge cp-badge--expiring">Contract Ending</span>
+                    <button className="btn-secondary-sm" onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 2 })}>+1 yr</button>
+                    <button className="btn-secondary-sm" onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 3 })}>+2 yr</button>
+                  </div>
+                ) : (
+                  <span className="cp-years-remaining">{(years - 1)} yr{(years - 1) !== 1 ? "s" : ""} remaining</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
