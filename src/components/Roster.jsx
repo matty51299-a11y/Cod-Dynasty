@@ -76,6 +76,7 @@ export default function Roster() {
               <th>Form</th>
               {RATING_KEYS.map(r => <th key={r.key}>{r.label}</th>)}
               <th>Salary</th>
+              <th>Yrs</th>
               {selectedTeam === userTeamId && <th>Action</th>}
             </tr>
           </thead>
@@ -104,6 +105,9 @@ export default function Roster() {
                   <td key={r.key} style={{ color: ratingColor(p[r.key]) }}>{p[r.key]}</td>
                 ))}
                 <td className="salary">${(p.salary / 1000).toFixed(0)}k</td>
+                <td style={{ color: (p.contractYears ?? 2) <= 1 ? "#ff6450" : "var(--text-dim)", fontSize: 12 }}>
+                  {p.contractYears ?? "—"}
+                </td>
                 {selectedTeam === userTeamId && (
                   <td>
                     <button
@@ -325,6 +329,15 @@ function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, 
               <span className="pm-bio-label">Salary</span>
               <span>${(player.salary / 1000).toFixed(0)}k</span>
             </div>
+            {player.contractYears != null && (
+              <div className="pm-bio-row">
+                <span className="pm-bio-label">Contract</span>
+                <span style={{ color: player.contractYears <= 1 ? "#ff6450" : "var(--text)" }}>
+                  {player.contractYears} yr{player.contractYears !== 1 ? "s" : ""} remaining
+                  {player.contractYears === 1 && " ⚠ expiring"}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -537,6 +537,30 @@ function runRetirements(players, prospects, season) {
   return { activePlayers, activeProspects, retired };
 }
 
+// ── Contract phase entry ──────────────────────────────────────────────────────
+// Transitions from "offseason" → "contracts" so the user can review expiring
+// contracts before the offseason actually advances.
+// Also migrates any legacy players that were saved without contractYears.
+export function enterContractPhase(gameState) {
+  const schedule = gameState.schedule;
+  if (schedule.phase !== "offseason") return gameState;
+
+  // Migrate legacy saves: assign contractYears to players who don't have it yet
+  const players = (gameState.players || []).map(p => {
+    if (p.contractYears != null) return p;
+    const id = p.id || p.name || "";
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+    return { ...p, contractYears: (h % 3) + 1 };
+  });
+
+  return {
+    ...gameState,
+    players,
+    schedule: { ...schedule, phase: "contracts" },
+  };
+}
+
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
   const standings      = gameState.schedule?.standings ?? {};
@@ -561,8 +585,33 @@ export function advanceOffseason(gameState) {
     }
   }
 
+  // ── Contract processing ────────────────────────────────────────────────────
+  // AI teams auto-renew any player on a 1-year contract (contractYears === 1)
+  // before the decrement so stars don't flood free agency every offseason.
+  // User's expiring players were already handled in the contracts phase.
+  const withAIRenewals = (gameState.players || []).map(p => {
+    if (!p.teamId || p.teamId === gameState.userTeamId) return p;
+    const years = p.contractYears ?? 2;
+    if (years === 1) return { ...p, contractYears: 2 };  // AI auto-renew
+    return p;
+  });
+
+  // Decrement contractYears by 1 for every signed player
+  const withDecrement = withAIRenewals.map(p => {
+    if (!p.teamId) return p;
+    return { ...p, contractYears: Math.max(0, (p.contractYears ?? 2) - 1) };
+  });
+
+  // Release players whose contracts hit 0 — they become free agents
+  const withExpiry = withDecrement.map(p => {
+    if (p.teamId && (p.contractYears ?? 1) === 0) {
+      return { ...p, teamId: null, isSub: false };
+    }
+    return p;
+  });
+
   // Age up all players and prospects, reset form
-  const agedPlayers = (gameState.players || []).map(p => ({
+  const agedPlayers = withExpiry.map(p => ({
     ...p,
     age:        (p.age || 18) + 1,
     experience: (p.experience || 0) + 1,
