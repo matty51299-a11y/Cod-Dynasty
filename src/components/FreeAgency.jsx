@@ -107,35 +107,47 @@ export default function FreeAgency() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(p => (
-              <tr key={p.id}>
-                <td className="player-name">{p.name}</td>
-                <td>{p.age}</td>
-                <td><span className="role-pill">{p.primary}</span></td>
-                <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
-                <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
-                <td style={{ color: ratingColor(p.gunny) }}>{p.gunny}</td>
-                <td style={{ color: ratingColor(p.clutch) }}>{p.clutch}</td>
-                <td style={{ color: ratingColor(p.searchIQ) }}>{p.searchIQ}</td>
-                <td style={{ color: ratingColor(p.teamwork) }}>{p.teamwork}</td>
-                <td className="salary">${(p.salary / 1000).toFixed(0)}k</td>
-                <td>
-                  <select
-                    value={signAs[p.id] || "starter"}
-                    onChange={e => setSignAs({ ...signAs, [p.id]: e.target.value })}
-                    className="slot-select"
-                  >
-                    <option value="starter">Starter</option>
-                    <option value="sub">Sub</option>
-                  </select>
-                </td>
-                <td>
-                  <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>
-                    Sign
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(p => {
+              const slot        = signAs[p.id] || "starter";
+              const cost        = getSigningCost(p);
+              // Subs don't count against the cap — only starters need the check.
+              const overBy      = slot === "starter" ? Math.max(0, cost - remaining) : 0;
+              const canAfford   = overBy === 0;
+              return (
+                <tr key={p.id}>
+                  <td className="player-name">{p.name}</td>
+                  <td>{p.age}</td>
+                  <td><span className="role-pill">{p.primary}</span></td>
+                  <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
+                  <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
+                  <td style={{ color: ratingColor(p.gunny) }}>{p.gunny}</td>
+                  <td style={{ color: ratingColor(p.clutch) }}>{p.clutch}</td>
+                  <td style={{ color: ratingColor(p.searchIQ) }}>{p.searchIQ}</td>
+                  <td style={{ color: ratingColor(p.teamwork) }}>{p.teamwork}</td>
+                  <td className="salary">${(cost / 1000).toFixed(0)}k</td>
+                  <td>
+                    <select
+                      value={slot}
+                      onChange={e => setSignAs({ ...signAs, [p.id]: e.target.value })}
+                      className="slot-select"
+                    >
+                      <option value="starter">Starter</option>
+                      <option value="sub">Sub</option>
+                    </select>
+                  </td>
+                  <td>
+                    {canAfford ? (
+                      <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>Sign</button>
+                    ) : (
+                      <span style={{ color: "#ef5350", fontSize: "0.78rem", fontWeight: "bold" }}
+                        title={`Exceeds cap by $${(overBy / 1000).toFixed(0)}k`}>
+                        Over Budget
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

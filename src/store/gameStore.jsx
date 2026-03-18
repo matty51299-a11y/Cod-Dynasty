@@ -6,6 +6,7 @@ import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps } from "../engine/seasonEngine.js";
+import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 
 const SAVE_KEY = "cdl_manager_save";
 
@@ -82,6 +83,23 @@ function reducer(state, action) {
       }
       if (slotType === "sub" && rosterNow.filter(p => p.isSub).length >= 1) {
         return addNotif(state, "Sub slot is full (1/1). Release your sub first.");
+      }
+
+      // ── Hard budget check (starters only — subs do not count against cap) ──
+      if (slotType === "starter") {
+        const target = state.prospects.find(p => p.id === playerId)
+                    || state.players.find(p => p.id === playerId);
+        if (target) {
+          const cap       = getTeamCap(userTeam);
+          const committed = rosterNow
+            .filter(p => !p.isSub)
+            .reduce((s, p) => s + getSigningCost(p), 0);
+          const cost  = getSigningCost(target);
+          const over  = committed + cost - cap;
+          if (over > 0) {
+            return addNotif(state, `Over budget — signing ${target.name} would exceed your cap by $${(over / 1000).toFixed(0)}k.`);
+          }
+        }
       }
 
       const prospect = state.prospects.find(p => p.id === playerId);

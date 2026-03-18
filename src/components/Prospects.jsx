@@ -123,8 +123,12 @@ export default function Prospects() {
           </thead>
           <tbody>
             {filtered.map(p => {
-              const ovr = p.scouted ? p.overall : p.scoutedOverall;
-              const pot = p.scouted ? p.potential : p.scoutedPotential;
+              const ovr       = p.scouted ? p.overall : p.scoutedOverall;
+              const pot       = p.scouted ? p.potential : p.scoutedPotential;
+              const slot      = signAs[p.id] || "starter";
+              const cost      = getSigningCost(p);
+              const overBy    = slot === "starter" ? Math.max(0, cost - remaining) : 0;
+              const canAfford = overBy === 0;
               return (
                 <tr key={p.id}>
                   <td className="player-name">
@@ -146,10 +150,10 @@ export default function Prospects() {
                       {pot}{!p.scouted && "~"}
                     </span>
                   </td>
-                  <td className="salary">${(p.salary / 1000).toFixed(0)}k</td>
+                  <td className="salary">${(cost / 1000).toFixed(0)}k</td>
                   <td>
                     <select
-                      value={signAs[p.id] || "starter"}
+                      value={slot}
                       onChange={e => setSignAs({ ...signAs, [p.id]: e.target.value })}
                       className="slot-select"
                     >
@@ -158,9 +162,14 @@ export default function Prospects() {
                     </select>
                   </td>
                   <td>
-                    <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>
-                      Sign
-                    </button>
+                    {canAfford ? (
+                      <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>Sign</button>
+                    ) : (
+                      <span style={{ color: "#ef5350", fontSize: "0.78rem", fontWeight: "bold" }}
+                        title={`Exceeds cap by $${(overBy / 1000).toFixed(0)}k`}>
+                        Over Budget
+                      </span>
+                    )}
                   </td>
                 </tr>
               );

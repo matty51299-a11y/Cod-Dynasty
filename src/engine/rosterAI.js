@@ -558,6 +558,55 @@ function releasePlayer(player, players, prospects) {
   };
 }
 
+// ── Minimum roster guarantee ──────────────────────────────────────────────────
+// After retirements or failed signings a team may have fewer than 4 starters.
+// This pass runs once per team at the end of every roster window and fills any
+// open starter slots with the best affordable candidate available.
+//
+// Rules:
+//   • Skips the user's team (user fills their own gaps manually)
+//   • Respects the hard budget cap — never signs over budget
+//   • Prefers highest-OVR affordable option (no philosophy weighting — this is
+//     emergency fill, not a considered decision)
+//   • Stops if no affordable candidate exists rather than leaving > 4 (better
+//     to have 3 strong players than 4 where one is terrible and over budget)
+function fillMinimumRoster(teamId, players, prospects, rosterMovesLog, season, windowType) {
+  let cur = { players, prospects };
+  const additions = [];
+  let safety = 0;
+
+  while (safety++ < 4) {
+    const starters = getStarters(cur.players, teamId);
+    if (starters.length >= 4) break;
+
+    const committed   = starters.reduce((s, p) => s + getSigningCost(p), 0);
+    const budgetLeft  = getTeamCap(teamId) - committed;
+
+    const pick = [
+      ...cur.players.filter(p => !p.teamId && !p.isProspect),
+      ...cur.prospects.filter(p => !p.teamId),
+    ]
+      .filter(c => getSigningCost(c) <= budgetLeft)
+      .sort((a, b) => (b.overall || 70) - (a.overall || 70))[0];
+
+    if (!pick) break; // nothing affordable — stop rather than go over budget
+
+    cur = signCandidate(pick, teamId, cur.players, cur.prospects);
+    additions.push({ out: null, in: pick.name, fromChallengers: !!pick.isProspect, reason: "roster_fill" });
+  }
+
+  if (additions.length > 0) {
+    rosterMovesLog.push({
+      season, teamId, windowType,
+      moveCount: additions.length,
+      philosophy: "roster_fill",
+      additions,
+    });
+  }
+
+  return cur;
+}
+
 function runRosterWindow(gameState, { windowType, majorIdx }) {
   const teamContexts = ensureContexts(gameState);
   let players = [...(gameState.players || [])];
@@ -656,10 +705,18 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       prospects = afterRelease.prospects;
 
       const teamNow = getStarters(players, team.id);
+
+      // ── Hard budget filter ────────────────────────────────────────────────
+      // Only consider candidates the team can actually afford after this
+      // release. This is a hard cap: over-budget players are excluded before
+      // scoring so the AI can never sign past its limit regardless of score.
+      const committed     = teamNow.reduce((s, p) => s + getSigningCost(p), 0);
+      const budgetLeft    = getTeamCap(team.id) - committed;
+
       const candidates = [
         ...players.filter(p => p.teamId == null),
         ...prospects,
-      ];
+      ].filter(c => getSigningCost(c) <= budgetLeft);
 
       if (!candidates.length) continue;
 
@@ -691,6 +748,18 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       standingRank: evaluation.standingRank,
       chemistry: Math.round(evaluation.chemistry),
     });
+  }
+
+  // ── Mandatory roster fill ─────────────────────────────────────────────────
+  // After all regular AI decisions, guarantee every AI team has 4 starters.
+  // Catches gaps caused by retirements, failed signings, or budget constraints
+  // in the window above. User's team is intentionally excluded — the player
+  // fills their own gaps through Free Agency / Challengers screens.
+  for (const team of CDL_TEAMS) {
+    if (team.id === gameState.userTeamId) continue;
+    const result = fillMinimumRoster(team.id, players, prospects, rosterMovesLog, gameState.season, windowType);
+    players   = result.players;
+    prospects = result.prospects;
   }
 
   return {
