@@ -1,6 +1,6 @@
 // src/components/NextMatchControl.jsx
-// Top-right topbar launcher for the upcoming user match.
-// Phase 1: clicking opens NextMatchOverlay (no simulation dispatched from here).
+// Top-right topbar launcher — primary stage-play progression control.
+// Clicking opens NextMatchOverlay; no simulation dispatched from here.
 
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
@@ -10,10 +10,7 @@ export default function NextMatchControl({ onOpen }) {
   if (!state) return null;
 
   const { schedule, userTeamId } = state;
-  const phase = schedule.phase;
-
-  // Only show during active stage with a pending user match
-  if (phase !== "stage") return null;
+  if (schedule.phase !== "stage") return null;
 
   const stageIdx = schedule.stageIdx ?? 0;
   const stage    = schedule.stages?.[stageIdx];
@@ -28,8 +25,9 @@ export default function NextMatchControl({ onOpen }) {
   const oppTeam = CDL_TEAMS.find(t => t.id === oppId);
 
   return (
-    <button className="nmc-btn" onClick={onOpen} title="Open next match">
-      <span className="nmc-label">NEXT MATCH</span>
+    <button className="nmc-btn" onClick={onOpen} title={`Play next matchday vs ${oppTeam?.name ?? oppId}`}>
+      <span className="nmc-play-label">Play Matchday</span>
+      <span className="nmc-divider">·</span>
       <span className="nmc-vs">vs</span>
       <span className="nmc-opp" style={{ color: oppTeam?.color ?? "var(--text-head)" }}>
         {oppTeam?.tag ?? oppId}

@@ -133,23 +133,17 @@ export default function Dashboard({ setScreen }) {
         )}
 
         {/* ── Primary action ── */}
+        {/* During stage play the top-right "Play Matchday" control is the main
+            progression action. Only bulk/end-of-stage actions live here. */}
         <div className="pc-actions">
-          {isStage && (
-            <>
-              <button
-                className="btn-primary pc-cta"
-                onClick={() => { dispatch({ type: "SIM_MATCHDAY" }); setExpandedIdx(null); }}
-              >
-                ▶ Play Next Matchday
-                <span className="pc-cta-badge">{remaining} left</span>
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={() => { dispatch({ type: "SIM_STAGE" }); setExpandedIdx(null); }}
-              >
-                Sim Rest of {stageName}
-              </button>
-            </>
+          {isStage && remaining > 0 && (
+            <button
+              className="btn-secondary pc-sim-rest"
+              onClick={() => { dispatch({ type: "SIM_STAGE" }); setExpandedIdx(null); }}
+            >
+              Sim Rest of {stageName}
+              <span className="pc-cta-badge">{remaining} left</span>
+            </button>
           )}
           {isMajor && !isEntered && (
             <div className="pc-major-hint muted" style={{ fontSize: 12, padding: "8px 0" }}>

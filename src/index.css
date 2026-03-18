@@ -3989,3 +3989,137 @@ body { margin: 0; }
 
 .kd-positive { color: var(--green); }
 .kd-negative { color: var(--red); }
+
+/* ── NEXT MATCH CONTROL — updated for "Play Matchday" label ─────────────────── */
+
+.nmc-play-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-head);
+}
+
+.nmc-divider {
+  font-size: 12px;
+  color: var(--border);
+  margin: 0 -2px;
+}
+
+/* ── NEXT MATCH OVERLAY — result view additions ──────────────────────────────── */
+
+/* Slightly wider card when showing result (map breakdown needs space) */
+.nmo-card-result {
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+/* Stakes line (pre-match) */
+.nmo-stakes {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  margin-bottom: 20px;
+  align-self: flex-start;
+  display: inline-block;
+}
+
+/* Play button — full-width primary */
+.nmo-play-btn {
+  flex: 1;
+  padding: 13px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border-radius: 8px;
+}
+
+/* Result banner */
+.nmo-result-banner {
+  border-radius: 10px;
+  padding: 20px 20px 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.nmo-win  { background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.2); }
+.nmo-loss { background: rgba(239, 83, 80, 0.08);  border: 1px solid rgba(239, 83, 80, 0.2); }
+
+.nmo-result-outcome {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  margin-bottom: 8px;
+}
+
+.nmo-win  .nmo-result-outcome { color: var(--green); }
+.nmo-loss .nmo-result-outcome { color: var(--red); }
+
+.nmo-result-score {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--text-head);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.nmo-result-teams {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.nmo-result-sep {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+/* Series MVP callout */
+.nmo-result-mvp {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255, 235, 59, 0.06);
+  border: 1px solid rgba(255, 235, 59, 0.15);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 14px;
+  font-size: 12px;
+}
+
+.nmo-mvp-star { font-size: 14px; }
+.nmo-mvp-name { color: var(--yellow); font-weight: 700; }
+.nmo-mvp-kd   { color: var(--text-dim); font-size: 11px; }
+.nmo-mvp-label {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+/* SeriesDetail wrapper in result view */
+.nmo-result-series {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.nmo-result-actions {
+  padding-top: 4px;
+}
+
+/* Dashboard: demoted sim-rest button */
+.pc-sim-rest {
+  font-size: 12px;
+  padding: 7px 14px;
+}
