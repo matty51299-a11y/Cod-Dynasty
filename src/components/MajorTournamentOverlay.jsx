@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
+import MajorMatchOverlay from "./MajorMatchOverlay.jsx";
 
 function teamName(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function teamTag(id)  { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
@@ -145,8 +146,8 @@ function EliminatedBanner({ elimination, userTeamId }) {
   );
 }
 
-// ── Next match spotlight with integrated sim controls ─────────────────────────
-function NextMatchCard({ bracket, roundIdx, userTeamId, dispatch, roundName }) {
+// ── Next match spotlight with sim controls ────────────────────────────────────
+function NextMatchCard({ bracket, roundIdx, userTeamId, dispatch, roundName, onPlayMatch }) {
   if (roundIdx < 0) return null;
   const round = bracket.rounds[roundIdx];
   const next  = round?.matches.find(m => !m.played);
@@ -173,9 +174,16 @@ function NextMatchCard({ bracket, roundIdx, userTeamId, dispatch, roundName }) {
         </div>
       </div>
       <div className="mto-nm-actions">
-        <button className="btn-primary mto-sim-btn" onClick={() => dispatch({ type: "SIM_NEXT_MAJOR_MATCH" })}>
-          ▶ Sim This Match
-        </button>
+        {/* User's match: featured Play Match CTA opens the full overlay */}
+        {userIn ? (
+          <button className="btn-primary mto-sim-btn mto-play-match-btn" onClick={onPlayMatch}>
+            ▶ Play Match
+          </button>
+        ) : (
+          <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_NEXT_MAJOR_MATCH" })}>
+            ▶ Sim Next Match
+          </button>
+        )}
         <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR_ROUND" })}>
           ▶▶ Sim {roundName ?? "Round"}
         </button>
@@ -321,7 +329,8 @@ function RoundSection({ round, roundIdx, bracket, isCurrentRound, userTeamId, ex
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function MajorTournamentOverlay() {
   const { state, dispatch } = useGame();
-  const [expandedKey, setExpandedKey] = useState(null);
+  const [expandedKey,      setExpandedKey]      = useState(null);
+  const [showMatchOverlay, setShowMatchOverlay]  = useState(false);
 
   if (!state) return null;
 
@@ -329,119 +338,135 @@ export default function MajorTournamentOverlay() {
   const enteredIdx  = state.enteredMajorIdx;
   if (enteredIdx == null) return null;
 
-  const isMajorPhase    = schedule.phase === "major";
-  const activeMajorIdx  = isMajorPhase ? (schedule.majorIdx ?? null) : null;
-  const isEntered       = activeMajorIdx !== null && enteredIdx === activeMajorIdx;
+  const isMajorPhase   = schedule.phase === "major";
+  const activeMajorIdx = isMajorPhase ? (schedule.majorIdx ?? null) : null;
+  const isEntered      = activeMajorIdx !== null && enteredIdx === activeMajorIdx;
 
-  // LIVE: in major phase, user has entered
-  const showLive = isEntered && isMajorPhase;
+  const showLive     = isEntered && isMajorPhase;
+  const enteredMajor = schedule.majors?.[enteredIdx];
+  const showChampion = !isMajorPhase && enteredMajor?.completed;
 
-  // CHAMPION: phase just transitioned out of major, major is completed
-  const enteredMajor  = schedule.majors?.[enteredIdx];
-  const showChampion  = !isMajorPhase && enteredMajor?.completed;
+  // Keep component alive when the match overlay is open so its effects can fire
+  // even if a Grand Final win transitions the phase mid-sim.
+  if (!showLive && !showChampion && !showMatchOverlay) return null;
 
-  if (!showLive && !showChampion) return null;
+  // ── MajorMatchOverlay — rendered outside live/champion conditional ──────────
+  // This ensures it stays mounted through phase transitions (e.g. GF win).
+  const matchOverlay = (
+    <MajorMatchOverlay
+      isOpen={showMatchOverlay}
+      onClose={() => setShowMatchOverlay(false)}
+    />
+  );
 
-  // ── Champion screen ──────────────────────────────────────────────────────
+  // ── Champion screen ──────────────────────────────────────────────────────────
   if (showChampion) {
     return (
-      <div className="mto-backdrop mto-backdrop-champ">
-        <ChampionScreen major={enteredMajor} dispatch={dispatch} />
-      </div>
+      <>
+        {matchOverlay}
+        <div className="mto-backdrop mto-backdrop-champ">
+          <ChampionScreen major={enteredMajor} dispatch={dispatch} />
+        </div>
+      </>
     );
   }
 
-  // ── Live tournament view ─────────────────────────────────────────────────
-  const major      = schedule.majors[activeMajorIdx];
-  const bracket    = major.bracket;
-  const curRound   = currentRoundIdx(bracket);
-  const roundName  = curRound >= 0 ? bracket.rounds[curRound].name : null;
+  // ── Live tournament view ─────────────────────────────────────────────────────
+  const major     = schedule.majors[activeMajorIdx];
+  const bracket   = major.bracket;
+  const curRound  = currentRoundIdx(bracket);
+  const roundName = curRound >= 0 ? bracket.rounds[curRound].name : null;
   const elimination = getUserElimination(bracket, userTeamId);
 
   return (
-    <div className="mto-backdrop">
-      <div className="mto-scroll-area">
-        <div className="mto-content">
+    <>
+      {matchOverlay}
 
-          {/* Hero header */}
-          <MvHero major={major} roundName={roundName} curRound={curRound} />
+      <div className="mto-backdrop">
+        <div className="mto-scroll-area">
+          <div className="mto-content">
 
-          {/* Elimination result — shown when user has been knocked out */}
-          {elimination && (
-            <EliminatedBanner elimination={elimination} userTeamId={userTeamId} />
-          )}
+            {/* Hero header */}
+            <MvHero major={major} roundName={roundName} curRound={curRound} />
 
-          {/* Featured next match — centerpiece (hidden if user is eliminated) */}
-          {curRound >= 0 && !elimination && (
-            <NextMatchCard
-              bracket={bracket}
-              roundIdx={curRound}
-              userTeamId={userTeamId}
-              dispatch={dispatch}
-              roundName={roundName}
-            />
-          )}
+            {/* Elimination banner — shown when user has been knocked out */}
+            {elimination && (
+              <EliminatedBanner elimination={elimination} userTeamId={userTeamId} />
+            )}
 
-          {/* Sim controls when eliminated — still let them advance the rest */}
-          {curRound >= 0 && elimination && (
-            <div className="mto-elim-sim-controls">
-              <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR_ROUND" })}>
-                ▶▶ Sim {roundName ?? "Round"}
-              </button>
-              <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR" })}>
-                ▶▶▶ Finish {major.name}
-              </button>
-            </div>
-          )}
+            {/* Next match card — hidden when eliminated */}
+            {curRound >= 0 && !elimination && (
+              <NextMatchCard
+                bracket={bracket}
+                roundIdx={curRound}
+                userTeamId={userTeamId}
+                dispatch={dispatch}
+                roundName={roundName}
+                onPlayMatch={() => setShowMatchOverlay(true)}
+              />
+            )}
 
-          {/* Bracket */}
-          <div className="mto-bracket-section">
-            <div className="mto-bracket-label">BRACKET</div>
-            <div className="mto-bracket-rounds">
-              {bracket.rounds.map((round, ri) => (
-                <RoundSection
-                  key={ri}
-                  round={round}
-                  roundIdx={ri}
-                  bracket={bracket}
-                  isCurrentRound={ri === curRound}
-                  userTeamId={userTeamId}
-                  expandedKey={expandedKey}
-                  setExpandedKey={setExpandedKey}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Seedings — demoted, collapsible */}
-          {bracket.seeds && (
-            <details className="mto-seeds-collapse">
-              <summary className="mto-seeds-summary">Seedings ▾</summary>
-              <div className="mto-seeds-list">
-                {bracket.seeds.map((id, i) => {
-                  const standings = enteredIdx === 4
-                    ? (schedule.standings ?? {})
-                    : (schedule.stageStandings ?? schedule.standings ?? {});
-                  const rec    = standings[id] ?? { wins: 0, losses: 0 };
-                  const isUser = id === userTeamId;
-                  return (
-                    <div key={id} className={`mto-seed-row ${isUser ? "mto-seed-you" : ""}`}>
-                      <span className="mto-seed-num">{i + 1}</span>
-                      <span className="mto-seed-dot" style={{ background: teamColor(id) }} />
-                      <span className="mto-seed-name" style={isUser ? { color: teamColor(id) } : {}}>
-                        {teamTag(id)}
-                      </span>
-                      <span className="mto-seed-rec">{rec.wins}W–{rec.losses}L</span>
-                      {isUser && <span className="you-badge">YOU</span>}
-                    </div>
-                  );
-                })}
+            {/* Sim controls when eliminated */}
+            {curRound >= 0 && elimination && (
+              <div className="mto-elim-sim-controls">
+                <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR_ROUND" })}>
+                  ▶▶ Sim {roundName ?? "Round"}
+                </button>
+                <button className="btn-secondary mto-sim-btn" onClick={() => dispatch({ type: "SIM_MAJOR" })}>
+                  ▶▶▶ Finish {major.name}
+                </button>
               </div>
-            </details>
-          )}
+            )}
 
+            {/* Bracket */}
+            <div className="mto-bracket-section">
+              <div className="mto-bracket-label">BRACKET</div>
+              <div className="mto-bracket-rounds">
+                {bracket.rounds.map((round, ri) => (
+                  <RoundSection
+                    key={ri}
+                    round={round}
+                    roundIdx={ri}
+                    bracket={bracket}
+                    isCurrentRound={ri === curRound}
+                    userTeamId={userTeamId}
+                    expandedKey={expandedKey}
+                    setExpandedKey={setExpandedKey}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Seedings — collapsible */}
+            {bracket.seeds && (
+              <details className="mto-seeds-collapse">
+                <summary className="mto-seeds-summary">Seedings ▾</summary>
+                <div className="mto-seeds-list">
+                  {bracket.seeds.map((id, i) => {
+                    const standings = enteredIdx === 4
+                      ? (schedule.standings ?? {})
+                      : (schedule.stageStandings ?? schedule.standings ?? {});
+                    const rec    = standings[id] ?? { wins: 0, losses: 0 };
+                    const isUser = id === userTeamId;
+                    return (
+                      <div key={id} className={`mto-seed-row ${isUser ? "mto-seed-you" : ""}`}>
+                        <span className="mto-seed-num">{i + 1}</span>
+                        <span className="mto-seed-dot" style={{ background: teamColor(id) }} />
+                        <span className="mto-seed-name" style={isUser ? { color: teamColor(id) } : {}}>
+                          {teamTag(id)}
+                        </span>
+                        <span className="mto-seed-rec">{rec.wins}W–{rec.losses}L</span>
+                        {isUser && <span className="you-badge">YOU</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
+            )}
+
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
