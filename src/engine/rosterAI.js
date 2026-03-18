@@ -3,6 +3,50 @@ import { calcChemistry } from "./chemistry.js";
 
 const PHILOSOPHIES = ["win_now", "youth_upside", "chemistry_stability", "balanced_value", "high_risk_gamble"];
 
+// ── 1. Budget system ──────────────────────────────────────────────────────────
+// Each franchise has a budgetTier (2–5) defined in teams.js.
+// BUDGET_CAPS is the maximum combined signing cost for a 4-player starting lineup.
+//
+// getSigningCost() uses a steep power curve so elite players are genuinely
+// expensive — the gap between an 80 OVR role player and a 93 OVR star is large:
+//   70 OVR → ~$30k   80 OVR → ~$80k   85 OVR → ~$162k
+//   88 OVR → ~$224k  90 OVR → ~$280k  93 OVR → ~$376k  99 OVR → ~$600k
+//
+// Challenger prospects remain cheap ($15k–$65k) so small orgs can build
+// viable rosters through the challenger path.
+
+const BUDGET_CAPS = {
+  5: 1_200_000, // Elite orgs (FaZe, OpTic, LAT)     — can field full star rosters
+  4:   900_000, // Strong orgs (G2, Miami, Cloud9)   — one star + quality depth
+  3:   680_000, // Mid orgs (Carolina, Toronto, RFL) — solid role-player builds
+  2:   500_000, // Small orgs (Boston, Paris, VAN)   — challenger / value path
+};
+
+function getTeamBudgetTier(teamId) {
+  return CDL_TEAMS.find(t => t.id === teamId)?.budgetTier ?? 3;
+}
+
+function getTeamCap(teamId) {
+  return BUDGET_CAPS[getTeamBudgetTier(teamId)] ?? 680_000;
+}
+
+// AI signing cost assessment (not the stored salary — a separate "market value").
+function getSigningCost(player) {
+  const ovr = player.overall || 70;
+  if (player.isProspect) {
+    return Math.round((ovr / 99) * 50 + 15) * 1000;
+  }
+  const t = Math.max(0, ovr - 70) / 29;
+  return Math.round((Math.pow(t, 2.2) * 570 + 30)) * 1000;
+}
+
+function getRosterSigningCost(players, teamId) {
+  return getStarters(players, teamId)
+    .reduce((sum, p) => sum + getSigningCost(p), 0);
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
 function seededRng(seed) {
   let s = seed;
   return () => {
@@ -62,6 +106,8 @@ function getMajorPlacement(schedule, teamId, majorIdx) {
   return 9;
 }
 
+// teamId is included in the returned object so downstream functions (budget
+// checks, destination penalty) can look up franchise-specific data.
 function evaluateTeam(teamId, gameState, windowType, majorIdx) {
   const starters = getStarters(gameState.players, teamId);
   const chemistry = starters.length ? calcChemistry(starters) : 40;
@@ -85,7 +131,7 @@ function evaluateTeam(teamId, gameState, windowType, majorIdx) {
   pressure += avgOverall >= 88 ? -8 : avgOverall <= 80 ? 7 : 0;
 
   if (windowType === "major") pressure *= 0.6;
-  return { standingRank, majorPlacement, chemistry, avgAge, avgOverall, upside, pressure };
+  return { teamId, standingRank, majorPlacement, chemistry, avgAge, avgOverall, upside, pressure };
 }
 
 function decideMoveCount(evaluation, context, rng, windowType) {
@@ -136,10 +182,49 @@ function roleFitScore(candidate, neededRole) {
   return -4;
 }
 
-function candidateScore(candidate, teamPlayers, context, evaluation, neededRole, rng, windowType) {
-  const age = candidate.age || 22;
+// ── 3. Star destination preference ───────────────────────────────────────────
+// Elite players (86+ OVR) strongly prefer competitive, well-ranked teams.
+// The penalty grows with the player's quality and the team's weakness, making
+// it very difficult for bottom-tier rosters to land genuine stars.
+//
+// Examples for a 93 OVR star:
+//   Top team (rank 1–2, avg 90 OVR): near-zero penalty
+//   Mid team (rank 6–8, avg 84 OVR): ~20–30 penalty
+//   Weak team (rank 10–12, avg 80 OVR): ~50–74 penalty
+function getDestinationPenalty(candidate, evaluation) {
   const overall = candidate.overall || 70;
-  const upside = (candidate.potential || overall) - overall;
+  if (candidate.isProspect || overall < 86) return 0;
+
+  // Team attractiveness: standing (0–30.8) + roster quality (0–12+)
+  const rankScore   = Math.max(0, 12 - evaluation.standingRank) * 2.8;
+  const rosterScore = Math.max(0, evaluation.avgOverall - 80) * 1.2;
+  const attractiveness = rankScore + rosterScore;
+
+  // Star's bar rises steeply: 86=5, 90=25, 93=40, 96=55, 99=70
+  const starBar = (overall - 85) * 5;
+  const gap = starBar - attractiveness;
+  return gap > 0 ? gap * 2.0 : 0;
+}
+
+// ── 2. Budget affordability ───────────────────────────────────────────────────
+// Applies a score penalty when signing this candidate would push the team over
+// its budget cap. Scales from -5 to -50 based on overspend amount.
+// teamPlayers should be the current starters AFTER releasing the player being
+// replaced (so the slot is open before costing the new signing).
+function getAffordabilityPenalty(candidate, evaluation, teamPlayers) {
+  const cap     = getTeamCap(evaluation.teamId);
+  const current = getRosterSigningCost(teamPlayers, evaluation.teamId);
+  const cost    = getSigningCost(candidate);
+  const over    = cost - (cap - current);
+  if (over <= 0) return 0;
+  return -clamp(over / 8000, 0, 50);
+}
+
+// ── Combined candidate scoring ────────────────────────────────────────────────
+function candidateScore(candidate, teamPlayers, context, evaluation, neededRole, rng, windowType) {
+  const age     = candidate.age || 22;
+  const overall = candidate.overall || 70;
+  const upside  = (candidate.potential || overall) - overall;
   const isProspect = !!candidate.isProspect;
   const roleFit = roleFitScore(candidate, neededRole);
 
@@ -148,11 +233,11 @@ function candidateScore(candidate, teamPlayers, context, evaluation, neededRole,
   const chemDelta = testChem - baseChem;
 
   const philosophyBoost = {
-    win_now: overall * 0.9 + (age <= 23 ? 2 : 0),
-    youth_upside: upside * 5 + (24 - age) * 1.8,
-    chemistry_stability: chemDelta * 3 + (candidate.teamwork || 70) * 0.22,
-    balanced_value: overall * 0.55 + upside * 2.1 + chemDelta * 1.5,
-    high_risk_gamble: upside * 4.4 + (rng() - 0.5) * 6,
+    win_now:              overall * 0.9 + (age <= 23 ? 2 : 0),
+    youth_upside:         upside * 5 + (24 - age) * 1.8,
+    chemistry_stability:  chemDelta * 3 + (candidate.teamwork || 70) * 0.22,
+    balanced_value:       overall * 0.55 + upside * 2.1 + chemDelta * 1.5,
+    high_risk_gamble:     upside * 4.4 + (rng() - 0.5) * 6,
   }[context.philosophy] || (overall * 0.5 + upside * 2);
 
   let score = 0;
@@ -162,10 +247,31 @@ function candidateScore(candidate, teamPlayers, context, evaluation, neededRole,
   score += chemDelta * 2;
   score += philosophyBoost;
 
-  // Encourage call-ups for pressured/aging/low-upside rosters.
-  const callupNeed = clamp((context.pressure + evaluation.pressure) / 70 + (evaluation.avgAge - 24) * 0.18 + (4 - evaluation.upside) * 0.2, -1, 3);
+  // ── Budget affordability ─────────────────────────────────────────────────
+  score += getAffordabilityPenalty(candidate, evaluation, teamPlayers);
+
+  // ── Star destination preference ──────────────────────────────────────────
+  score -= getDestinationPenalty(candidate, evaluation);
+
+  // ── 4. Challenger market dynamics ────────────────────────────────────────
+  // Base call-up need (pressure + aging + low-upside roster)
+  const callupNeed = clamp(
+    (context.pressure + evaluation.pressure) / 70 +
+    (evaluation.avgAge - 24) * 0.18 +
+    (4 - evaluation.upside) * 0.2,
+    -1, 3
+  );
+
+  // Small-budget teams lean more heavily on challengers
+  const budgetTier       = getTeamBudgetTier(evaluation.teamId);
+  const budgetChallBonus = Math.max(0, 3 - budgetTier) * 10; // +10 tier-2, +20 tier-1
+
+  // Premium challengers (76+ OVR, 86+ potential) are genuine starter options
+  const isPremiumChallenger = isProspect && overall >= 76 && (candidate.potential || overall) >= 86;
+  const premiumBonus = isPremiumChallenger ? 8 : 0;
+
   if (isProspect) {
-    score += 6 + context.challengerTrust * 10 + callupNeed * 7;
+    score += 6 + context.challengerTrust * 10 + callupNeed * 7 + budgetChallBonus + premiumBonus;
   } else {
     score -= callupNeed * 2.8;
   }
