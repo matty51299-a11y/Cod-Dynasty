@@ -527,11 +527,15 @@ function runRetirements(players, prospects, season) {
     return true;
   });
 
-  // Old unsigned challengers can also age out
+  // Old unsigned challengers can also age out.
+  // Threshold raised to 30 so decent 29-year-olds stay visible.
+  // Strong players (75+ OVR) resist retirement — they are still attractive signings.
   const activeProspects = prospects.filter(p => {
     const age = p.age || 20;
-    if (age < 29) return true;
-    return Math.random() > 0.55; // ~55 % of old unsigned prospects retire
+    const ovr = p.overall || 70;
+    if (age < 30) return true;
+    if (ovr >= 75) return Math.random() > 0.35; // strong veterans: ~35 % retire
+    return Math.random() > 0.55;                // weak old prospects: ~55 % retire
   });
 
   return { activePlayers, activeProspects, retired };
@@ -823,25 +827,45 @@ function _buildFreshProspect(tier, idx, season) {
   };
 }
 
-// Cleans up stale unsigned challengers and injects a fresh ~20-player class.
+// Cleans up stale unsigned challengers and injects a fresh annual class.
 // Only operates on the prospects array (unsigned challengers).
 // Signed prospects are in gameState.players and are never touched here.
+//
+// Pool targets: minimum 150  |  fill target 175  |  hard cap 200
+// Cleanup removes only clearly weak older players; 75+ OVR are shielded until 32.
+// Annual intake: ~20 youth (2–4 elite, 4–6 mid, rest low).
+// Top-up batch fires when pool < 150 after annual class, adds mid/low to reach 175.
 export function refreshProspectPool(prospects, season) {
   // ── Step 1: Remove old / weak unsigned challengers ───────────────────────
+  // Philosophy: only remove players who are clearly washed and too old to develop.
+  // Strong unsigned challengers (75+ OVR) are kept regardless of age below 32
+  // because they are still valuable signings and interesting for the ecosystem.
   const cleaned = prospects.filter(p => {
     const age = p.age || 20;
     const ovr = p.overall || 70;
-    // Hard rule: age 26+ and below 70 OVR — always retired out
-    if (age >= 26 && ovr < 70) return false;
-    // Soft rule: age 25+ and below 67 OVR — 70 % chance to remove
-    if (age >= 25 && ovr < 67 && Math.random() < 0.70) return false;
-    // Soft rule: age 24+ and below 62 OVR — 80 % chance to remove
-    if (age >= 24 && ovr < 62 && Math.random() < 0.80) return false;
+
+    // Shield: never remove a strong unsigned player purely for age until 32+
+    // (they may be unsigned veterans that add depth and signing options)
+    if (ovr >= 75 && age < 32) return true;
+
+    // Hard rule: age 30+ and clearly washed (below 68 OVR) — always removed
+    if (age >= 30 && ovr < 68) return false;
+    // Hard rule: age 28+ and weak (below 63 OVR) — always removed
+    if (age >= 28 && ovr < 63) return false;
+    // Soft rule: age 26+ and below 68 OVR — 60 % chance to remove
+    if (age >= 26 && ovr < 68 && Math.random() < 0.60) return false;
+    // Soft rule: age 24+ and below 60 OVR — 50 % chance to remove
+    if (age >= 24 && ovr < 60 && Math.random() < 0.50) return false;
     return true;
   });
 
   // ── Step 2: Generate this season's incoming class ────────────────────────
-  // Elite count: 2–4 per year (rare but guaranteed presence)
+  // Annual youth intake: 2–4 elite, 4–6 mid, rest low — always runs.
+  // If the pool is still below the minimum target after the class is added,
+  // a top-up batch of mid/low players fills it up to the target fill level.
+  const POOL_MIN    = 150; // trigger top-up below this
+  const POOL_TARGET = 175; // fill up to this when topping up
+
   const eliteCount = Math.floor(Math.random() * 3) + 2;   // 2–4
   const midCount   = Math.floor(Math.random() * 3) + 4;   // 4–6
   const lowCount   = Math.max(0, 20 - eliteCount - midCount);
@@ -852,17 +876,37 @@ export function refreshProspectPool(prospects, season) {
   for (let i = 0; i < midCount;   i++) newClass.push(_buildFreshProspect("mid",   idx++, season));
   for (let i = 0; i < lowCount;   i++) newClass.push(_buildFreshProspect("low",   idx++, season));
 
-  // ── Step 3: Combine + enforce pool cap (max 60) ──────────────────────────
-  const combined = [...cleaned, ...newClass];
-  if (combined.length <= 60) return combined;
+  // Top-up: if pool is below POOL_MIN, add a mix of mid/low prospects to reach
+  // POOL_TARGET. No bonus elites — those are rare and only come via the annual class.
+  const afterAnnual = cleaned.length + newClass.length;
+  if (afterAnnual < POOL_MIN) {
+    const needed = POOL_TARGET - afterAnnual;
+    for (let i = 0; i < needed; i++) {
+      const tier = Math.random() < 0.30 ? "mid" : "low";
+      newClass.push(_buildFreshProspect(tier, idx++, season));
+    }
+  }
 
-  // Over cap: sort oldest-and-weakest to front, then trim excess from there
+  // ── Step 3: Combine + enforce pool cap (max 200) ─────────────────────────
+  const HARD_CAP = 200;
+  const combined = [...cleaned, ...newClass];
+  if (combined.length <= HARD_CAP) return combined;
+
+  // Over cap: sort weakest-and-oldest to front so they are trimmed first.
+  // Strong players (75+ OVR) are always protected — they sort to the back.
   const sorted = [...combined].sort((a, b) => {
-    const ageA = a.age || 20, ageB = b.age || 20;
-    if (ageA !== ageB) return ageB - ageA;              // older → front (removed first)
-    return (a.overall || 70) - (b.overall || 70);       // lower OVR → front
+    const ovrA = a.overall || 70, ovrB = b.overall || 70;
+    const ageA = a.age    || 20, ageB = b.age    || 20;
+    // Primary: protect strong players — 75+ OVR sorts last (kept)
+    const strongA = ovrA >= 75 ? 1 : 0;
+    const strongB = ovrB >= 75 ? 1 : 0;
+    if (strongA !== strongB) return strongA - strongB;  // weak → front (removed)
+    // Among same strength tier: older sorts first (removed)
+    if (ageA !== ageB) return ageB - ageA;
+    // Same age: lower OVR sorts first (removed)
+    return ovrA - ovrB;
   });
-  return sorted.slice(combined.length - 60);
+  return sorted.slice(combined.length - HARD_CAP);
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
