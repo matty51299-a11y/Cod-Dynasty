@@ -72,6 +72,93 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
+// ── Per-save world nonce ───────────────────────────────────────────────────────
+// Derives a unique integer from the prospect pool, which is seeded with
+// Date.now() each new game (see gameStore newGameState). Mixing this into
+// every team's roster seed breaks save-to-save determinism without requiring
+// any changes to the game state structure.
+function getWorldNonce(prospects) {
+  if (!prospects || prospects.length === 0) return 0;
+  return prospects.slice(0, 6).reduce((h, p) => (hashString(p.id) ^ ((h * 31) >>> 0)) >>> 0, 17);
+}
+
+// ── Philosophy-driven cut score modifier ─────────────────────────────────────
+// Applied on top of the standard formula to make each team identity genuinely
+// affect WHO they hold vs. who they release, not just who they sign.
+//   youth_upside     → patient with young high-upside players
+//   chemistry_stab.  → reluctant to cut high-teamwork players
+//   win_now          → quicker to cut older/stagnant players
+//   balanced_value   → mild patience with players showing upside
+//   high_risk_gamble → no bias (relies on noise for variation)
+function philosophyCutModifier(player, context) {
+  const age     = player.age || 22;
+  const overall = player.overall || 70;
+  const upside  = (player.potential || overall) - overall;
+
+  switch (context.philosophy) {
+    case "youth_upside":
+      if (age <= 21 && upside >= 5) return -15;
+      if (age <= 23 && upside >= 5) return -8;
+      if (age <= 23 && upside >= 3) return -4;
+      return 0;
+
+    case "chemistry_stability": {
+      const tw = player.teamwork || 70;
+      if (tw >= 82) return -10;
+      if (tw >= 72) return -5;
+      return 0;
+    }
+
+    case "win_now":
+      if (age >= 28) return 5;
+      if (overall <= 78 && age >= 26) return 4;
+      return 0;
+
+    case "balanced_value":
+      return upside >= 4 ? -3 : 0;
+
+    default:
+      return 0;
+  }
+}
+
+// ── Hesitation threshold ──────────────────────────────────────────────────────
+// Minimum margin a player's score must exceed the eligibility threshold before
+// a team acts confidently. Teams whose top cut candidate barely qualifies may
+// hold instead of forcing the move. Philosophy shapes how decisive each team is.
+function hesitationMargin(philosophy) {
+  switch (philosophy) {
+    case "chemistry_stability": return 10; // strong evidence required
+    case "youth_upside":        return 7;
+    case "balanced_value":      return 5;
+    case "high_risk_gamble":    return 3;  // acts quickly on any weakness
+    case "win_now":             return 2;  // most decisive
+    default:                    return 5;
+  }
+}
+
+// ── Weighted cut selection ────────────────────────────────────────────────────
+// Picks `count` players to cut from the eligible pool using proportional
+// weighting on cut score. Higher-scored players are still most likely to be
+// cut, but players in similar score bands occasionally swap — preventing the
+// same player from always being dropped across different saves.
+function weightedCutSelect(eligibleWithScores, count, rng) {
+  const pool     = [...eligibleWithScores];
+  const selected = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const totalWeight = pool.reduce((sum, e) => sum + Math.max(1, e.cutScore), 0);
+    let roll = rng() * totalWeight;
+    let pick = pool[pool.length - 1]; // fallback
+    for (const entry of pool) {
+      roll -= Math.max(1, entry.cutScore);
+      if (roll <= 0) { pick = entry; break; }
+    }
+    selected.push(pick.player);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  return selected;
+}
+
 function ensureContexts(gameState) {
   const existing = gameState.teamContexts || {};
   const next = { ...existing };
@@ -463,7 +550,10 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
   for (const team of CDL_TEAMS) {
     if (team.id === gameState.userTeamId) continue;
 
-    const seed = hashString(`${team.id}_${gameState.season}_${windowType}_${majorIdx ?? -1}`);
+    // Mix in the per-save world nonce (derived from randomly-seeded prospects)
+    // so the same season/window produces different decisions across different saves.
+    const worldNonce = getWorldNonce(gameState.prospects);
+    const seed = hashString(`${team.id}_${gameState.season}_${windowType}_${majorIdx ?? -1}_${worldNonce}`);
     const rng = seededRng(seed);
     const context = { ...teamContexts[team.id] };
     const evaluation = evaluateTeam(team.id, { ...gameState, players, prospects }, windowType, majorIdx);
@@ -494,21 +584,53 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
                        : evaluation.isTopPerformer    ? 13
                        : 10;
 
-    const startersWithScores = starters.map(p => ({
-      player: p,
-      cutScore: playerCutScore(p, evaluation, starters, gameState.playerSeasonStats, gameState.season),
-    })).sort((a, b) => b.cutScore - a.cutScore);
+    // ── Score each starter with philosophy modifier + controlled noise ────
+    // Philosophy modifiers give each team identity a real effect on who they
+    // keep (e.g. youth_upside retains young talent; chemistry_stability holds
+    // high-teamwork players longer). Noise (scaled by volatility and philosophy)
+    // ensures players in similar score bands don't always produce the same
+    // ordering across different saves.
+    const noiseScale = context.philosophy === "high_risk_gamble" ? 1.8
+                     : context.philosophy === "chemistry_stability" ? 0.6
+                     : context.philosophy === "win_now" ? 0.8
+                     : 1.0;
+    const noiseRange = 12 * clamp(context.volatility, 0.3, 1.0) * noiseScale;
 
-    const eligibleToCut = startersWithScores
-      .filter(({ cutScore }) => cutScore >= cutThreshold)
-      .slice(0, moveCount)
-      .map(({ player }) => player);
+    const startersWithScores = starters.map(p => {
+      const base      = playerCutScore(p, evaluation, starters, gameState.playerSeasonStats, gameState.season);
+      const philoMod  = philosophyCutModifier(p, context);
+      const noise     = (rng() - 0.5) * noiseRange;
+      return { player: p, cutScore: base + philoMod + noise };
+    }).sort((a, b) => b.cutScore - a.cutScore);
+
+    const eligiblePool = startersWithScores.filter(({ cutScore }) => cutScore >= cutThreshold);
 
     // If no players are genuinely weak enough to cut, skip this team's window
-    if (eligibleToCut.length === 0) {
+    if (eligiblePool.length === 0) {
       rosterMovesLog.push({ season: gameState.season, teamId: team.id, windowType, moveCount: 0, philosophy: context.philosophy });
       continue;
     }
+
+    // ── Hesitation gate ───────────────────────────────────────────────────
+    // If the top cut candidate barely clears the threshold, the team may hold
+    // rather than always acting on marginal weakness. Philosophy governs how
+    // much margin is needed before the team feels confident enough to move.
+    // Loyal teams hesitate more; volatile teams second-guess less.
+    const topCutScore = eligiblePool[0].cutScore;
+    const margin      = topCutScore - cutThreshold;
+    if (margin < hesitationMargin(context.philosophy)) {
+      const holdChance = 0.30 + context.loyalty * 0.25; // 0.30–0.55
+      if (rng() < holdChance) {
+        rosterMovesLog.push({ season: gameState.season, teamId: team.id, windowType, moveCount: 0, philosophy: context.philosophy });
+        continue;
+      }
+    }
+
+    // ── Weighted cut selection ────────────────────────────────────────────
+    // Pick cut candidates using proportional weighting rather than always
+    // taking the top scorer(s). Players in similar bands get interchangeable
+    // outcomes between saves; genuinely weak players are still most likely cut.
+    const eligibleToCut = weightedCutSelect(eligiblePool, moveCount, rng);
 
     const additions = [];
     for (const cut of eligibleToCut) {
