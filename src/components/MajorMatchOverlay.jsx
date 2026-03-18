@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -38,6 +39,7 @@ function getWinConsequence(bracket, userTeamId, majorName) {
 
 // ── Pre-match view ────────────────────────────────────────────────────────────
 function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay }) {
+  const { openTeamHub } = useTeamHub();
   const oppId    = match.a === userTeamId ? match.b : match.a;
   const userSeed = seedNum(bracket, userTeamId, match.a === userTeamId ? match.seedA : match.seedB);
   const oppSeed  = seedNum(bracket, oppId,      match.a === userTeamId ? match.seedB : match.seedA);
@@ -52,7 +54,11 @@ function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay
           <div className="nmo-team-name" style={{ color: teamColor(userTeamId) }}>
             {teamName(userTeamId)}
           </div>
-          <div className="nmo-team-tag" style={{ color: teamColor(userTeamId) }}>
+          <div
+            className="nmo-team-tag team-link"
+            style={{ color: teamColor(userTeamId) }}
+            onClick={() => openTeamHub(userTeamId)}
+          >
             {teamTag(userTeamId)}
           </div>
           {userSeed != null && <div className="nmo-team-rec">Seed #{userSeed}</div>}
@@ -67,7 +73,11 @@ function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay
           <div className="nmo-team-name" style={{ color: teamColor(oppId) }}>
             {teamName(oppId)}
           </div>
-          <div className="nmo-team-tag" style={{ color: teamColor(oppId) }}>
+          <div
+            className="nmo-team-tag team-link"
+            style={{ color: teamColor(oppId) }}
+            onClick={() => openTeamHub(oppId)}
+          >
             {teamTag(oppId)}
           </div>
           {oppSeed != null && <div className="nmo-team-rec">Seed #{oppSeed}</div>}
@@ -85,6 +95,7 @@ function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay
 
 // ── Result view ───────────────────────────────────────────────────────────────
 function ResultView({ result, userTeamId, latestBracket, majorName, roundName, onClose }) {
+  const { openTeamHub } = useTeamHub();
   const won        = result.winnerId === userTeamId;
   const consequence = won ? getWinConsequence(latestBracket, userTeamId, majorName) : null;
 
@@ -95,11 +106,11 @@ function ResultView({ result, userTeamId, latestBracket, majorName, roundName, o
         <span className="nmo-result-outcome">{won ? "VICTORY" : "DEFEAT"}</span>
         <div className="nmo-result-score">{result.score}</div>
         <div className="nmo-result-teams">
-          <span style={{ color: teamColor(result.winnerId) }}>
+          <span className="team-link" style={{ color: teamColor(result.winnerId) }} onClick={() => openTeamHub(result.winnerId)}>
             {teamTag(result.winnerId)}
           </span>
           <span className="nmo-result-sep">—</span>
-          <span style={{ color: teamColor(result.loserId), opacity: 0.6 }}>
+          <span className="team-link" style={{ color: teamColor(result.loserId), opacity: 0.6 }} onClick={() => openTeamHub(result.loserId)}>
             {teamTag(result.loserId)}
           </span>
         </div>

@@ -4,12 +4,14 @@
 
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 
 export default function KDLeaders() {
   const { state } = useGame();
+  const { openTeamHub } = useTeamHub();
   if (!state) return null;
 
   const { schedule, players, season, userTeamId } = state;
@@ -88,7 +90,11 @@ export default function KDLeaders() {
                   </td>
                   <td className="kd-td kd-td-name">{row.name}</td>
                   <td className="kd-td">
-                    <span className="kd-team-tag" style={{ color: teamColor(row.teamId) }}>
+                    <span
+                      className="kd-team-tag team-link"
+                      style={{ color: teamColor(row.teamId) }}
+                      onClick={() => openTeamHub(row.teamId)}
+                    >
                       {teamTag(row.teamId)}
                     </span>
                   </td>

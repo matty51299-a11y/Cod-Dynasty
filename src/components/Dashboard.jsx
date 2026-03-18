@@ -6,6 +6,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
 import SeriesDetail from "./SeriesDetail.jsx";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -13,6 +14,7 @@ function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 
 export default function Dashboard({ setScreen }) {
   const { state, dispatch } = useGame();
+  const { openTeamHub } = useTeamHub();
   const [expandedIdx, setExpandedIdx] = useState(null);
 
   if (!state) return null;
@@ -212,7 +214,13 @@ export default function Dashboard({ setScreen }) {
               <div key={t.id} className={`ms-row ${t.id === userTeamId ? "ms-row-you" : ""}`}>
                 <span className="ms-rank">{i + 1}</span>
                 <span className="ms-dot" style={{ background: t.color }} />
-                <span className="ms-name">{t.tag}</span>
+                <span
+                  className="ms-name team-link"
+                  style={{ color: t.color }}
+                  onClick={() => openTeamHub(t.id)}
+                >
+                  {t.tag}
+                </span>
                 <span className="ms-record muted">{t.rec.wins}W–{t.rec.losses}L</span>
                 <span className="ms-pts">{t.rec.points} pts</span>
               </div>
@@ -232,7 +240,13 @@ export default function Dashboard({ setScreen }) {
             </div>
             <span className="nmp-vs">vs</span>
             <div className="nmp-team-side nmp-team-right">
-              <span className="nmp-opp-name" style={{ color: nextOppTeam.color }}>{nextOppTeam.name}</span>
+              <span
+                className="nmp-opp-name team-link"
+                style={{ color: nextOppTeam.color }}
+                onClick={() => openTeamHub(nextOppId)}
+              >
+                {nextOppTeam.name}
+              </span>
               <span className="nmp-record-opp muted">{nextOppRec.wins}W–{nextOppRec.losses}L</span>
             </div>
           </div>
@@ -264,11 +278,19 @@ export default function Dashboard({ setScreen }) {
                     <div className="rc-row-top">
                       <span className={`rc-outcome ${won ? "rco-win" : "rco-loss"}`}>{won ? "W" : "L"}</span>
                       <div className="rc-teams">
-                        <span className="rc-winner" style={{ color: won ? (team?.color ?? "#fff") : teamColor(oppId) }}>
+                        <span
+                          className="rc-winner team-link"
+                          style={{ color: won ? (team?.color ?? "#fff") : teamColor(oppId) }}
+                          onClick={e => { e.stopPropagation(); openTeamHub(won ? userTeamId : oppId); }}
+                        >
                           {won ? (team?.name ?? userTeamId) : opp}
                         </span>
                         <span className="rc-score">{r.score}</span>
-                        <span className="rc-loser" style={{ color: won ? teamColor(oppId) : (team?.color ?? "#fff"), opacity: 0.7 }}>
+                        <span
+                          className="rc-loser team-link"
+                          style={{ color: won ? teamColor(oppId) : (team?.color ?? "#fff"), opacity: 0.7 }}
+                          onClick={e => { e.stopPropagation(); openTeamHub(won ? oppId : userTeamId); }}
+                        >
                           {won ? opp : (team?.name ?? userTeamId)}
                         </span>
                       </div>
@@ -310,7 +332,13 @@ export default function Dashboard({ setScreen }) {
         return (
           <div key={i} className="champion-banner" style={{ borderColor: champ?.color }}>
             🏆 {major.name} Champion:{" "}
-            <strong style={{ color: champ?.color }}>{champ?.name ?? major.bracket.champion}</strong>
+            <strong
+              className="team-link"
+              style={{ color: champ?.color }}
+              onClick={() => openTeamHub(major.bracket.champion)}
+            >
+              {champ?.name ?? major.bracket.champion}
+            </strong>
           </div>
         );
       })}

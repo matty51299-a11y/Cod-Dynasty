@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useGame, saveGame, loadGame, deleteSave } from "./store/gameStore.jsx";
+import { TeamHubProvider } from "./store/teamHubContext.jsx";
 import TeamSelect        from "./components/TeamSelect.jsx";
 import Sidebar           from "./components/Sidebar.jsx";
 import NextMatchControl  from "./components/NextMatchControl.jsx";
@@ -19,6 +20,7 @@ import MatchLog          from "./components/MatchLog.jsx";
 import MajorEntryOverlay    from "./components/MajorEntryOverlay.jsx";
 import MajorTournamentOverlay from "./components/MajorTournamentOverlay.jsx";
 import OffseasonReport   from "./components/OffseasonReport.jsx";
+import TeamHubOverlay    from "./components/TeamHubOverlay.jsx";
 import { CDL_TEAMS }     from "./data/teams.js";
 
 export default function App() {
@@ -67,6 +69,7 @@ export default function App() {
   }
 
   return (
+    <TeamHubProvider>
     <div className="app">
       {/* ── Top bar ── */}
       <header className="topbar">
@@ -113,6 +116,7 @@ export default function App() {
         />
         <MajorEntryOverlay />
         <MajorTournamentOverlay />
+        <TeamHubOverlay />
 
         {/* Screen content */}
         <main className="main-content">
@@ -128,5 +132,6 @@ export default function App() {
         </main>
       </div>
     </div>
+    </TeamHubProvider>
   );
 }

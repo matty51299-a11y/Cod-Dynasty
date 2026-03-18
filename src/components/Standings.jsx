@@ -6,9 +6,11 @@
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 export default function Standings() {
   const { state } = useGame();
+  const { openTeamHub } = useTeamHub();
   const [showCumulative, setShowCumulative] = useState(false);
   if (!state) return null;
 
@@ -90,7 +92,13 @@ export default function Standings() {
               <td>{i + 1}</td>
               <td>
                 <span className="dot" style={{ background: team.color }} />
-                {team.name}
+                <span
+                  className="team-link"
+                  style={{ color: team.color }}
+                  onClick={() => openTeamHub(team.id)}
+                >
+                  {team.name}
+                </span>
                 {team.id === userTeamId && <span className="you-badge"> YOU</span>}
               </td>
               <td>{record.wins}</td>
@@ -111,6 +119,7 @@ export default function Standings() {
 }
 
 function MajorBracketSummary({ major }) {
+  const { openTeamHub } = useTeamHub();
   const { bracket } = major;
   if (!bracket?.rounds) return null;
 
@@ -136,11 +145,17 @@ function MajorBracketSummary({ major }) {
                 const winnerB = m.result?.winnerId === m.b;
                 return (
                   <div key={mi} className="bracket-match">
-                    <span className={winnerA ? "winner" : (m.played ? "loser" : "")}>
+                    <span
+                      className={`team-link ${winnerA ? "winner" : (m.played ? "loser" : "")}`}
+                      onClick={() => openTeamHub(m.a)}
+                    >
                       {teamA?.tag ?? m.a}
                     </span>
                     {" vs "}
-                    <span className={winnerB ? "winner" : (m.played ? "loser" : "")}>
+                    <span
+                      className={`team-link ${winnerB ? "winner" : (m.played ? "loser" : "")}`}
+                      onClick={() => openTeamHub(m.b)}
+                    >
                       {teamB?.tag ?? m.b}
                     </span>
                     {m.result && <span className="score"> {m.result.score}</span>}

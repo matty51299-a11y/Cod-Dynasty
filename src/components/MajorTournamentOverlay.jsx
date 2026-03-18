@@ -12,6 +12,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import MajorMatchOverlay from "./MajorMatchOverlay.jsx";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function teamName(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function teamTag(id)  { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
@@ -197,6 +198,7 @@ function NextMatchCard({ bracket, roundIdx, userTeamId, dispatch, roundName, onP
 
 // ── Single bracket match card ─────────────────────────────────────────────────
 function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, cardKey }) {
+  const { openTeamHub } = useTeamHub();
   const isPlayed     = match.played;
   const result       = match.result;
   const seedA        = getSeedNum(bracket, match.a, match.seedA);
@@ -217,11 +219,11 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
       <div className="mto-bracket-card">
         <div className="mto-bc-team">
           {seedA && <span className="mto-bc-seed">{seedA}</span>}
-          <span className="mto-bc-name" style={{ color: teamColor(match.a) }}>{teamTag(match.a)}</span>
+          <span className="mto-bc-name team-link" style={{ color: teamColor(match.a) }} onClick={() => openTeamHub(match.a)}>{teamTag(match.a)}</span>
         </div>
         <div className="mto-bc-team">
           {seedB && <span className="mto-bc-seed">{seedB}</span>}
-          <span className="mto-bc-name" style={{ color: teamColor(match.b) }}>{teamTag(match.b)}</span>
+          <span className="mto-bc-name team-link" style={{ color: teamColor(match.b) }} onClick={() => openTeamHub(match.b)}>{teamTag(match.b)}</span>
         </div>
       </div>
     );
@@ -247,13 +249,13 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
       <div className="mto-bc-score-center">
         <div className="mto-bc-sc-side">
           {winnerSeed && <span className="mto-bc-seed">{winnerSeed}</span>}
-          <span className="mto-bc-sc-tag" style={{ color: teamColor(winnerId) }}>
+          <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(winnerId) }} onClick={() => openTeamHub(winnerId)}>
             {teamTag(winnerId)}
           </span>
         </div>
         <span className="mto-bc-sc-score">{result.score}</span>
         <div className="mto-bc-sc-side mto-bc-sc-loser">
-          <span className="mto-bc-sc-tag" style={{ color: teamColor(loserId) }}>
+          <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(loserId) }} onClick={() => openTeamHub(loserId)}>
             {teamTag(loserId)}
           </span>
           {loserSeed && <span className="mto-bc-seed">{loserSeed}</span>}
@@ -329,6 +331,7 @@ function RoundSection({ round, roundIdx, bracket, isCurrentRound, userTeamId, ex
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function MajorTournamentOverlay() {
   const { state, dispatch } = useGame();
+  const { openTeamHub } = useTeamHub();
   const [expandedKey,      setExpandedKey]      = useState(null);
   const [showMatchOverlay, setShowMatchOverlay]  = useState(false);
 
@@ -452,7 +455,11 @@ export default function MajorTournamentOverlay() {
                       <div key={id} className={`mto-seed-row ${isUser ? "mto-seed-you" : ""}`}>
                         <span className="mto-seed-num">{i + 1}</span>
                         <span className="mto-seed-dot" style={{ background: teamColor(id) }} />
-                        <span className="mto-seed-name" style={isUser ? { color: teamColor(id) } : {}}>
+                        <span
+                          className="mto-seed-name team-link"
+                          style={isUser ? { color: teamColor(id) } : {}}
+                          onClick={() => openTeamHub(id)}
+                        >
                           {teamTag(id)}
                         </span>
                         <span className="mto-seed-rec">{rec.wins}W–{rec.losses}L</span>

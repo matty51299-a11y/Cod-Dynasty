@@ -3,6 +3,7 @@
 
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
@@ -19,6 +20,7 @@ function groupByMatchday(matches) {
 
 export default function Schedule() {
   const { state } = useGame();
+  const { openTeamHub } = useTeamHub();
   if (!state) return null;
 
   const { schedule, userTeamId } = state;
@@ -70,7 +72,11 @@ export default function Schedule() {
                       key={mi}
                       className={`sched-match ${isUser ? "sched-match-user" : ""} ${match.played ? "sched-match-played" : ""}`}
                     >
-                      <span className="sched-team" style={{ color: teamColor(match.a) }}>
+                      <span
+                        className="sched-team team-link"
+                        style={{ color: teamColor(match.a) }}
+                        onClick={e => { e.stopPropagation(); openTeamHub(match.a); }}
+                      >
                         {teamTag(match.a)}
                         {match.played && result && (
                           <span className={`sched-score ${result.winnerId === match.a ? "sc-win" : "sc-loss"}`}>
@@ -85,7 +91,11 @@ export default function Schedule() {
                         <span className="sched-sep">vs</span>
                       )}
 
-                      <span className="sched-team sched-team-b" style={{ color: teamColor(match.b) }}>
+                      <span
+                        className="sched-team sched-team-b team-link"
+                        style={{ color: teamColor(match.b) }}
+                        onClick={e => { e.stopPropagation(); openTeamHub(match.b); }}
+                      >
                         {match.played && result && (
                           <span className={`sched-score ${result.winnerId === match.b ? "sc-win" : "sc-loss"}`}>
                             {result.teamAId === match.a ? result.winsB : result.winsA}

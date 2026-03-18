@@ -3605,6 +3605,261 @@ body { margin: 0; }
 
 .mto-return-btn:active { transform: translateY(0); }
 
+/* ── Team link ───────────────────────────────────────────────────────────────── */
+/* Applied to any span/element wrapping a clickable team name or tag.            */
+.team-link {
+  cursor: pointer;
+  transition: opacity 0.12s;
+}
+.team-link:hover { opacity: 0.7; }
+
+/* ── TeamHubOverlay ──────────────────────────────────────────────────────────── */
+.th-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1010;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.th-panel {
+  position: relative;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: min(380px, 96vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: nmo-card-in 0.2s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+}
+
+.th-close {
+  position: absolute;
+  top: 12px; right: 14px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.th-close:hover { color: var(--text-head); background: var(--bg3); }
+
+/* Header */
+.th-header {
+  padding: 18px 20px 14px;
+  border-left: 3px solid var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+
+.th-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  padding-right: 28px; /* clear close btn */
+}
+
+.th-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.th-team-name {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.th-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  background: var(--bg3);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.th-you {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.th-rank {
+  font-size: 11px;
+}
+
+/* Stats */
+.th-stats {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.th-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.th-stat-label {
+  width: 52px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.th-stat-val {
+  font-weight: 700;
+  color: var(--text-head);
+  font-size: 13px;
+}
+
+.th-stat-pts {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Section */
+.th-section {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.th-section:last-child { border-bottom: none; }
+
+.th-section-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* Recent form */
+.th-form-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.th-form-pip {
+  width: 26px; height: 26px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.th-fw { background: rgba(0, 230, 118, 0.15); color: #00e676; border: 1px solid rgba(0, 230, 118, 0.3); }
+.th-fl { background: rgba(239, 83, 80, 0.12);  color: #ef5350; border: 1px solid rgba(239, 83, 80, 0.25); }
+
+.th-streak {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: 4px;
+}
+
+/* Roster */
+.th-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.th-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.th-player-top {
+  background: rgba(255, 235, 59, 0.05);
+  border: 1px solid rgba(255, 235, 59, 0.12);
+}
+
+.th-p-name {
+  flex: 1;
+  color: var(--text-head);
+  font-weight: 600;
+}
+
+.th-p-ovr {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 24px;
+  text-align: right;
+}
+
+.th-p-role {
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg3);
+  border-radius: 3px;
+  padding: 1px 5px;
+  letter-spacing: 0.5px;
+}
+
+.th-p-kd {
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 32px;
+  text-align: right;
+}
+
+.th-p-star {
+  font-size: 11px;
+}
+
+/* Top performer */
+.th-top-performer {
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255, 235, 59, 0.05);
+  border-top: 1px solid rgba(255, 235, 59, 0.12);
+  font-size: 12px;
+  border-radius: 0 0 14px 14px;
+}
+
+.th-tp-star { font-size: 14px; }
+.th-tp-name { font-weight: 700; color: var(--yellow, #f59e0b); }
+.th-tp-kd   { font-size: 12px; font-weight: 700; }
+.th-tp-label {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
 /* ── APP BODY LAYOUT (sidebar + main) ───────────────────────────────────────── */
 
 .app {

@@ -6,12 +6,14 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function nameOf(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function colorOf(id){ return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; }
 
 export default function MatchLog() {
   const { state } = useGame();
+  const { openTeamHub } = useTeamHub();
   const [expanded, setExpanded] = useState(null);
 
   if (!state) return null;
@@ -53,11 +55,19 @@ export default function MatchLog() {
                     )}
 
                     <div className="rc-teams">
-                      <span className="rc-winner" style={{ color: colorOf(r.winnerId) }}>
+                      <span
+                        className="rc-winner team-link"
+                        style={{ color: colorOf(r.winnerId) }}
+                        onClick={e => { e.stopPropagation(); openTeamHub(r.winnerId); }}
+                      >
                         {nameOf(r.winnerId)}
                       </span>
                       <span className="rc-score">{r.score}</span>
-                      <span className="rc-loser" style={{ color: colorOf(r.loserId) }}>
+                      <span
+                        className="rc-loser team-link"
+                        style={{ color: colorOf(r.loserId) }}
+                        onClick={e => { e.stopPropagation(); openTeamHub(r.loserId); }}
+                      >
                         {nameOf(r.loserId)}
                       </span>
                     </div>
