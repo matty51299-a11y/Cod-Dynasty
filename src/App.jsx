@@ -1,35 +1,31 @@
 // src/App.jsx
 // Root application component.
-// Handles: save/load lifecycle, navigation, notifications.
+// Handles: save/load lifecycle, sidebar navigation, notifications, overlays.
 
 import { useEffect, useState } from "react";
 import { useGame, saveGame, loadGame, deleteSave } from "./store/gameStore.jsx";
-import TeamSelect from "./components/TeamSelect.jsx";
-import Dashboard from "./components/Dashboard.jsx";
-import Standings from "./components/Standings.jsx";
-import Roster from "./components/Roster.jsx";
-import FreeAgency from "./components/FreeAgency.jsx";
-import Prospects from "./components/Prospects.jsx";
-import MatchLog from "./components/MatchLog.jsx";
-import MajorEntryOverlay from "./components/MajorEntryOverlay.jsx";
+import TeamSelect        from "./components/TeamSelect.jsx";
+import Sidebar           from "./components/Sidebar.jsx";
+import NextMatchControl  from "./components/NextMatchControl.jsx";
+import NextMatchOverlay  from "./components/NextMatchOverlay.jsx";
+import Dashboard         from "./components/Dashboard.jsx";
+import Standings         from "./components/Standings.jsx";
+import Schedule          from "./components/Schedule.jsx";
+import KDLeaders         from "./components/KDLeaders.jsx";
+import Roster            from "./components/Roster.jsx";
+import FreeAgency        from "./components/FreeAgency.jsx";
+import Prospects         from "./components/Prospects.jsx";
+import MatchLog          from "./components/MatchLog.jsx";
+import MajorEntryOverlay    from "./components/MajorEntryOverlay.jsx";
 import MajorTournamentOverlay from "./components/MajorTournamentOverlay.jsx";
-import OffseasonReport from "./components/OffseasonReport.jsx";
-import { CDL_TEAMS } from "./data/teams.js";
-
-const TABS = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "standings", label: "Standings" },
-  { id: "roster",    label: "Roster" },
-  { id: "fa",        label: "Free Agency" },
-  { id: "prospects", label: "Challengers" },
-  { id: "devreport", label: "Dev Report" },
-  { id: "log",       label: "Match Log" },
-];
+import OffseasonReport   from "./components/OffseasonReport.jsx";
+import { CDL_TEAMS }     from "./data/teams.js";
 
 export default function App() {
   const { state, dispatch } = useGame();
-  const [tab, setTab] = useState("dashboard");
-  const [confirmNew, setConfirmNew] = useState(false);
+  const [screen, setScreen]           = useState("home");
+  const [confirmNew, setConfirmNew]   = useState(false);
+  const [showMatchOverlay, setShowMatchOverlay] = useState(false);
 
   // On mount: auto-load a save if one exists
   useEffect(() => {
@@ -61,7 +57,7 @@ export default function App() {
     );
   }
 
-  const team = CDL_TEAMS.find(t => t.id === state.userTeamId);
+  const team         = CDL_TEAMS.find(t => t.id === state.userTeamId);
   const notification = state.notifications?.[0];
 
   function handleNewGame() {
@@ -72,7 +68,7 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Top bar */}
+      {/* ── Top bar ── */}
       <header className="topbar">
         <div className="topbar-left">
           <span className="app-title">CDL MANAGER</span>
@@ -84,6 +80,9 @@ export default function App() {
           )}
         </div>
         <div className="topbar-right">
+          {/* Next Match launcher — opens NextMatchOverlay (no direct sim) */}
+          <NextMatchControl onOpen={() => setShowMatchOverlay(true)} />
+
           {!confirmNew ? (
             <button className="btn-new-game" onClick={() => setConfirmNew(true)}>
               New Game
@@ -98,42 +97,36 @@ export default function App() {
         </div>
       </header>
 
-      {/* Notification toast */}
+      {/* ── Notification toast ── */}
       {notification && (
         <div className="toast">{notification}</div>
       )}
 
-      {/* Navigation tabs */}
-      <nav className="nav-tabs">
-        {TABS.map(t => {
-          const hasDevData = t.id === "devreport" && state.progressionLog?.length > 0;
-          return (
-            <button
-              key={t.id}
-              className={`nav-tab ${tab === t.id ? "active" : ""}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-              {hasDevData && <span className="tab-dev-dot" />}
-            </button>
-          );
-        })}
-      </nav>
+      {/* ── App body: sidebar + main ── */}
+      <div className="app-body">
+        <Sidebar screen={screen} setScreen={setScreen} />
 
-      {/* Major tournament overlays — rendered above the entire app */}
-      <MajorEntryOverlay />
-      <MajorTournamentOverlay />
+        {/* Event overlays — sit above sidebar + main content */}
+        <NextMatchOverlay
+          isOpen={showMatchOverlay}
+          onClose={() => setShowMatchOverlay(false)}
+        />
+        <MajorEntryOverlay />
+        <MajorTournamentOverlay />
 
-      {/* Page content */}
-      <main className="main-content">
-        {tab === "dashboard" && <Dashboard setTab={setTab} />}
-        {tab === "standings" && <Standings />}
-        {tab === "roster"    && <Roster />}
-        {tab === "fa"        && <FreeAgency />}
-        {tab === "prospects" && <Prospects />}
-        {tab === "devreport" && <OffseasonReport />}
-        {tab === "log"       && <MatchLog />}
-      </main>
+        {/* Screen content */}
+        <main className="main-content">
+          {screen === "home"      && <Dashboard setScreen={setScreen} />}
+          {screen === "standings" && <Standings />}
+          {screen === "schedule"  && <Schedule />}
+          {screen === "kdleaders" && <KDLeaders />}
+          {screen === "roster"    && <Roster />}
+          {screen === "fa"        && <FreeAgency />}
+          {screen === "prospects" && <Prospects />}
+          {screen === "devreport" && <OffseasonReport />}
+          {screen === "log"       && <MatchLog />}
+        </main>
+      </div>
     </div>
   );
 }

@@ -11,7 +11,7 @@ function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 
-export default function Dashboard({ setTab }) {
+export default function Dashboard({ setScreen }) {
   const { state, dispatch } = useGame();
   const [expandedIdx, setExpandedIdx] = useState(null);
 
@@ -77,7 +77,7 @@ export default function Dashboard({ setTab }) {
 
   function enterTournament() {
     dispatch({ type: "ENTER_MAJOR", majorIdx });
-    if (setTab) setTab("major");
+    // Navigation is handled by MajorEntryOverlay / MajorTournamentOverlay overlays
   }
 
   const phaseLabel = isOffseason ? "Offseason"
@@ -209,7 +209,7 @@ export default function Dashboard({ setTab }) {
         <div className="mini-standings">
           <div className="ms-title">
             {stageName} Standings
-            <button className="ms-full-link" onClick={() => setTab?.("standings")}>
+            <button className="ms-full-link" onClick={() => setScreen?.("standings")}>
               View full →
             </button>
           </div>

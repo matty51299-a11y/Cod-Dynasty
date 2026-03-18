@@ -1,0 +1,83 @@
+// src/components/Sidebar.jsx
+// Left sidebar navigation — replaces the horizontal nav-tabs bar.
+
+import { useGame } from "../store/gameStore.jsx";
+import { CDL_TEAMS } from "../data/teams.js";
+
+const NAV_ITEMS = [
+  { id: "home",      icon: "⌂",  label: "Home" },
+  { id: "standings", icon: "≡",  label: "Standings" },
+  { id: "schedule",  icon: "◫",  label: "Schedule" },
+  { id: "kdleaders", icon: "↑",  label: "K/D Leaders" },
+  { id: "roster",    icon: "♟",  label: "Roster" },
+  { id: "fa",        icon: "✦",  label: "Free Agency" },
+  { id: "prospects", icon: "◉",  label: "Challengers" },
+  { id: "devreport", icon: "⬡",  label: "Dev Report" },
+  { id: "log",       icon: "▤",  label: "Match Log" },
+];
+
+export default function Sidebar({ screen, setScreen }) {
+  const { state } = useGame();
+  if (!state) return null;
+
+  const { schedule, userTeamId } = state;
+  const team  = CDL_TEAMS.find(t => t.id === userTeamId);
+  const phase = schedule.phase;
+
+  // Phase pill text
+  const stageIdx = schedule.stageIdx ?? 0;
+  const stageName = schedule.stages?.[stageIdx]?.name ?? "Stage";
+  const majorName = schedule.majors?.[schedule.majorIdx ?? 0]?.name ?? "Major";
+  const remaining = (() => {
+    if (phase !== "stage") return null;
+    const st = schedule.stages?.[stageIdx];
+    return st ? st.matches.filter(m => !m.played).length : null;
+  })();
+
+  const pillText = (() => {
+    if (phase === "stage")      return `${stageName}${remaining != null ? ` · ${remaining} left` : ""}`;
+    if (phase === "major")      return `${majorName} — LIVE`;
+    if (phase === "preChamps")  return "Pre-Championship";
+    if (phase === "offseason")  return "Offseason";
+    return phase;
+  })();
+
+  const pillClass = phase === "major" ? "sb-pill sb-pill-live"
+                  : phase === "offseason" ? "sb-pill sb-pill-dim"
+                  : "sb-pill";
+
+  const hasDevData = state.progressionLog?.length > 0;
+
+  return (
+    <aside className="sidebar">
+      {/* Team identity */}
+      <div className="sb-team-block">
+        <span className="sb-team-dot" style={{ background: team?.color ?? "var(--accent)" }} />
+        <span className="sb-team-tag" style={{ color: team?.color ?? "var(--accent)" }}>
+          {team?.tag ?? "???"}
+        </span>
+        <span className="sb-season">S{state.season}</span>
+      </div>
+
+      {/* Nav items */}
+      <nav className="sb-nav">
+        {NAV_ITEMS.map(item => (
+          <button
+            key={item.id}
+            className={`sb-item ${screen === item.id ? "active" : ""}`}
+            onClick={() => setScreen(item.id)}
+          >
+            <span className="sb-icon">{item.icon}</span>
+            <span className="sb-label">{item.label}</span>
+            {item.id === "devreport" && hasDevData && <span className="sb-dot" />}
+          </button>
+        ))}
+      </nav>
+
+      {/* Phase status pill at bottom */}
+      <div className="sb-footer">
+        <span className={pillClass}>{pillText}</span>
+      </div>
+    </aside>
+  );
+}
