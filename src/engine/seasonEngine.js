@@ -472,6 +472,71 @@ export function simUserMatchday(gameState) {
   return { ...gameState, schedule: { ...schedule } };
 }
 
+// ── Retirement ────────────────────────────────────────────────────────────────
+// Called after players are aged but before progression runs.
+// Returns the filtered player/prospect arrays and a list of retirees.
+//
+// Age curves (probability of retiring at that age):
+//   < 27:  0     — too young to consider retirement
+//   27:    3 %
+//   28:    8 %
+//   29:   20 %
+//   30:   35 %
+//   31:   50 %
+//   32:   65 %
+//   33+:  80 %
+//
+// Modifiers:
+//   Elite (90+ OVR)    → ×0.25  (stars play longer)
+//   Strong  (87–89)    → ×0.45
+//   Solid   (83–86)    → ×0.65
+//   Heavy decline      → ×1.5   (well below potential accelerates exit)
+//
+// Uses Math.random() intentionally so retirements vary between saves (genuine
+// career uncertainty), unlike the seeded roster AI decisions.
+function runRetirements(players, prospects, season) {
+  const retired = [];
+
+  const activePlayers = players.filter(p => {
+    const age     = p.age || 22;
+    const overall = p.overall || 70;
+
+    if (age < 27) return true;
+
+    let prob = age >= 33 ? 0.80
+             : age >= 32 ? 0.65
+             : age >= 31 ? 0.50
+             : age >= 30 ? 0.35
+             : age >= 29 ? 0.20
+             : age >= 28 ? 0.08
+             :              0.03; // 27
+
+    // Elite players can sustain longer careers
+    if      (overall >= 90) prob *= 0.25;
+    else if (overall >= 87) prob *= 0.45;
+    else if (overall >= 83) prob *= 0.65;
+
+    // Players far below their potential are already declining — they go sooner
+    const pot = p.potential || overall;
+    if (overall < pot - 12) prob = Math.min(0.95, prob * 1.5);
+
+    if (Math.random() < prob) {
+      retired.push({ ...p, retiredSeason: season });
+      return false;
+    }
+    return true;
+  });
+
+  // Old unsigned challengers can also age out
+  const activeProspects = prospects.filter(p => {
+    const age = p.age || 20;
+    if (age < 29) return true;
+    return Math.random() > 0.55; // ~55 % of old unsigned prospects retire
+  });
+
+  return { activePlayers, activeProspects, retired };
+}
+
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
   const standings      = gameState.schedule?.standings ?? {};
@@ -511,9 +576,15 @@ export function advanceOffseason(gameState) {
     form:       65,
   }));
 
-  // Run progression/regression on the aged players
+  // Retire players who have aged out before running progression on survivors.
+  // Retirees are removed from rosters and free agency; teams will fill vacated
+  // slots through the AI offseason roster window that runs after this.
+  const { activePlayers, activeProspects, retired } =
+    runRetirements(agedPlayers, agedProspects, outgoingSeason);
+
+  // Run progression/regression on the aged survivors
   const { updatedPlayers, updatedProspects, progressionLog } =
-    runProgression(agedPlayers, agedProspects, standings, newSeason);
+    runProgression(activePlayers, activeProspects, standings, newSeason);
 
   const withProgression = {
     ...gameState,
@@ -521,6 +592,7 @@ export function advanceOffseason(gameState) {
     prospects:        updatedProspects,
     progressionLog,
     playerSeasonStats,
+    retiredPlayers:   [...(gameState.retiredPlayers || []), ...retired],
     schedule:         buildSeason(newSeason),
     season:           newSeason,
   };

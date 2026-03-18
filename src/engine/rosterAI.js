@@ -458,7 +458,14 @@ function candidateScore(candidate, teamPlayers, context, evaluation, neededRole,
   let score = 0;
   score += roleFit;
   score += overall * 0.45;
-  score += upside * 2.2;
+  // Upside base weight reduced from 2.2 to 1.0.
+  // Previously upside was counted twice: once here and again inside every
+  // philosophy boost that includes upside (balanced_value, youth_upside,
+  // high_risk_gamble). That stacked 4-7× per upside point, letting a
+  // 62 OVR / 85-pot challenger outscore an 83 OVR proven FA by ~100 pts.
+  // Philosophy boosts now carry the primary upside weight; the 1.0 base
+  // preserves a small universal signal for philosophies that ignore upside.
+  score += upside * 1.0;
   score += chemDelta * 2;
   score += philosophyBoost;
 
@@ -487,21 +494,31 @@ function candidateScore(candidate, teamPlayers, context, evaluation, neededRole,
   const premiumBonus = isPremiumChallenger ? 8 : 0;
 
   if (isProspect) {
-    // Reduced base bonus (4 vs. old 6) to prevent challengers always beating
-    // elite free agents who are a clear upgrade.
-    score += 4 + context.challengerTrust * 10 + callupNeed * 7 + budgetChallBonus + premiumBonus;
+    score += 4 + context.challengerTrust * 8 + callupNeed * 5 + budgetChallBonus + premiumBonus;
+
+    // ── Below-roster-level penalty ──────────────────────────────────────────
+    // A prospect rated well below the team's current average should not beat a
+    // proven FA on upside math alone. Premium challengers (76+ OVR) have a small
+    // gap and are barely affected; very weak challengers take a meaningful hit.
+    const rosterGap = evaluation.avgOverall - overall;
+    if (rosterGap > 5) score -= (rosterGap - 5) * 2.5;
   } else {
     score -= callupNeed * 2.8;
 
+    // ── Proven-quality floor for established free agents ──────────────────────
+    // Reliable mid-to-high OVR FAs get a direct quality bonus that reflects their
+    // certainty over a prospect's theoretical upside. Without this, upside math
+    // dominates and solid FAs sit unsigned while weak challengers fill slots.
+    //   80 OVR → +7.2   83 OVR → +12.6   86 OVR → +18   90 OVR → +25.2
+    if (overall >= 80) score += (overall - 76) * 1.8;
+
     // ── Upgrade urgency ────────────────────────────────────────────────────
-    // If a free agent is significantly better than the current roster average,
-    // reward signing them — especially for struggling teams.
-    // This ensures high-rated FAs get picked up by teams that need them most.
+    // Threshold lowered from > 3 to > 0 — any positive gap should be rewarded.
+    // A team averaging 80 OVR signing an 83 OVR FA (gap=3) previously got zero
+    // bonus; that is the exact case that caused proven FAs to sit unsigned.
     const upgradeGap = overall - evaluation.avgOverall;
-    if (upgradeGap > 3) {
-      // Base upgrade bonus scales with how much better the FA is
-      const upgradeBonus = upgradeGap * 1.8;
-      // Bottom-4 teams get 60% extra urgency to actually land the upgrade
+    if (upgradeGap > 0) {
+      const upgradeBonus = upgradeGap * 2.5;
       const urgencyMultiplier = evaluation.standingRank >= 9 ? 1.6 : evaluation.standingRank >= 7 ? 1.2 : 1.0;
       score += upgradeBonus * urgencyMultiplier;
     }
