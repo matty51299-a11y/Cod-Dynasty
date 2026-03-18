@@ -3457,18 +3457,77 @@ body { margin: 0; }
   margin-bottom: 16px;
 }
 
-/* ── MatchCard expanded MVP callout ─────────────────────────────────────────── */
-.mto-bc-mvp {
-  font-size: 12px;
-  color: var(--text-dim);
-  padding: 8px 12px 4px;
+/* ── MatchCard played (result-card layout) ──────────────────────────────────── */
+.mto-bc-played {
+  padding-bottom: 0;
 }
 
-.mto-bc-mvp strong { color: var(--yellow, #f59e0b); }
+/* Outcome word — mirrors qualifier's VICTORY/DEFEAT */
+.mto-bc-outcome {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-align: center;
+  padding: 8px 10px 4px;
+}
+.mto-bco-win  { color: var(--green, #00e676); }
+.mto-bco-loss { color: var(--red, #ef5350); }
 
-.mto-bc-mvp-kd {
+/* Score centerpiece row */
+.mto-bc-score-center {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 12px 6px;
+}
+
+.mto-bc-sc-side {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+
+.mto-bc-sc-loser {
+  justify-content: flex-end;
+  opacity: 0.5;
+}
+
+.mto-bc-sc-tag {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.mto-bc-sc-score {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text-head);
+  flex-shrink: 0;
+  letter-spacing: 1px;
+}
+
+/* MVP row — always visible on played cards, qualifier-style */
+.mto-bc-mvp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 235, 59, 0.06);
+  border-top: 1px solid rgba(255, 235, 59, 0.12);
+  padding: 7px 12px;
   font-size: 11px;
+}
+
+.mto-bc-mvp-star { font-size: 12px; }
+.mto-bc-mvp-name { color: var(--yellow, #f59e0b); font-size: 12px; }
+.mto-bc-mvp-kd   { color: var(--text-dim); font-size: 11px; }
+.mto-bc-mvp-label {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
   color: var(--text-dim);
+  text-transform: uppercase;
 }
 
 /* Return to Season CTA */

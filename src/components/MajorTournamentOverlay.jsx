@@ -197,47 +197,77 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
   const userWon      = isPlayed && result?.winnerId === userTeamId && userInvolved;
   const userLost     = isPlayed && result?.loserId  === userTeamId && userInvolved;
   const isOpen       = expandedKey === cardKey;
-  const scoreA       = isPlayed ? (result.teamAId === match.a ? result.winsA : result.winsB) : null;
-  const scoreB       = isPlayed ? (result.teamAId === match.a ? result.winsB : result.winsA) : null;
 
   function toggle(e) {
     e.stopPropagation();
     setExpandedKey(prev => (prev === cardKey ? null : cardKey));
   }
 
+  // ── Unplayed: compact matchup ──────────────────────────────────────────────
+  if (!isPlayed) {
+    return (
+      <div className="mto-bracket-card">
+        <div className="mto-bc-team">
+          {seedA && <span className="mto-bc-seed">{seedA}</span>}
+          <span className="mto-bc-name" style={{ color: teamColor(match.a) }}>{teamTag(match.a)}</span>
+        </div>
+        <div className="mto-bc-team">
+          {seedB && <span className="mto-bc-seed">{seedB}</span>}
+          <span className="mto-bc-name" style={{ color: teamColor(match.b) }}>{teamTag(match.b)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Played: qualifier-family result card (score as centerpiece) ────────────
+  const winnerId   = result.winnerId;
+  const loserId    = result.loserId;
+  const winnerSeed = winnerId === match.a ? seedA : seedB;
+  const loserSeed  = loserId  === match.a ? seedA : seedB;
+
   return (
-    <div className={`mto-bracket-card ${userWon ? "mbc-user-win" : userLost ? "mbc-user-loss" : ""}`}>
-      <div className={`mto-bc-team ${isPlayed && result?.winnerId === match.a ? "mbc-winner" : isPlayed ? "mbc-loser" : ""}`}>
-        {seedA && <span className="mto-bc-seed">{seedA}</span>}
-        <span className="mto-bc-name" style={{ color: teamColor(match.a) }}>{teamTag(match.a)}</span>
-        {isPlayed && (
-          <span className={`mto-bc-score ${result?.winnerId === match.a ? "mbc-score-win" : "mbc-score-loss"}`}>
-            {scoreA}
-          </span>
-        )}
-      </div>
-      <div className={`mto-bc-team ${isPlayed && result?.winnerId === match.b ? "mbc-winner" : isPlayed ? "mbc-loser" : ""}`}>
-        {seedB && <span className="mto-bc-seed">{seedB}</span>}
-        <span className="mto-bc-name" style={{ color: teamColor(match.b) }}>{teamTag(match.b)}</span>
-        {isPlayed && (
-          <span className={`mto-bc-score ${result?.winnerId === match.b ? "mbc-score-win" : "mbc-score-loss"}`}>
-            {scoreB}
-          </span>
-        )}
-      </div>
-      {isPlayed && (
-        <button className="mto-bc-details" onClick={toggle}>
-          {isOpen ? "Hide ▲" : "Details ▼"}
-        </button>
+    <div className={`mto-bracket-card mto-bc-played ${userWon ? "mbc-user-win" : userLost ? "mbc-user-loss" : ""}`}>
+
+      {/* Outcome word — only for user's matches, mirrors qualifier banner */}
+      {userInvolved && (
+        <div className={`mto-bc-outcome ${userWon ? "mto-bco-win" : "mto-bco-loss"}`}>
+          {userWon ? "VICTORY" : "DEFEAT"}
+        </div>
       )}
-      {isOpen && isPlayed && (
+
+      {/* Score centerpiece: winner — score — loser */}
+      <div className="mto-bc-score-center">
+        <div className="mto-bc-sc-side">
+          {winnerSeed && <span className="mto-bc-seed">{winnerSeed}</span>}
+          <span className="mto-bc-sc-tag" style={{ color: teamColor(winnerId) }}>
+            {teamTag(winnerId)}
+          </span>
+        </div>
+        <span className="mto-bc-sc-score">{result.score}</span>
+        <div className="mto-bc-sc-side mto-bc-sc-loser">
+          <span className="mto-bc-sc-tag" style={{ color: teamColor(loserId) }}>
+            {teamTag(loserId)}
+          </span>
+          {loserSeed && <span className="mto-bc-seed">{loserSeed}</span>}
+        </div>
+      </div>
+
+      {/* MVP — always visible, matches qualifier MVP block style */}
+      {result.standoutName && result.standoutKD > 0 && (
+        <div className="mto-bc-mvp-row">
+          <span className="mto-bc-mvp-star">⭐</span>
+          <strong className="mto-bc-mvp-name">{result.standoutName}</strong>
+          <span className="mto-bc-mvp-kd">{result.standoutKD.toFixed(2)} K/D</span>
+          <span className="mto-bc-mvp-label">MVP</span>
+        </div>
+      )}
+
+      {/* Details expand → full SeriesDetail breakdown */}
+      <button className="mto-bc-details" onClick={toggle}>
+        {isOpen ? "Hide ▲" : "Details ▼"}
+      </button>
+      {isOpen && (
         <div className="mto-bc-expand">
-          {result.standoutName && result.standoutKD > 0 && (
-            <div className="mto-bc-mvp">
-              ⭐ <strong>{result.standoutName}</strong>
-              <span className="mto-bc-mvp-kd"> {result.standoutKD.toFixed(2)} K/D · Series MVP</span>
-            </div>
-          )}
           <SeriesDetail result={result} />
         </div>
       )}
