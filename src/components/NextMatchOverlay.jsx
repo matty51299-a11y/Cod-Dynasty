@@ -1,10 +1,9 @@
 // src/components/NextMatchOverlay.jsx
 // Phase 2: full matchday loop overlay.
 //
-// Pre-match  → user sees upcoming fixture + stakes context → clicks "Play Matchday"
-// Result     → overlay shows ONLY the user's result (other league results live
-//              in Schedule / Standings / Match Log per design intent)
-// Continue   → onClose(); sidebar screens auto-reflect updated state
+// Pre-match  → fixture preview + stakes context → "Play Matchday"
+// Result     → user's result only + consequence lines → "Continue"
+// Continue   → onClose(); sidebar screens reflect updated state
 
 import { useEffect, useRef, useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
@@ -21,9 +20,91 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-// Derive a short stakes/context sentence for the pre-match card
+// ── Standings rank helper ─────────────────────────────────────────────────────
+// Returns 1-based rank: number of teams with strictly more points + 1.
+function getRank(standings, teamId) {
+  const myPts = standings[teamId]?.points ?? 0;
+  return Object.values(standings).filter(r => r.points > myPts).length + 1;
+}
+
+// ── Post-match consequence lines ──────────────────────────────────────────────
+// Derives up to 2 punchy consequence sentences from before/after standings,
+// the match result, streak, and live K/D data. No engine changes needed.
+function getConsequences(result, userTeamId, preStandings, postStandings, matchLog) {
+  if (!result || !preStandings || !postStandings) return [];
+
+  const won  = result.winnerId === userTeamId;
+  const oppId = won ? result.loserId : result.winnerId;
+  const tag   = teamTag(userTeamId);
+  const lines = [];
+
+  // ── 1. User rank / Top-8 movement ──────────────────────────────────────────
+  const preRank  = getRank(preStandings, userTeamId);
+  const postRank = getRank(postStandings, userTeamId);
+  const wasTop8  = preRank  <= 8;
+  const nowTop8  = postRank <= 8;
+
+  if (!wasTop8 && nowTop8)       lines.push(`${tag} move into the Top 8`);
+  else if (wasTop8 && !nowTop8)  lines.push(`${tag} fall out of the Top 8`);
+  else if (postRank < preRank)   lines.push(`${tag} climb to ${ordinal(postRank)}`);
+  else if (postRank > preRank)   lines.push(`${tag} slip to ${ordinal(postRank)}`);
+  else if (postRank === 1)       lines.push(`${tag} hold the top spot`);
+
+  // ── 2. Streak ───────────────────────────────────────────────────────────────
+  if (lines.length < 2) {
+    const myLog = [...(matchLog ?? [])]
+      .reverse()
+      .filter(r => r.winnerId === userTeamId || r.loserId === userTeamId);
+    let streak = 0, streakWon = null;
+    for (const r of myLog) {
+      const w = r.winnerId === userTeamId;
+      if (streakWon === null) streakWon = w;
+      if (w === streakWon) streak++;
+      else break;
+    }
+    if (streak >= 3) {
+      lines.push(streakWon ? `Win streak reaches ${streak}` : `Losing streak hits ${streak}`);
+    } else if (streak === 2) {
+      lines.push(streakWon ? "Back-to-back wins" : "Two straight defeats");
+    }
+  }
+
+  // ── 3. K/D league-leader moment ─────────────────────────────────────────────
+  // Only when the series MVP is genuinely exceptional AND leads the live table.
+  if (lines.length < 2 && result.standoutName && result.standoutKD >= 1.15) {
+    const totals = {};
+    for (const entry of matchLog ?? []) {
+      if (!entry.playerStats) continue;
+      for (const stats of Object.values(entry.playerStats)) {
+        if (!totals[stats.name]) totals[stats.name] = { kills: 0, deaths: 0 };
+        totals[stats.name].kills  += stats.kills  ?? 0;
+        totals[stats.name].deaths += stats.deaths ?? 0;
+      }
+    }
+    const leader = Object.entries(totals)
+      .map(([name, t]) => ({ name, kd: t.deaths > 0 ? t.kills / t.deaths : t.kills }))
+      .sort((a, b) => b.kd - a.kd)[0];
+    if (leader?.name === result.standoutName) {
+      lines.push(`${result.standoutName} leads the league at ${leader.kd.toFixed(2)} K/D`);
+    }
+  }
+
+  // ── 4. Opponent's notable movement (fallback) ───────────────────────────────
+  if (lines.length < 2) {
+    const oppPre  = getRank(preStandings, oppId);
+    const oppPost = getRank(postStandings, oppId);
+    const ot = teamTag(oppId);
+    if (oppPre <= 8 && oppPost > 8)       lines.push(`${ot} fall out of the Top 8`);
+    else if (oppPre > 8 && oppPost <= 8)  lines.push(`${ot} move into the Top 8`);
+    else if (oppPost > oppPre + 1)        lines.push(`${ot} drop to ${ordinal(oppPost)}`);
+    else if (oppPost < oppPre - 1)        lines.push(`${ot} rise to ${ordinal(oppPost)}`);
+  }
+
+  return lines.slice(0, 2);
+}
+
+// ── Stakes line (pre-match) ───────────────────────────────────────────────────
 function getStakesLine(userTeamId, stageStandings, matchLog) {
-  // Streak check from most-recent matches backward
   const myLog = [...(matchLog ?? [])].reverse()
     .filter(r => r.winnerId === userTeamId || r.loserId === userTeamId);
 
@@ -39,9 +120,8 @@ function getStakesLine(userTeamId, stageStandings, matchLog) {
   if (streakLen === 2 && !streakWon) return "Two-match losing streak";
   if (streakLen === 2 && streakWon)  return "Two straight wins";
 
-  // Ranking-based stakes
   const sorted = CDL_TEAMS
-    .map(t => ({ id: t.id, pts: (stageStandings[t.id]?.points ?? 0) }))
+    .map(t => ({ id: t.id, pts: stageStandings[t.id]?.points ?? 0 }))
     .sort((a, b) => b.pts - a.pts);
   const myPts  = stageStandings[userTeamId]?.points ?? 0;
   const myRank = sorted.findIndex(t => t.id === userTeamId) + 1;
@@ -52,14 +132,13 @@ function getStakesLine(userTeamId, stageStandings, matchLog) {
   if (myRank > 1 && rankAfterWin < myRank) return `Win moves you to ${ordinal(rankAfterWin)}`;
   if (myRank <= 4) return `${ordinal(myRank)} — hold your position`;
   if (rankAfterLoss > myRank) return `Loss drops you to ${ordinal(rankAfterLoss)}`;
-
   return null;
 }
 
 // ── Pre-match view ────────────────────────────────────────────────────────────
 function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchdayCtx, onPlay }) {
-  const oppId    = nextMatch.a === userTeamId ? nextMatch.b : nextMatch.a;
-  const stakes   = getStakesLine(userTeamId, stageStandings, matchLog);
+  const oppId  = nextMatch.a === userTeamId ? nextMatch.b : nextMatch.a;
+  const stakes = getStakesLine(userTeamId, stageStandings, matchLog);
 
   function rec(id) {
     const r = stageStandings[id] ?? { wins: 0, losses: 0 };
@@ -74,7 +153,6 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
       {stakes && <div className="nmo-stakes">{stakes}</div>}
 
       <div className="nmo-matchup">
-        {/* User team */}
         <div className="nmo-team nmo-team-user">
           <div className="nmo-team-name" style={{ color: teamColor(userTeamId) }}>
             {teamName(userTeamId)}
@@ -90,7 +168,6 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
           <span className="nmo-vs">vs</span>
         </div>
 
-        {/* Opponent */}
         <div className="nmo-team">
           <div className="nmo-team-name" style={{ color: teamColor(oppId) }}>
             {teamName(oppId)}
@@ -112,9 +189,8 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
 }
 
 // ── Result view ───────────────────────────────────────────────────────────────
-function ResultView({ result, userTeamId, onClose }) {
+function ResultView({ result, userTeamId, preStandings, postStandings, matchLog, onClose }) {
   if (!result) {
-    // Edge case: user's team wasn't scheduled this matchday
     return (
       <>
         <div className="nmo-title">MATCHDAY COMPLETE</div>
@@ -126,8 +202,9 @@ function ResultView({ result, userTeamId, onClose }) {
     );
   }
 
-  const won    = result.winnerId === userTeamId;
-  const oppId  = won ? result.loserId : result.winnerId;
+  const won  = result.winnerId === userTeamId;
+  const oppId = won ? result.loserId : result.winnerId;
+  const consequences = getConsequences(result, userTeamId, preStandings, postStandings, matchLog);
 
   return (
     <>
@@ -146,7 +223,18 @@ function ResultView({ result, userTeamId, onClose }) {
         </div>
       </div>
 
-      {/* MVP / standout */}
+      {/* Consequence lines */}
+      {consequences.length > 0 && (
+        <div className="nmo-consequences">
+          {consequences.map((line, i) => (
+            <div key={i} className="nmo-consequence-line">
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Series MVP */}
       {result.standoutName && result.standoutKD > 0 && (
         <div className="nmo-result-mvp">
           <span className="nmo-mvp-star">⭐</span>
@@ -156,7 +244,7 @@ function ResultView({ result, userTeamId, onClose }) {
         </div>
       )}
 
-      {/* Map-by-map breakdown via existing component */}
+      {/* Map-by-map breakdown */}
       {result.mapResults?.length > 0 && (
         <div className="nmo-result-series">
           <SeriesDetail result={result} />
@@ -176,33 +264,40 @@ function ResultView({ result, userTeamId, onClose }) {
 export default function NextMatchOverlay({ isOpen, onClose }) {
   const { state, dispatch } = useGame();
 
-  // "pre" = pre-match view   "result" = post-sim result view
-  const [view, setView]           = useState("pre");
-  const [userResult, setUserResult] = useState(null);
-  const preSimLenRef               = useRef(null); // matchLog length before SIM_MATCHDAY
+  const [view, setView]         = useState("pre");
+  const [postSimData, setPostSimData] = useState(null);
+  // postSimData: { userResult, preStandings }
 
-  // Reset to pre-match state whenever the overlay opens
+  const preSimLenRef        = useRef(null); // matchLog length before dispatch
+  const preSimStandingsRef  = useRef(null); // standings snapshot before dispatch
+
+  // Reset whenever overlay opens
   useEffect(() => {
     if (isOpen) {
       setView("pre");
-      setUserResult(null);
-      preSimLenRef.current = null;
+      setPostSimData(null);
+      preSimLenRef.current       = null;
+      preSimStandingsRef.current = null;
     }
   }, [isOpen]);
 
-  // After SIM_MATCHDAY fires, detect the user's result from new matchLog entries
+  // Detect result after SIM_USER_MATCHDAY state update
   useEffect(() => {
     if (preSimLenRef.current === null) return;
     const matchLog = state?.schedule?.matchLog ?? [];
-    if (matchLog.length <= preSimLenRef.current) return; // not yet updated
+    if (matchLog.length <= preSimLenRef.current) return;
 
     const newEntries = matchLog.slice(preSimLenRef.current);
     const userEntry  = newEntries.find(
       r => r.winnerId === state.userTeamId || r.loserId === state.userTeamId
     ) ?? null;
 
-    preSimLenRef.current = null;
-    setUserResult(userEntry);
+    setPostSimData({
+      userResult:   userEntry,
+      preStandings: preSimStandingsRef.current,
+    });
+    preSimLenRef.current       = null;
+    preSimStandingsRef.current = null;
     setView("result");
   }, [state?.schedule?.matchLog?.length]); // eslint-disable-line
 
@@ -214,12 +309,10 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
   const stageName      = stage?.name ?? "Stage";
   const stageStandings = schedule.stageStandings ?? {};
 
-  // Next unplayed user match
   const nextMatch = stage?.matches.find(
     m => !m.played && (m.a === userTeamId || m.b === userTeamId)
   ) ?? null;
 
-  // Matchday context label
   const matchdayCtx = (() => {
     if (!stage || !nextMatch) return stageName;
     const matchIdx = stage.matches.indexOf(nextMatch);
@@ -228,15 +321,18 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
   })();
 
   function handlePlay() {
+    // Snapshot standings before the dispatch mutates state — pre vs post diff
+    const snapshot = {};
+    for (const [id, rec] of Object.entries(stageStandings)) {
+      snapshot[id] = { ...rec };
+    }
+    preSimStandingsRef.current = snapshot;
     preSimLenRef.current = state.schedule.matchLog?.length ?? 0;
-    // SIM_USER_MATCHDAY guarantees the user's next match is included in the
-    // simmed batch, regardless of how the shuffled schedule is ordered.
     dispatch({ type: "SIM_USER_MATCHDAY" });
   }
 
   function handleClose() {
     onClose();
-    // Reset happens via the isOpen useEffect on next open
   }
 
   return (
@@ -270,8 +366,11 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
 
         {view === "result" && (
           <ResultView
-            result={userResult}
+            result={postSimData?.userResult ?? null}
             userTeamId={userTeamId}
+            preStandings={postSimData?.preStandings ?? null}
+            postStandings={stageStandings}
+            matchLog={schedule.matchLog}
             onClose={handleClose}
           />
         )}
