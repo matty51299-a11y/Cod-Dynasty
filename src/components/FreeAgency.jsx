@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
+import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 
 const RATING_KEYS = ["gunny","awareness","objective","searchIQ","clutch","teamwork","composure","adaptability"];
 
@@ -24,6 +25,14 @@ export default function FreeAgency() {
   if (!state) return null;
 
   const { players, userTeamId } = state;
+
+  // ── Budget calc ─────────────────────────────────────────────────────────
+  const myStarters  = players.filter(p => p.teamId === userTeamId && !p.isSub);
+  const teamCap     = getTeamCap(userTeamId);
+  const committed   = myStarters.reduce((s, p) => s + getSigningCost(p), 0);
+  const remaining   = teamCap - committed;
+  const budgetPct   = Math.min(100, Math.round((committed / teamCap) * 100));
+  const budgetColor = budgetPct >= 90 ? "#ef5350" : budgetPct >= 70 ? "#ffa726" : "#69f0ae";
 
   // Free agents = no team from the pro roster
   const freeAgents = players
@@ -48,6 +57,17 @@ export default function FreeAgency() {
       <p className="muted">
         Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub.
       </p>
+      <div style={{ marginBottom: "14px" }}>
+        <span className="muted">
+          Cap: <strong>${(teamCap / 1000).toFixed(0)}k</strong>
+          {" · "}Committed: <strong>${(committed / 1000).toFixed(0)}k</strong>
+          {" · "}Remaining:{" "}
+          <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong>
+        </span>
+        <div style={{ height: "5px", background: "#2a2a2a", borderRadius: "3px", marginTop: "5px", width: "300px" }}>
+          <div style={{ height: "100%", width: `${budgetPct}%`, background: budgetColor, borderRadius: "3px", transition: "width 0.3s" }} />
+        </div>
+      </div>
 
       <div className="filters">
         <div className="filter-group">

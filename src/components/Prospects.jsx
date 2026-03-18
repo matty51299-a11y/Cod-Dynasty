@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
+import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 
 function ratingColor(v) {
   if (v >= 90) return "#00e676";
@@ -31,6 +32,14 @@ export default function Prospects() {
   const starterCount = myRoster.filter(p => !p.isSub).length;
   const subCount = myRoster.filter(p => p.isSub).length;
 
+  // ── Budget calc ─────────────────────────────────────────────────────────
+  const myStarters  = myRoster.filter(p => !p.isSub);
+  const teamCap     = getTeamCap(userTeamId);
+  const committed   = myStarters.reduce((s, p) => s + getSigningCost(p), 0);
+  const remaining   = teamCap - committed;
+  const budgetPct   = Math.min(100, Math.round((committed / teamCap) * 100));
+  const budgetColor = budgetPct >= 90 ? "#ef5350" : budgetPct >= 70 ? "#ffa726" : "#69f0ae";
+
   // Available prospects (not already on a team)
   const available = (prospects || []).filter(p => !p.teamId);
 
@@ -54,6 +63,17 @@ export default function Prospects() {
       <p className="muted">
         {available.length} prospects available · Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub
       </p>
+      <div style={{ marginBottom: "14px" }}>
+        <span className="muted">
+          Cap: <strong>${(teamCap / 1000).toFixed(0)}k</strong>
+          {" · "}Committed: <strong>${(committed / 1000).toFixed(0)}k</strong>
+          {" · "}Remaining:{" "}
+          <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong>
+        </span>
+        <div style={{ height: "5px", background: "#2a2a2a", borderRadius: "3px", marginTop: "5px", width: "300px" }}>
+          <div style={{ height: "100%", width: `${budgetPct}%`, background: budgetColor, borderRadius: "3px", transition: "width 0.3s" }} />
+        </div>
+      </div>
       <p className="muted scout-note">
         ⚠ Ratings shown are <em>scouted estimates</em> – true values revealed on signing.
       </p>

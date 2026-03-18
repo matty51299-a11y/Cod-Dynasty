@@ -22,16 +22,16 @@ const BUDGET_CAPS = {
   2:   500_000, // Small orgs (Boston, Paris, VAN)   — challenger / value path
 };
 
-function getTeamBudgetTier(teamId) {
+export function getTeamBudgetTier(teamId) {
   return CDL_TEAMS.find(t => t.id === teamId)?.budgetTier ?? 3;
 }
 
-function getTeamCap(teamId) {
+export function getTeamCap(teamId) {
   return BUDGET_CAPS[getTeamBudgetTier(teamId)] ?? 680_000;
 }
 
 // AI signing cost assessment (not the stored salary — a separate "market value").
-function getSigningCost(player) {
+export function getSigningCost(player) {
   const ovr = player.overall || 70;
   if (player.isProspect) {
     return Math.round((ovr / 99) * 50 + 15) * 1000;
@@ -164,12 +164,54 @@ function decideMoveCount(evaluation, context, rng, windowType) {
   return { moveCount, nextPressure: clamp(pressureNow * 0.65 + (moveCount === 0 ? 2 : -8), 0, 100) };
 }
 
-function playerCutScore(player, evaluation) {
-  const agePenalty = (player.age || 22) >= 27 ? 10 : (player.age || 22) >= 25 ? 5 : 0;
-  const upside = (player.potential || player.overall || 70) - (player.overall || 70);
+// ── Drop protection ───────────────────────────────────────────────────────────
+// A player is protected from being cut if:
+//   • OVR >= 85 (elite tier — stars should almost never be released)
+//   • OR they are in the team's top 2 starters by OVR
+//
+// Protected players receive a near-zero cut score (0–6 based purely on age).
+// This ensures they can only be released when there is literally nobody else
+// worse on the roster, preventing unrealistic star releases.
+//
+// Recent season K/D adds a performance modifier for unprotected players:
+//   underperformers (< 0.88 K/D) cut more readily; strong performers less so.
+function playerCutScore(player, evaluation, starters, playerSeasonStats, season) {
+  const overall = player.overall || 70;
+  const age     = player.age || 22;
+
+  // ── Protection check ──────────────────────────────────────────────────────
+  const sortedByOvr = [...starters].sort((a, b) => (b.overall || 70) - (a.overall || 70));
+  const isTopTwo    = sortedByOvr.slice(0, 2).some(p => p.id === player.id);
+  if (overall >= 85 || isTopTwo) {
+    // Allow only age-based micro-increases so truly ancient stars can eventually rotate out
+    const ageMod = age >= 31 ? 6 : age >= 29 ? 3 : 0;
+    return ageMod; // 0–6: will never win over a normal-range player (scores 16+)
+  }
+
+  // ── Recent performance modifier ───────────────────────────────────────────
+  let perfPenalty = 0;
+  if (playerSeasonStats && season != null) {
+    const stats = (playerSeasonStats[player.id] || [])
+      .filter(s => s.season === season && (s.matches || 0) > 2);
+    if (stats.length > 0) {
+      const kills  = stats.reduce((s, r) => s + (r.kills  || 0), 0);
+      const deaths = stats.reduce((s, r) => s + (r.deaths || 0), 0);
+      if (deaths > 0) {
+        const kd = kills / deaths;
+        if (kd < 0.88)  perfPenalty = Math.round((0.88 - kd) * 25); // up to +12
+        else if (kd > 1.15) perfPenalty = -3; // slight protection for strong performers
+      }
+    }
+  }
+
+  // ── Standard formula ──────────────────────────────────────────────────────
+  const agePenalty      = age >= 27 ? 8 : age >= 25 ? 4 : 0;
+  const upside          = (player.potential || overall) - overall;
   const lowUpsidePenalty = upside <= 2 ? 7 : upside <= 4 ? 3 : -2;
-  const roleFitPenalty = player.primary === "Flex" ? 1 : 0;
-  return 100 - (player.overall || 70) + agePenalty + lowUpsidePenalty + roleFitPenalty + (60 - evaluation.chemistry) * 0.14;
+  const roleFitPenalty  = player.primary === "Flex" ? 1 : 0;
+
+  return 100 - overall + agePenalty + lowUpsidePenalty + roleFitPenalty
+    + (60 - evaluation.chemistry) * 0.14 + perfPenalty;
 }
 
 function roleFitScore(candidate, neededRole) {
@@ -334,7 +376,12 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
     }
 
     let starters = getStarters(players, team.id);
-    const toCut = [...starters].sort((a, b) => playerCutScore(b, evaluation) - playerCutScore(a, evaluation)).slice(0, moveCount);
+    const toCut = [...starters]
+      .sort((a, b) =>
+        playerCutScore(b, evaluation, starters, gameState.playerSeasonStats, gameState.season) -
+        playerCutScore(a, evaluation, starters, gameState.playerSeasonStats, gameState.season)
+      )
+      .slice(0, moveCount);
 
     const additions = [];
     for (const cut of toCut) {
