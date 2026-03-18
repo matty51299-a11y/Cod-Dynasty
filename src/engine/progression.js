@@ -5,30 +5,36 @@
 // ──────────────
 // Tier 1 — Base development (runs for every player):
 //   Roll for GROWTH / PLATEAU / DECLINE based on age curve.
-//   Magnitude is continuous and trait-weighted; result is probabilistically
-//   rounded to an integer to avoid always flushing small values to 0.
-//   Typical outcome: −2 to +3 for most players.
+//   Magnitude is continuous and weighted by traits + headroom + potential.
+//   Result is probabilistically rounded to integer.
+//   Typical outcome: −2 to +4 for most players.
 //
 // Tier 2 — Special event (independent roll, separate from Tier 1):
-//   A small percentage of players each offseason hit a BREAKOUT or COLLAPSE.
-//   These are rolled independently so events can amplify, dampen, or even
-//   reverse the base trend (e.g. base +1 + breakout +5 = +6; base -1 + collapse -4 = -5).
+//   A percentage of players each offseason hit a BREAKOUT or COLLAPSE.
+//   These are rolled independently so events can amplify or dampen the base.
 //   Breakout probability:  high for young + high headroom + good workEthic
 //   Collapse probability:  high for old + low workEthic + bad season
 //
-// Base age curve maxima:
-//   eff age ≤18:  grow ~0–3    dec ~0–0.8
-//   eff age 19-20: grow ~0–4   dec ~0–0.8   ← peak development
-//   eff age 21-22: grow ~0–3.5 dec ~0–1.0
-//   eff age 23-24: grow ~0–2.2 dec ~0–1.5
-//   eff age 25-26: grow ~0–1.3 dec ~0–2.5
-//   eff age 27-28: grow ~0–0.8 dec ~0–3.5
-//   eff age 29-30: grow ~0–0.5 dec ~0–5.0
-//   eff age 31+:   grow ~0–0.3 dec ~0–6.0
+// Base age curve maxima (after rebalance):
+//   eff age ≤18:  grow ~0–3.8  dec ~0–0.8
+//   eff age 19-20: grow ~0–5.0  dec ~0–0.7   ← peak development
+//   eff age 21-22: grow ~0–4.5  dec ~0–1.0
+//   eff age 23-24: grow ~0–2.8  dec ~0–1.5
+//   eff age 25-26: grow ~0–1.4  dec ~0–2.5
+//   eff age 27-28: grow ~0–0.9  dec ~0–3.5
+//   eff age 29-30: grow ~0–0.5  dec ~0–5.0
+//   eff age 31+:   grow ~0–0.3  dec ~0–6.0
 //
-// Breakout bonus range: +3 to +9 (magnitude biased toward lower end)
-// Collapse drop range:  −3 to −8 (magnitude biased toward lower end)
-// Expected breakouts league-wide per offseason: ~3–6
+// potentialMult: scales growth with remaining headroom.
+//   headroom=0:  1.00 (blocked by hrFactor anyway)
+//   headroom=5:  1.11
+//   headroom=10: 1.23
+//   headroom=14: 1.32
+//   headroom≥20: 1.45
+//
+// Breakout bonus range: +3 to +12 (magnitude biased toward lower end)
+// Collapse drop range:  −3 to −8  (magnitude biased toward lower end)
+// Expected breakouts league-wide per offseason: ~5–10
 // Expected collapses league-wide per offseason: ~4–8
 
 // ── Stat keys used by match simulation ───────────────────────────────────────
@@ -63,15 +69,23 @@ export function calcOverall(p) {
 
 // ── Tier 1: Base age curve ────────────────────────────────────────────────────
 // growChance + decChance < 1.0; remainder is plateau probability.
+//
+// Changes vs previous version:
+//   ≤18: growChance +0.06, maxGrow +0.8
+//   ≤20: growChance +0.07, maxGrow +1.0 (primary youth buff)
+//   ≤22: growChance +0.07, maxGrow +1.0
+//   ≤24: growChance +0.04, maxGrow +0.6
+//   ≤26: maxGrow +0.1 (minimal)
+//   28+: growChance slightly trimmed to offset potentialMult on veterans
 function getAgeFactor(effAge) {
-  if (effAge <= 18) return { growChance: 0.52, maxGrow: 3.0, decChance: 0.02, maxDec: 0.8  };
-  if (effAge <= 20) return { growChance: 0.65, maxGrow: 4.0, decChance: 0.04, maxDec: 0.8  };
-  if (effAge <= 22) return { growChance: 0.55, maxGrow: 3.5, decChance: 0.07, maxDec: 1.0  };
-  if (effAge <= 24) return { growChance: 0.40, maxGrow: 2.2, decChance: 0.13, maxDec: 1.5  };
-  if (effAge <= 26) return { growChance: 0.25, maxGrow: 1.3, decChance: 0.23, maxDec: 2.5  };
-  if (effAge <= 28) return { growChance: 0.14, maxGrow: 0.8, decChance: 0.40, maxDec: 3.5  };
-  if (effAge <= 30) return { growChance: 0.07, maxGrow: 0.5, decChance: 0.55, maxDec: 5.0  };
-  return              { growChance: 0.04, maxGrow: 0.3, decChance: 0.68, maxDec: 6.0  };
+  if (effAge <= 18) return { growChance: 0.58, maxGrow: 3.8, decChance: 0.02, maxDec: 0.8  };
+  if (effAge <= 20) return { growChance: 0.72, maxGrow: 5.0, decChance: 0.03, maxDec: 0.7  };
+  if (effAge <= 22) return { growChance: 0.62, maxGrow: 4.5, decChance: 0.06, maxDec: 1.0  };
+  if (effAge <= 24) return { growChance: 0.44, maxGrow: 2.8, decChance: 0.12, maxDec: 1.5  };
+  if (effAge <= 26) return { growChance: 0.26, maxGrow: 1.4, decChance: 0.24, maxDec: 2.5  };
+  if (effAge <= 28) return { growChance: 0.13, maxGrow: 0.9, decChance: 0.40, maxDec: 3.5  };
+  if (effAge <= 30) return { growChance: 0.06, maxGrow: 0.5, decChance: 0.55, maxDec: 5.0  };
+  return              { growChance: 0.03, maxGrow: 0.3, decChance: 0.68, maxDec: 6.0  };
 }
 
 // ── Team performance helper ───────────────────────────────────────────────────
@@ -97,25 +111,30 @@ function specialEvent(player, rng, teamPerf, headroom) {
 
   // ── Breakout probability ──────────────────────────────────────────────────
   // Only young players with genuine headroom can break out.
+  // Rates increased vs previous: young + high-headroom prospects now break out
+  // more often to match the expectation that high-potential players develop.
   let breakChance = 0;
   if (headroom > 0) {
     if (effAge <= 20) {
-      breakChance = headroom >= 12 ? 0.14
-                  : headroom >= 8  ? 0.10
-                  : headroom >= 5  ? 0.06
+      breakChance = headroom >= 15 ? 0.22
+                  : headroom >= 12 ? 0.18   // was 0.14
+                  : headroom >= 8  ? 0.12   // was 0.10
+                  : headroom >= 5  ? 0.07   // was 0.06
                   : 0.02;
     } else if (effAge <= 22) {
-      breakChance = headroom >= 10 ? 0.09
-                  : headroom >= 6  ? 0.05
+      breakChance = headroom >= 12 ? 0.12   // was 0.09 (at >= 10)
+                  : headroom >= 8  ? 0.07   // restructured (was 0.05 at >= 6)
+                  : headroom >= 5  ? 0.04   // was 0.02 (at >= 3)
                   : headroom >= 3  ? 0.02
                   : 0;
     } else if (effAge <= 24) {
-      breakChance = headroom >= 10 ? 0.05
-                  : headroom >= 6  ? 0.02
+      breakChance = headroom >= 12 ? 0.07   // was 0.05 (at >= 10)
+                  : headroom >= 8  ? 0.04   // was 0.02 (at >= 6)
+                  : headroom >= 5  ? 0.01   // new
                   : 0;
     } else if (effAge <= 26) {
-      // Late developer edge case — very rare
-      breakChance = headroom >= 8 ? 0.015 : 0;
+      // Late developer — slightly raised
+      breakChance = headroom >= 10 ? 0.025 : headroom >= 8 ? 0.015 : 0;
     }
     // workEthic multiplier: 0.55 (workEthic=1) → 1.45 (workEthic=5)
     breakChance *= (0.55 + we * 0.90);
@@ -123,7 +142,7 @@ function specialEvent(player, rng, teamPerf, headroom) {
     if (effAge <= 24 && teamPerf > 0.3) breakChance += 0.025;
   }
 
-  // ── Collapse probability ──────────────────────────────────────────────────
+  // ── Collapse probability (unchanged) ─────────────────────────────────────
   let collapseChance = 0;
   if      (effAge >= 31) collapseChance = 0.18;
   else if (effAge >= 29) collapseChance = 0.12;
@@ -142,17 +161,19 @@ function specialEvent(player, rng, teamPerf, headroom) {
   const collapseRoll = rng();
 
   if (breakRoll < breakChance) {
-    // Bonus magnitude: 3–9, biased toward 3–5 via min(u, v)
-    const maxBonus = headroom >= 12 ? 9
-                   : headroom >= 8  ? 7
-                   : headroom >= 5  ? 5
+    // Bonus magnitude: 3–12, biased toward lower end via min(u, v).
+    // Higher ceiling for very large headroom (was max 9).
+    const maxBonus = headroom >= 15 ? 12
+                   : headroom >= 12 ? 10   // was 9
+                   : headroom >= 8  ? 8    // was 7
+                   : headroom >= 5  ? 6    // was 5
                    : 4;
     const bonus = 3 + Math.floor(Math.min(rng(), rng()) * (maxBonus - 2));
     return { eventDelta: Math.min(headroom, bonus), eventType: "breakout" };
   }
 
   if (collapseRoll < collapseChance) {
-    // Drop magnitude: 3–8, biased toward 3–4 via min(u, v)
+    // Drop magnitude: 3–8, biased toward 3–4 via min(u, v) — unchanged
     const maxDrop = effAge >= 31 ? 8
                   : effAge >= 29 ? 6
                   : effAge >= 27 ? 5
@@ -193,13 +214,26 @@ export function developPlayer(player, rng, teamPerf = 0) {
     const resist    = 0.5 + we * 0.5;
     floatDelta      = -(rng() * af.maxDec / resist);
   } else if (roll < adjDecChance + adjGrowChance) {
+    // hrFactor: smoothed bands (was 0.22/0.55/0.85/1.0)
     const hrFactor  = headroom <= 0  ? 0.00
-                    : headroom <= 2  ? 0.22
-                    : headroom <= 5  ? 0.55
-                    : headroom <= 10 ? 0.85
+                    : headroom <= 2  ? 0.28   // was 0.22
+                    : headroom <= 5  ? 0.60   // was 0.55
+                    : headroom <= 10 ? 0.88   // was 0.85
                     : 1.00;
+
+    // potentialMult: NEW — continuously scales with remaining headroom so that
+    // high-potential players grow materially faster than low-headroom ones.
+    //   headroom=0:  1.00 (moot; hrFactor already = 0)
+    //   headroom=5:  1.11
+    //   headroom=10: 1.23
+    //   headroom=14: 1.32
+    //   headroom≥20: 1.45
+    const potentialMult = headroom > 0
+      ? (1.0 + (Math.min(headroom, 20) / 20) * 0.45)
+      : 1.0;
+
     const traitBoost = 0.50 + we * 0.40 + adaptNorm * 0.15;
-    floatDelta       = rng() * af.maxGrow * traitBoost * hrFactor;
+    floatDelta       = rng() * af.maxGrow * traitBoost * hrFactor * potentialMult;
   }
 
   // Probabilistic integer rounding (0.7 → +1 with 70% prob, etc.)
