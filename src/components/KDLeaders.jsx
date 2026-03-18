@@ -1,5 +1,6 @@
 // src/components/KDLeaders.jsx
-// Season K/D leaderboard. Joins playerSeasonStats with players list.
+// Live K/D leaderboard — aggregated from the current season's matchLog.
+// playerSeasonStats is the offseason archive; matchLog is the live source.
 
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
@@ -11,36 +12,49 @@ export default function KDLeaders() {
   const { state } = useGame();
   if (!state) return null;
 
-  const { playerSeasonStats, players, season, userTeamId } = state;
+  const { schedule, players, season, userTeamId } = state;
+  const matchLog = schedule?.matchLog ?? [];
 
-  if (!playerSeasonStats || Object.keys(playerSeasonStats).length === 0) {
+  if (matchLog.length === 0) {
     return (
       <div className="screen-padded">
-        <h2 className="screen-title">K/D Leaders</h2>
-        <p className="muted">No match data yet — play some matches to populate the leaderboard.</p>
+        <h2 className="screen-title">K/D Leaders — Season {season}</h2>
+        <p className="muted">No matches played yet — play some matchdays to populate the leaderboard.</p>
       </div>
     );
   }
 
-  // Build leaderboard rows: for each player, find their stats for the current season
-  const rows = players
-    .map(p => {
-      const history = playerSeasonStats[p.id] ?? [];
-      const seasonEntry = history.find(s => s.season === season);
-      if (!seasonEntry || seasonEntry.matches === 0) return null;
-      const { kills = 0, deaths = 0, matches = 0 } = seasonEntry;
-      const kd = deaths > 0 ? kills / deaths : kills;
-      return { id: p.id, name: p.name, teamId: p.teamId, kills, deaths, matches, kd };
-    })
-    .filter(Boolean)
+  // Aggregate kills/deaths/matches per player from current-season matchLog.
+  // Each entry carries playerStats: { [playerId]: { name, teamId, kills, deaths, kd } }
+  const totals = {};
+  for (const entry of matchLog) {
+    if (!entry.playerStats) continue;
+    for (const [pid, stats] of Object.entries(entry.playerStats)) {
+      if (!totals[pid]) totals[pid] = { kills: 0, deaths: 0, matches: 0, name: stats.name, teamId: stats.teamId };
+      totals[pid].kills   += stats.kills  ?? 0;
+      totals[pid].deaths  += stats.deaths ?? 0;
+      totals[pid].matches += 1;
+    }
+  }
+
+  const rows = Object.entries(totals)
+    .map(([pid, t]) => ({
+      id:      pid,
+      name:    t.name,
+      teamId:  t.teamId,
+      kills:   t.kills,
+      deaths:  t.deaths,
+      matches: t.matches,
+      kd:      t.deaths > 0 ? t.kills / t.deaths : t.kills,
+    }))
     .sort((a, b) => b.kd - a.kd)
     .slice(0, 30);
 
   if (rows.length === 0) {
     return (
       <div className="screen-padded">
-        <h2 className="screen-title">K/D Leaders</h2>
-        <p className="muted">No match data for Season {season} yet.</p>
+        <h2 className="screen-title">K/D Leaders — Season {season}</h2>
+        <p className="muted">No player stat data found in match log.</p>
       </div>
     );
   }

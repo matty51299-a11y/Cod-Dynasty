@@ -229,7 +229,9 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
 
   function handlePlay() {
     preSimLenRef.current = state.schedule.matchLog?.length ?? 0;
-    dispatch({ type: "SIM_MATCHDAY" });
+    // SIM_USER_MATCHDAY guarantees the user's next match is included in the
+    // simmed batch, regardless of how the shuffled schedule is ordered.
+    dispatch({ type: "SIM_USER_MATCHDAY" });
   }
 
   function handleClose() {

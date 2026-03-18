@@ -5,7 +5,7 @@
 import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
-import { buildSeason, simNextMatch, simMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps } from "../engine/seasonEngine.js";
 
 const SAVE_KEY = "cdl_manager_save";
 
@@ -40,6 +40,9 @@ function reducer(state, action) {
 
     case "SIM_MATCHDAY":
       return simMatchday({ ...state });
+
+    case "SIM_USER_MATCHDAY":
+      return simUserMatchday({ ...state });
 
     case "SIM_STAGE":
       return simStage({ ...state });

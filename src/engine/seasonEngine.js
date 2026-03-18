@@ -400,6 +400,84 @@ export function simStage(gameState) {
   return state;
 }
 
+// ── Simulate a matchday that always includes the user's next match ─────────────
+// Used by the "Play Matchday" overlay so the user's result is guaranteed.
+// Fills remaining slots with non-overlapping league matches.
+export function simUserMatchday(gameState) {
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "stage") return gameState;
+
+  const { userTeamId } = gameState;
+  const stage      = schedule.stages[schedule.stageIdx];
+  const allUnplayed = stage.matches
+    .map((m, i) => (!m.played ? i : -1))
+    .filter(i => i !== -1);
+
+  if (allUnplayed.length === 0) return gameState;
+
+  // Find the user's next unplayed match index
+  const userMatchIdx = allUnplayed.find(
+    i => stage.matches[i].a === userTeamId || stage.matches[i].b === userTeamId
+  ) ?? -1;
+
+  if (userMatchIdx < 0) {
+    // User has no remaining matches — fall back to a normal matchday
+    return simMatchday(gameState);
+  }
+
+  // Build today's batch: user's match first, then fill up to 6 with
+  // non-overlapping matches from the rest of the unplayed list.
+  const { a: ua, b: ub } = stage.matches[userMatchIdx];
+  const usedTeams   = new Set([ua, ub]);
+  const todayIndices = [userMatchIdx];
+
+  for (const idx of allUnplayed) {
+    if (idx === userMatchIdx) continue;
+    const { a, b } = stage.matches[idx];
+    if (!usedTeams.has(a) && !usedTeams.has(b)) {
+      todayIndices.push(idx);
+      usedTeams.add(a);
+      usedTeams.add(b);
+    }
+    if (todayIndices.length === 6) break;
+  }
+
+  // Simulate each match in the batch
+  for (const idx of todayIndices) {
+    const match  = stage.matches[idx];
+    if (match.played) continue;
+    const seed   = schedule.season * 100_000 + schedule.stageIdx * 10_000 + idx;
+    const teamA  = buildTeamObj(match.a, gameState);
+    const teamB  = buildTeamObj(match.b, gameState);
+    const result = simMatch(teamA, teamB, seed);
+
+    match.played = true;
+    match.result = result;
+
+    schedule.standings[result.winnerId].wins++;
+    schedule.standings[result.winnerId].points += 3;
+    schedule.standings[result.loserId].losses++;
+    schedule.standings[result.loserId].points += 1;
+
+    schedule.stageStandings[result.winnerId].wins++;
+    schedule.stageStandings[result.winnerId].points += 3;
+    schedule.stageStandings[result.loserId].losses++;
+    schedule.stageStandings[result.loserId].points += 1;
+
+    schedule.matchLog.push({ ...result, stage: stage.name });
+  }
+
+  // If stage is now complete, advance to major phase
+  if (stage.matches.every(m => m.played)) {
+    schedule.phase    = "major";
+    schedule.majorIdx = schedule.stageIdx;
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings);
+  }
+
+  schedule.currentMatchday++;
+  return { ...gameState, schedule: { ...schedule } };
+}
+
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
   const standings      = gameState.schedule?.standings ?? {};
