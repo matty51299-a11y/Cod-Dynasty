@@ -4,22 +4,24 @@ import { calcChemistry } from "./chemistry.js";
 const PHILOSOPHIES = ["win_now", "youth_upside", "chemistry_stability", "balanced_value", "high_risk_gamble"];
 
 // ── 1. Budget system ──────────────────────────────────────────────────────────
-// Each franchise has a budgetTier (2–5) defined in teams.js.
+// Each franchise has a budgetTier (2–6) defined in teams.js.
 // BUDGET_CAPS is the maximum combined signing cost for a 4-player starting lineup.
 //
-// getSigningCost() uses a steep power curve so elite players are genuinely
-// expensive — the gap between an 80 OVR role player and a 93 OVR star is large:
-//   70 OVR → ~$30k   80 OVR → ~$80k   85 OVR → ~$162k
-//   88 OVR → ~$224k  90 OVR → ~$280k  93 OVR → ~$376k  99 OVR → ~$600k
+// getSigningCost() uses a power curve (exponent 2.5) that keeps low/mid players
+// affordable while making elite signings genuinely expensive:
+//   70 OVR → ~$25k   75 OVR → ~$32k   80 OVR → ~$65k
+//   85 OVR → ~$136k  88 OVR → ~$200k  90 OVR → ~$252k
+//   93 OVR → ~$347k  99 OVR → $600k
 //
 // Challenger prospects remain cheap ($15k–$65k) so small orgs can build
 // viable rosters through the challenger path.
 
 const BUDGET_CAPS = {
-  5: 1_200_000, // Elite orgs (FaZe, OpTic, LAT)     — can field full star rosters
-  4:   900_000, // Strong orgs (G2, Miami, Cloud9)   — one star + quality depth
-  3:   680_000, // Mid orgs (Carolina, Toronto, RFL) — solid role-player builds
-  2:   500_000, // Small orgs (Boston, Paris, VAN)   — challenger / value path
+  6: 1_500_000, // Riyadh Falcons only — highest budget in the CDL
+  5: 1_150_000, // Top spenders (OpTic, FaZe, Paris) — star-heavy rosters
+  4:   850_000, // Upper-mid orgs (LAT, Toronto, Miami, G2) — one star + depth
+  3:   680_000, // (fallback default — no teams currently assigned here)
+  2:   580_000, // Budget orgs (Boston, Carolina, Cloud9, VAN) — challenger path
 };
 
 export function getTeamBudgetTier(teamId) {
@@ -31,13 +33,15 @@ export function getTeamCap(teamId) {
 }
 
 // AI signing cost assessment (not the stored salary — a separate "market value").
+// Uses the same power-curve formula as the displayed salary so AI budget logic
+// and the free agency UI stay consistent.
 export function getSigningCost(player) {
   const ovr = player.overall || 70;
   if (player.isProspect) {
-    return Math.round((ovr / 99) * 50 + 15) * 1000;
+    return Math.round((ovr / 99) * 50 + 15) * 1000; // $15k–$65k
   }
   const t = Math.max(0, ovr - 70) / 29;
-  return Math.round((Math.pow(t, 2.2) * 570 + 30)) * 1000;
+  return Math.round((Math.pow(t, 2.5) * 575 + 25)) * 1000;
 }
 
 function getRosterSigningCost(players, teamId) {
