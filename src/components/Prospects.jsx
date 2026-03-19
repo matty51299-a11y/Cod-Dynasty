@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
+import PoolHealth from "./PoolHealth.jsx";
 
 function ratingColor(v) {
   if (v >= 90) return "#00e676";
@@ -27,7 +28,7 @@ export default function Prospects() {
 
   if (!state) return null;
 
-  const { prospects, userTeamId, players } = state;
+  const { prospects, userTeamId, players, challengersLog } = state;
   const myRoster = players.filter(p => p.teamId === userTeamId);
   const starterCount = myRoster.filter(p => !p.isSub).length;
   const subCount = myRoster.filter(p => p.isSub).length;
@@ -60,6 +61,7 @@ export default function Prospects() {
   return (
     <div className="prospects-page">
       <h2>Challengers Pool</h2>
+      <PoolHealth prospects={prospects} challengersLog={challengersLog} />
       <p className="muted">
         {available.length} prospects available · Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub
       </p>

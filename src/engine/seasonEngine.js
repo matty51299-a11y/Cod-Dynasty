@@ -643,7 +643,24 @@ export function advanceOffseason(gameState) {
   // Runs after progression so newly-aged prospects are evaluated with their
   // updated overalls. Only touches unsigned challengers (updatedProspects).
   // Signed former-prospects are in updatedPlayers and are never affected.
-  const refreshedProspects = refreshProspectPool(updatedProspects, newSeason);
+  const { prospects: refreshedProspects, metrics: poolMetrics } =
+    refreshProspectPool(updatedProspects, newSeason);
+
+  // ── Build a per-season challengers ecosystem snapshot ────────────────────
+  // Stored in state.challengersLog for the Pool Health report panel.
+  const retiredProspectCount = retired.filter(r => r.isProspect).length;
+  const rp = refreshedProspects; // shorthand
+  const challengersEntry = {
+    season:              newSeason,
+    poolSize:            rp.length,
+    avgAge:              rp.length ? +(rp.reduce((s, p) => s + (p.age || 20), 0) / rp.length).toFixed(1) : 0,
+    avgOvr:              rp.length ? +(rp.reduce((s, p) => s + (p.overall || 70), 0) / rp.length).toFixed(1) : 0,
+    removedByRetirement: retiredProspectCount,
+    removedByCleanup:    poolMetrics.removedByCleanup,
+    annualIntake:        poolMetrics.annualIntake,
+    topUpCount:          poolMetrics.topUpCount,
+    removedByCap:        poolMetrics.removedByCap,
+  };
 
   const withProgression = {
     ...gameState,
@@ -652,6 +669,7 @@ export function advanceOffseason(gameState) {
     progressionLog,
     playerSeasonStats,
     retiredPlayers:   [...(gameState.retiredPlayers || []), ...retired],
+    challengersLog:   [...(gameState.challengersLog || []), challengersEntry],
     schedule:         buildSeason(newSeason),
     season:           newSeason,
   };
@@ -879,8 +897,10 @@ export function refreshProspectPool(prospects, season) {
   // Top-up: if pool is below POOL_MIN, add a mix of mid/low prospects to reach
   // POOL_TARGET. No bonus elites — those are rare and only come via the annual class.
   const afterAnnual = cleaned.length + newClass.length;
+  let topUpCount = 0;
   if (afterAnnual < POOL_MIN) {
     const needed = POOL_TARGET - afterAnnual;
+    topUpCount = needed;
     for (let i = 0; i < needed; i++) {
       const tier = Math.random() < 0.30 ? "mid" : "low";
       newClass.push(_buildFreshProspect(tier, idx++, season));
@@ -890,23 +910,39 @@ export function refreshProspectPool(prospects, season) {
   // ── Step 3: Combine + enforce pool cap (max 200) ─────────────────────────
   const HARD_CAP = 200;
   const combined = [...cleaned, ...newClass];
-  if (combined.length <= HARD_CAP) return combined;
 
-  // Over cap: sort weakest-and-oldest to front so they are trimmed first.
-  // Strong players (75+ OVR) are always protected — they sort to the back.
-  const sorted = [...combined].sort((a, b) => {
-    const ovrA = a.overall || 70, ovrB = b.overall || 70;
-    const ageA = a.age    || 20, ageB = b.age    || 20;
-    // Primary: protect strong players — 75+ OVR sorts last (kept)
-    const strongA = ovrA >= 75 ? 1 : 0;
-    const strongB = ovrB >= 75 ? 1 : 0;
-    if (strongA !== strongB) return strongA - strongB;  // weak → front (removed)
-    // Among same strength tier: older sorts first (removed)
-    if (ageA !== ageB) return ageB - ageA;
-    // Same age: lower OVR sorts first (removed)
-    return ovrA - ovrB;
-  });
-  return sorted.slice(combined.length - HARD_CAP);
+  let finalProspects;
+  let removedByCap = 0;
+
+  if (combined.length <= HARD_CAP) {
+    finalProspects = combined;
+  } else {
+    removedByCap = combined.length - HARD_CAP;
+    // Over cap: sort weakest-and-oldest to front so they are trimmed first.
+    // Strong players (75+ OVR) are always protected — they sort to the back.
+    const sorted = [...combined].sort((a, b) => {
+      const ovrA = a.overall || 70, ovrB = b.overall || 70;
+      const ageA = a.age    || 20, ageB = b.age    || 20;
+      const strongA = ovrA >= 75 ? 1 : 0;
+      const strongB = ovrB >= 75 ? 1 : 0;
+      if (strongA !== strongB) return strongA - strongB;
+      if (ageA !== ageB) return ageB - ageA;
+      return ovrA - ovrB;
+    });
+    finalProspects = sorted.slice(combined.length - HARD_CAP);
+  }
+
+  return {
+    prospects: finalProspects,
+    metrics: {
+      beforeCleanup:    prospects.length,
+      removedByCleanup: prospects.length - cleaned.length,
+      annualIntake:     eliteCount + midCount + lowCount,
+      topUpCount,
+      removedByCap,
+      afterCount:       finalProspects.length,
+    },
+  };
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────

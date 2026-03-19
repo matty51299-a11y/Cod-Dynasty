@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useGame, saveGame, loadGame, deleteSave } from "./store/gameStore.jsx";
+import "./engine/poolReport.js"; // registers window.poolReport() console utility
 import { TeamHubProvider } from "./store/teamHubContext.jsx";
 import TeamSelect        from "./components/TeamSelect.jsx";
 import Sidebar           from "./components/Sidebar.jsx";

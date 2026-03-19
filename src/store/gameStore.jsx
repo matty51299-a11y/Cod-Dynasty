@@ -24,6 +24,7 @@ function newGameState(userTeamId) {
     saveExists: true,
     enteredMajorIdx:   null,  // tracks which major the user has "entered" past the intro gate
     playerSeasonStats: {},    // { [playerId]: [{ season, kills, deaths, matches }, ...] }
+    challengersLog:    [],    // per-season challengers pool snapshots (for Pool Health panel)
   };
 }
 
@@ -182,6 +183,9 @@ const GameContext = createContext(null);
 
 export function GameProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null);
+
+  // Expose state on window so the poolReport() console utility can access it.
+  if (typeof window !== "undefined") window.__gameState = state;
 
   return (
     <GameContext.Provider value={{ state, dispatch }}>
