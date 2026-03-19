@@ -12,6 +12,14 @@ function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 
+function ratingColor(v) {
+  if (v >= 90) return "#ffd700";
+  if (v >= 85) return "#00e676";
+  if (v >= 80) return "#69f0ae";
+  if (v >= 70) return "#ffeb3b";
+  return "#ef5350";
+}
+
 export default function Dashboard({ setScreen }) {
   const { state, dispatch } = useGame();
   const { openTeamHub } = useTeamHub();
@@ -19,7 +27,7 @@ export default function Dashboard({ setScreen }) {
 
   if (!state) return null;
 
-  const { schedule, userTeamId, season, players } = state;
+  const { schedule, userTeamId, season, players, progressionLog } = state;
   const team      = CDL_TEAMS.find(t => t.id === userTeamId);
   const myPlayers = players.filter(p => p.teamId === userTeamId);
   const chem      = calcChemistry(myPlayers);
@@ -70,6 +78,27 @@ export default function Dashboard({ setScreen }) {
   const nextOppId   = nextMatchInStage ? (nextMatchInStage.a === userTeamId ? nextMatchInStage.b : nextMatchInStage.a) : null;
   const nextOppTeam = nextOppId ? CDL_TEAMS.find(t => t.id === nextOppId) : null;
   const nextOppRec  = nextOppId ? (stageStandings[nextOppId] ?? { wins: 0, losses: 0 }) : null;
+
+  // ── Highlights data ──────────────────────────────────────────────────────────
+  // Top player on user's team
+  const topPlayer = myPlayers.filter(p => !p.isSub).sort((a, b) => b.overall - a.overall)[0] ?? null;
+
+  // Top team by points in current standings view
+  const standingsForHighlights = isStage ? stageStandings : cumStandings;
+  const topTeamEntry = CDL_TEAMS
+    .map(t => ({ t, rec: standingsForHighlights[t.id] ?? { wins: 0, losses: 0, points: 0 } }))
+    .sort((a, b) => b.rec.points - a.rec.points)[0];
+  const topTeam       = topTeamEntry?.t ?? null;
+  const topTeamRecord = topTeamEntry?.rec ?? null;
+  const topTeamHasMatches = (topTeamRecord?.wins ?? 0) + (topTeamRecord?.losses ?? 0) > 0;
+
+  // Biggest breakout and collapse from last offseason's progressionLog
+  const progLog = progressionLog ?? [];
+  const breakouts = progLog.filter(e => e.eventType === "breakout" && e.delta > 0).sort((a, b) => b.delta - a.delta);
+  const collapses = progLog.filter(e => e.eventType === "collapse" && e.delta < 0).sort((a, b) => a.delta - b.delta);
+  const biggestBreakout = breakouts[0] ?? null;
+  const biggestCollapse = collapses[0] ?? null;
+  const showHighlights = topPlayer || topTeamHasMatches || biggestBreakout || biggestCollapse;
 
   const myLog = [...(schedule.matchLog || [])]
     .reverse()
@@ -180,6 +209,49 @@ export default function Dashboard({ setScreen }) {
           )}
         </div>
       </div>
+
+      {/* ── Highlights grid ── */}
+      {showHighlights && (
+        <div className="highlights-grid">
+          {topPlayer && (
+            <div className="highlight-card" style={{ borderTopColor: team?.color ?? "var(--accent)" }}>
+              <div className="hl-label">Your Best Player</div>
+              <div className="hl-name">{topPlayer.name}</div>
+              <div className="hl-value" style={{ color: ratingColor(topPlayer.overall) }}>
+                {topPlayer.overall}
+              </div>
+              <div className="hl-sub">{topPlayer.primary} · OVR</div>
+            </div>
+          )}
+
+          {topTeamHasMatches && topTeam && (
+            <div className="highlight-card" style={{ borderTopColor: topTeam.color }}>
+              <div className="hl-label">{isStage ? "Stage Leader" : "Season Leader"}</div>
+              <div className="hl-name" style={{ color: topTeam.color }}>{topTeam.name}</div>
+              <div className="hl-value" style={{ color: topTeam.color }}>{topTeamRecord.points}</div>
+              <div className="hl-sub">{topTeamRecord.wins}W – {topTeamRecord.losses}L · pts</div>
+            </div>
+          )}
+
+          {biggestBreakout && (
+            <div className="highlight-card hl-card-green">
+              <div className="hl-label">Breakout</div>
+              <div className="hl-name">{biggestBreakout.name}</div>
+              <div className="hl-value hl-val-green">+{biggestBreakout.delta}</div>
+              <div className="hl-sub">{biggestBreakout.oldOverall} → {biggestBreakout.newOverall} OVR</div>
+            </div>
+          )}
+
+          {biggestCollapse && (
+            <div className="highlight-card hl-card-red">
+              <div className="hl-label">Collapse</div>
+              <div className="hl-name">{biggestCollapse.name}</div>
+              <div className="hl-value hl-val-red">{biggestCollapse.delta}</div>
+              <div className="hl-sub">{biggestCollapse.oldOverall} → {biggestCollapse.newOverall} OVR</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Pre-Champs seeding preview ── */}
       {isPreChamps && (

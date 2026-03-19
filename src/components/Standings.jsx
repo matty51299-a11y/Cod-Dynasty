@@ -89,7 +89,9 @@ export default function Standings() {
         <tbody>
           {sorted.map(({ team, record }, i) => (
             <tr key={team.id} className={team.id === userTeamId ? "user-row" : ""}>
-              <td>{i + 1}</td>
+              <td style={{ borderLeft: `3px solid ${team.color}`, borderRadius: "6px 0 0 6px", paddingLeft: 8 }}>
+                {i + 1}
+              </td>
               <td>
                 <span className="dot" style={{ background: team.color }} />
                 <span

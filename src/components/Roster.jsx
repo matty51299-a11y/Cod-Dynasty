@@ -88,7 +88,19 @@ export default function Roster() {
                 onClick={() => setModalPlayer(p)}
                 title="Click for player detail"
               >
-                <td className="player-name">
+                <td
+                  className="player-name"
+                  style={{
+                    borderLeft: `3px solid ${
+                      p.overall >= 90 ? "#ffd700"
+                      : p.overall >= 85 ? "#00e676"
+                      : p.overall >= 80 ? "#3d8f5f"
+                      : "var(--border)"
+                    }`,
+                    borderRadius: "6px 0 0 6px",
+                    paddingLeft: 8,
+                  }}
+                >
                   {p.name} {p.isSub && <span className="sub-label">SUB</span>}
                 </td>
                 <td>{p.age}</td>

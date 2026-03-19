@@ -3,10 +3,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #0e0f14;
-  --bg2:       #14151c;
-  --bg3:       #1c1d27;
-  --border:    #2a2b38;
+  --bg:        #09090e;
+  --bg2:       #111318;
+  --bg3:       #1c1e28;
+  --border:    #252838;
   --text:      #c8cad4;
   --text-dim:  #6b6d7e;
   --text-head: #eceef5;
@@ -204,6 +204,59 @@ body { margin: 0; }
 .section h3 { font-size: 14px; color: var(--text-dim); text-transform: uppercase;
   letter-spacing: 1px; margin-bottom: 10px; }
 
+/* ── DASHBOARD HIGHLIGHTS GRID ──────────────────────────────────────────────── */
+.highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.highlight-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.15s;
+}
+.highlight-card:hover { background: var(--bg3); }
+
+.hl-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.hl-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-head);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hl-value {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  margin-top: 3px;
+}
+.hl-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.hl-val-green { color: var(--green); }
+.hl-val-red   { color: var(--red); }
+.hl-card-green { border-top-color: var(--green); }
+.hl-card-red   { border-top-color: var(--red); }
+
 /* ── DASHBOARD RECENT RESULTS CARDS ─────────────────────────────────────────── */
 .recent-results-list { display: flex; flex-direction: column; gap: 4px; }
 
@@ -259,7 +312,15 @@ body { margin: 0; }
 .standings-page h2 { margin-bottom: 4px; color: var(--text-head); }
 
 .standings-table,
-.roster-table,
+.roster-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+/* Legacy — not used in JSX but kept in case */
 .results-table {
   width: 100%;
   border-collapse: collapse;
@@ -268,7 +329,17 @@ body { margin: 0; }
 }
 
 .standings-table th,
-.roster-table th,
+.roster-table th {
+  text-align: left;
+  padding: 4px 10px 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  background: transparent;
+  border: none;
+}
+
 .results-table th {
   text-align: left;
   padding: 7px 10px;
@@ -281,20 +352,38 @@ body { margin: 0; }
 }
 
 .standings-table td,
-.roster-table td,
+.roster-table td {
+  padding: 9px 10px;
+  vertical-align: middle;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.standings-table td:first-child,
+.roster-table td:first-child {
+  border-left: 1px solid var(--border);
+  border-radius: 6px 0 0 6px;
+}
+.standings-table td:last-child,
+.roster-table td:last-child {
+  border-right: 1px solid var(--border);
+  border-radius: 0 6px 6px 0;
+}
+
 .results-table td {
   padding: 7px 10px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
-.standings-table tr:hover,
-.roster-table tr:hover,
+.standings-table tbody tr:hover td,
+.roster-table tbody tr:hover td { background: var(--bg3); }
 .results-table tr:hover { background: var(--bg3); }
 
-.user-row { background: rgba(79,142,247,0.06); }
-.win-row  { background: rgba(0,230,118,0.04); }
-.loss-row { background: rgba(239,83,80,0.04); }
+.user-row td { background: rgba(79,142,247,0.06); }
+.win-row  td { background: rgba(0,230,118,0.04); }
+.loss-row td { background: rgba(239,83,80,0.04); }
+.user-row, .win-row, .loss-row { background: transparent; }
 
 .dot {
   display: inline-block;
@@ -4443,37 +4532,49 @@ body { margin: 0; }
 
 .kd-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 3px;
   font-size: 13px;
 }
 
 .kd-th {
-  padding: 8px 12px;
+  padding: 4px 12px 8px;
   text-align: left;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--text-dim);
   text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg2);
+  border: none;
+  background: transparent;
 }
 
 .kd-th-rank { width: 40px; }
 .kd-th-team { width: 60px; }
 .kd-th-num  { text-align: right; }
 
-.kd-row {
+.kd-row { }
+
+.kd-row .kd-td {
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
-
-.kd-row:hover { background: var(--bg2); }
-
-.kd-row-user {
-  background: rgba(79, 142, 247, 0.05);
+.kd-row .kd-td:first-child {
+  border-left: 1px solid var(--border);
+  border-radius: 6px 0 0 6px;
+}
+.kd-row .kd-td:last-child {
+  border-right: 1px solid var(--border);
+  border-radius: 0 6px 6px 0;
 }
 
-.kd-row-user:hover { background: rgba(79, 142, 247, 0.09); }
+.kd-row:hover .kd-td { background: var(--bg3); }
+
+.kd-row-user .kd-td {
+  background: rgba(79, 142, 247, 0.05);
+}
+.kd-row-user:hover .kd-td { background: rgba(79, 142, 247, 0.09); }
 
 .kd-td {
   padding: 9px 12px;
