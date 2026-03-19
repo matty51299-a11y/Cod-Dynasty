@@ -24,6 +24,7 @@ function newGameState(userTeamId) {
     saveExists: true,
     enteredMajorIdx:   null,  // tracks which major the user has "entered" past the intro gate
     playerSeasonStats: {},    // { [playerId]: [{ season, kills, deaths, matches }, ...] }
+    playerOvrHistory:  {},    // { [playerId]: [{ season, overall }, ...] }
     challengersLog:    [],    // per-season challengers pool snapshots (for Pool Health panel)
   };
 }
@@ -123,7 +124,11 @@ function reducer(state, action) {
 
       if (prospect) {
         // Move prospect out of prospects array, into players array
-        const signed = { ...prospect, teamId: userTeam, isSub: slotType === "sub", scouted: true, contractYears: 2 };
+        const existingHistory = prospect.teamHistory || [];
+        const historyUpdated = existingHistory.some(e => e.season === state.season)
+          ? existingHistory
+          : [...existingHistory, { season: state.season, teamId: userTeam }];
+        const signed = { ...prospect, teamId: userTeam, isSub: slotType === "sub", scouted: true, contractYears: 2, teamHistory: historyUpdated };
         return addNotif({
           ...state,
           players: [...state.players, signed],
@@ -137,9 +142,14 @@ function reducer(state, action) {
 
       return addNotif({
         ...state,
-        players: state.players.map(p =>
-          p.id === playerId ? { ...p, teamId: userTeam, isSub: slotType === "sub", scouted: true, contractYears: 2 } : p
-        ),
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          const existingHistory = p.teamHistory || [];
+          const historyUpdated = existingHistory.some(e => e.season === state.season)
+            ? existingHistory
+            : [...existingHistory, { season: state.season, teamId: userTeam }];
+          return { ...p, teamId: userTeam, isSub: slotType === "sub", scouted: true, contractYears: 2, teamHistory: historyUpdated };
+        }),
       }, `${target.name} signed!`);
     }
 

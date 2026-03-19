@@ -1870,6 +1870,19 @@ body { margin: 0; }
   gap: 6px;
 }
 
+/* Career teams list in player modal */
+.pm-team-history {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pm-team-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
 /* ── K/D STATS (also used in modal) ─────────────────────────────────────────── */
 .kd-history-table {
   width: 100%;

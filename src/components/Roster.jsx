@@ -32,7 +32,7 @@ export default function Roster() {
 
   if (!state) return null;
 
-  const { players, userTeamId, progressionLog } = state;
+  const { players, userTeamId, progressionLog, playerOvrHistory } = state;
   const myPlayers = players.filter(p => p.teamId === selectedTeam);
   const chem = calcChemistry(myPlayers);
   const team = CDL_TEAMS.find(t => t.id === selectedTeam);
@@ -133,6 +133,7 @@ export default function Roster() {
           matchLog={state?.schedule?.matchLog}
           playerSeasonStats={state?.playerSeasonStats}
           progressionLog={progressionLog}
+          playerOvrHistory={playerOvrHistory}
           onClose={() => setModalPlayer(null)}
         />
       )}
@@ -141,7 +142,7 @@ export default function Roster() {
 }
 
 // ── Player Modal ──────────────────────────────────────────────────────────────
-function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, progressionLog, onClose }) {
+function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, progressionLog, playerOvrHistory, onClose }) {
   const team = CDL_TEAMS.find(t => t.id === teamId);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
@@ -164,6 +165,14 @@ function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, 
 
   // Last offseason OVR delta from progressionLog (current season's log only)
   const lastProg = (progressionLog ?? []).find(e => e.id === player.id);
+
+  // Career OVR timeline
+  const ovrHistory = ((playerOvrHistory ?? {})[player.id] ?? [])
+    .slice().sort((a, b) => a.season - b.season);
+
+  // Team history
+  const teamHistoryEntries = (player.teamHistory ?? [])
+    .slice().sort((a, b) => a.season - b.season);
 
   // ── Derived identity fields ───────────────────────────────────────────────
   const region = player.region ?? "Unknown";
@@ -335,6 +344,57 @@ function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, 
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* ── OVR History ── */}
+          {ovrHistory.length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-title">OVR History</div>
+              <table className="kd-history-table">
+                <thead>
+                  <tr>
+                    <th>Season</th>
+                    <th>OVR</th>
+                    <th>Δ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ovrHistory.map((e, i) => {
+                    const prev = ovrHistory[i - 1];
+                    const delta = prev != null ? e.overall - prev.overall : null;
+                    return (
+                      <tr key={e.season}>
+                        <td style={{ fontWeight: 600 }}>S{e.season}</td>
+                        <td style={{ color: ratingColor(e.overall), fontWeight: "bold" }}>{e.overall}</td>
+                        <td style={{ color: delta > 0 ? "#69f0ae" : delta < 0 ? "#ef5350" : "#777" }}>
+                          {delta !== null ? (delta > 0 ? `+${delta}` : delta === 0 ? "—" : delta) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── Career Teams ── */}
+          {teamHistoryEntries.length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-title">Career Teams</div>
+              <div className="pm-team-history">
+                {teamHistoryEntries.map(e => {
+                  const t = CDL_TEAMS.find(x => x.id === e.teamId);
+                  return (
+                    <div key={e.season} className="pm-team-row">
+                      <span className="pm-strip-lbl">S{e.season}</span>
+                      <span style={{ color: t?.color ?? "var(--text)" }}>
+                        {t?.name ?? e.teamId ?? "Unknown"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

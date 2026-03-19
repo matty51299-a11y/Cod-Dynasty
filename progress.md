@@ -77,6 +77,28 @@ playerSeasonStats: {
 
 ---
 
+## Career History System
+
+```
+playerOvrHistory: {
+  [playerId]: [{ season, overall }]   // overall = OVR played at that season (pre-progression)
+}
+```
+
+Recorded in `advanceOffseason()` from `progressionLog.oldOverall`. Cumulative, never reset.
+
+```
+player.teamHistory: [{ season, teamId }]
+```
+
+Per-player, travels with the player across transfers. Written:
+- In `advanceOffseason()`: snapshot each signed player's `teamId` at season end (pre-expiry), so released players still get their last team recorded
+- In `SIGN_PLAYER` reducer: appended when user signs a player mid-season (deduplicated by season)
+
+Migration: existing saves without these fields default to `{}` / `[]` gracefully.
+
+---
+
 ## Contract System
 
 Each player has `contractYears` (integer, years remaining).
@@ -98,10 +120,20 @@ Each player has `contractYears` (integer, years remaining).
 7. Then: age, retire, progress, **prospect pool refresh**, AI offseason roster window, new season built
 
 **Prospect Pool Refresh** (runs after progression each offseason):
-- Removes unsigned challengers: age 26+ & OVR < 70 (hard), age 25+ & OVR < 67 (70% chance), age 24+ & OVR < 62 (80% chance)
+- Shields strong players (75+ OVR, age < 32) from cleanup regardless of age
+- Removes unsigned challengers: age 30+ & OVR < 68 (hard), age 28+ & OVR < 63 (hard), age 26+ & OVR < 68 (60% chance), age 24+ & OVR < 60 (50% chance)
 - Generates ~20 new prospects per year: 2–4 elite (OVR 75–83, POT 87–95), 4–6 mid-tier, rest lower
+- Top-up batch fires if pool drops below 150 (fills to 175)
 - New prospects are mostly age 18–20 (occasional 21)
-- Pool hard-capped at 60 unsigned challengers total
+- Pool targets: min 150 · fill target 175 · hard cap 200
+
+**Pool Health Panel** (`PoolHealth.jsx`, embedded in Challengers page):
+- Collapsible debug panel: pool size, avg age/OVR, age 26+ count, OVR 75+ count
+- Age and OVR bucket bar charts
+- Last offseason change breakdown (retirement/cleanup/intake/top-up/cap-trim)
+- Top 20 unsigned challengers table
+- Season-by-season pool history from `challengersLog`
+- `window.poolReport()` browser console utility (registered via `src/engine/poolReport.js` imported in `App.jsx`)
 
 **Signing:** `SIGN_PLAYER` gives all newly signed players `contractYears: 2`.
 
@@ -201,7 +233,14 @@ Phase-aware hub. Shows:
 ## Player UI
 
 - Clicking player opens modal overlay
-- Shows: attributes grid, K/D stats, season history table, hidden traits (user team only), bio (age, salary, contract, dev curve)
+- Header: name, team·region·role meta row, info strip (age/POT/salary/contract/dev/exp), OVR block with ▲/▼ last-offseason delta
+- Performance section: season K/D bubble, career K/D bubble, last offseason Δ bubble with event label
+- Season History table: per-season K/D from `playerSeasonStats`
+- OVR History table: per-season OVR from `playerOvrHistory` (shows after first offseason)
+- Career Teams list: per-season team from `player.teamHistory` (shows after first offseason)
+- Attributes: 2-column grid with bar charts
+- Hidden Traits: visible on user team only (WorkEthic, Tilt Resistance, Leadership, Ego, Meta Dependence)
+- `player.region` displayed prominently in meta row (reflects player nationality, not org)
 
 ---
 
@@ -223,6 +262,8 @@ Core philosophy: **focus → action → result → world update**
 - No league narrative (news, storylines)
 - No opponent roster viewer
 - No contract salary negotiation (re-signing is free / year-only decision)
+- OVR history and team history only populate after the first offseason (new games start with empty history)
+- `progressionLog` is replaced each offseason (not cumulative) — profile only shows "Last Offseason Δ" from it; full OVR history is now in `playerOvrHistory` instead
 
 ---
 
@@ -287,9 +328,11 @@ Core philosophy: **focus → action → result → world update**
   notifications[],
   enteredMajorIdx,
   playerSeasonStats: { [playerId]: [{ season, kills, deaths, matches }] },
+  playerOvrHistory:  { [playerId]: [{ season, overall }] },
   progressionLog[],
   retiredPlayers[],
   rosterMovesLog[],
+  challengersLog[],
   teamContexts: { [teamId]: { philosophy, loyalty, volatility, challengerTrust, pressure } },
 }
 ```
@@ -298,10 +341,13 @@ Player shape (key fields):
 ```js
 {
   id, name, teamId, age, primary, secondary,
+  region,          // player nationality (NOT org/team location)
   overall, potential, salary,
   contractYears,   // years remaining; 0 = expired → FA
   form, experience, isProspect,
+  developmentCurve, // "early" | "standard" | "late"
   gunny, awareness, objective, searchIQ, clutch, teamwork, composure, adaptability,
   ego, workEthic, tiltResistance, leadership, metaDependence,
+  teamHistory: [{ season, teamId }],   // which team per season; travels with player
 }
 ```

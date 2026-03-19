@@ -606,8 +606,18 @@ export function advanceOffseason(gameState) {
     return { ...p, contractYears: Math.max(0, (p.contractYears ?? 2) - 1) };
   });
 
+  // Snapshot teamHistory: record each signed player's team for the outgoing season.
+  // Captured pre-expiry so players whose contracts just hit 0 still get their
+  // last season's team recorded. Deduplicates if SIGN_PLAYER already wrote it.
+  const withTeamHistorySnapshot = withDecrement.map(p => {
+    if (!p.teamId) return p;
+    const history = p.teamHistory || [];
+    if (history.some(e => e.season === outgoingSeason)) return p;
+    return { ...p, teamHistory: [...history, { season: outgoingSeason, teamId: p.teamId }] };
+  });
+
   // Release players whose contracts hit 0 — they become free agents
-  const withExpiry = withDecrement.map(p => {
+  const withExpiry = withTeamHistorySnapshot.map(p => {
     if (p.teamId && (p.contractYears ?? 1) === 0) {
       return { ...p, teamId: null, isSub: false };
     }
@@ -639,6 +649,18 @@ export function advanceOffseason(gameState) {
   const { updatedPlayers, updatedProspects, progressionLog } =
     runProgression(activePlayers, activeProspects, standings, newSeason);
 
+  // ── Build playerOvrHistory from this season's progression ────────────────
+  // Records the OVR each player *played at* during the outgoing season
+  // (oldOverall = pre-progression OVR = what they were rated all season).
+  const playerOvrHistory = { ...(gameState.playerOvrHistory ?? {}) };
+  for (const entry of progressionLog) {
+    if (!playerOvrHistory[entry.id]) playerOvrHistory[entry.id] = [];
+    playerOvrHistory[entry.id] = [
+      ...playerOvrHistory[entry.id],
+      { season: outgoingSeason, overall: entry.oldOverall },
+    ];
+  }
+
   // ── Refresh prospect pool for the incoming season ─────────────────────────
   // Runs after progression so newly-aged prospects are evaluated with their
   // updated overalls. Only touches unsigned challengers (updatedProspects).
@@ -668,6 +690,7 @@ export function advanceOffseason(gameState) {
     prospects:        refreshedProspects,
     progressionLog,
     playerSeasonStats,
+    playerOvrHistory,
     retiredPlayers:   [...(gameState.retiredPlayers || []), ...retired],
     challengersLog:   [...(gameState.challengersLog || []), challengersEntry],
     schedule:         buildSeason(newSeason),
