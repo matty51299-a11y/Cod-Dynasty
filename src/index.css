@@ -1732,6 +1732,8 @@ body { margin: 0; }
   overflow-y: auto;
   position: relative;
 }
+/* Wider variant for the improved profile layout */
+.player-modal.pm-wide { max-width: 660px; }
 
 .pm-header {
   display: flex;
@@ -1807,7 +1809,7 @@ body { margin: 0; }
 .pm-kd-label{ font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 .pm-kd-sub  { font-size: 11px; margin-top: 1px; }
 
-/* Bio section */
+/* Bio section (kept for legacy saves, new profile uses pm-info-strip) */
 .pm-bio { display: flex; flex-direction: column; gap: 5px; }
 
 .pm-bio-row {
@@ -1817,6 +1819,56 @@ body { margin: 0; }
 }
 
 .pm-bio-label { min-width: 90px; color: var(--text-dim); font-size: 11px; }
+
+/* ── IMPROVED PLAYER PROFILE LAYOUT ─────────────────────────────────────────── */
+
+/* Info strip below the name+meta row */
+.pm-info-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--text);
+}
+.pm-strip-lbl { color: var(--text-dim); margin-right: 2px; }
+
+/* Separator dot between meta items */
+.pm-dot { color: #444; font-size: 11px; }
+
+/* Region badge in the meta row */
+.pm-region-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #aaa;
+  letter-spacing: 0.04em;
+}
+
+/* Secondary role shown faintly next to primary */
+.pm-secondary { font-size: 11px; margin-left: 2px; }
+
+/* OVR delta shown below the OVR number */
+.pm-ovr-delta {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin-top: 3px;
+  text-align: center;
+}
+
+/* 2-column attribute grid */
+.pm-attr-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 22px;
+}
+
+/* Traits laid out in a tighter single column */
+.pm-traits-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
 /* ── K/D STATS (also used in modal) ─────────────────────────────────────────── */
 .kd-history-table {

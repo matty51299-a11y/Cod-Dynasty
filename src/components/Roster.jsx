@@ -32,7 +32,7 @@ export default function Roster() {
 
   if (!state) return null;
 
-  const { players, userTeamId } = state;
+  const { players, userTeamId, progressionLog } = state;
   const myPlayers = players.filter(p => p.teamId === selectedTeam);
   const chem = calcChemistry(myPlayers);
   const team = CDL_TEAMS.find(t => t.id === selectedTeam);
@@ -132,6 +132,7 @@ export default function Roster() {
           isUserTeam={selectedTeam === userTeamId}
           matchLog={state?.schedule?.matchLog}
           playerSeasonStats={state?.playerSeasonStats}
+          progressionLog={progressionLog}
           onClose={() => setModalPlayer(null)}
         />
       )}
@@ -140,36 +141,42 @@ export default function Roster() {
 }
 
 // ── Player Modal ──────────────────────────────────────────────────────────────
-function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, onClose }) {
+function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, progressionLog, onClose }) {
   const team = CDL_TEAMS.find(t => t.id === teamId);
 
-  // Current season K/D
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  // Current-season K/D from live matchLog
   let curKills = 0, curDeaths = 0, curMatches = 0;
   for (const result of (matchLog ?? [])) {
     const ps = result.playerStats?.[player.id];
-    if (ps) {
-      curKills   += ps.kills  ?? 0;
-      curDeaths  += ps.deaths ?? 0;
-      curMatches += 1;
-    }
+    if (ps) { curKills += ps.kills ?? 0; curDeaths += ps.deaths ?? 0; curMatches += 1; }
   }
-  const curKD = curDeaths > 0
-    ? (curKills / curDeaths).toFixed(2)
-    : curMatches > 0 ? curKills.toFixed(2) : "—";
+  const curKD = curDeaths > 0 ? (curKills / curDeaths).toFixed(2)
+              : curMatches > 0 ? curKills.toFixed(2) : "—";
 
-  // Career stats
+  // Career K/D from playerSeasonStats (completed seasons)
   const history = ((playerSeasonStats ?? {})[player.id] ?? [])
     .slice().sort((a, b) => a.season - b.season);
   const careerKills  = history.reduce((s, e) => s + e.kills,  0);
   const careerDeaths = history.reduce((s, e) => s + e.deaths, 0);
-  const careerKD     = careerDeaths > 0 ? (careerKills / careerDeaths).toFixed(2) : "—";
+  const careerKD = careerDeaths > 0 ? (careerKills / careerDeaths).toFixed(2) : "—";
+  const careerMatches = history.reduce((s, e) => s + e.matches, 0);
 
-  const traits = [
-    { label: "Ego",             key: "ego",           desc: "High = volatile", invert: true },
-    { label: "Work Ethic",      key: "workEthic",     desc: "Higher = faster dev" },
-    { label: "Tilt Resistance", key: "tiltResistance",desc: "Higher = bounces back" },
-    { label: "Leadership",      key: "leadership",    desc: "Boosts chemistry" },
-    { label: "Meta Dependence", key: "metaDependence",desc: "High = risky on shifts", invert: true },
+  // Last offseason OVR delta from progressionLog (current season's log only)
+  const lastProg = (progressionLog ?? []).find(e => e.id === player.id);
+
+  // ── Derived identity fields ───────────────────────────────────────────────
+  const region = player.region ?? "Unknown";
+  const isUnsigned = !player.teamId;
+  const isChallenger = isUnsigned && player.isProspect;
+  const statusLabel = isChallenger ? "Challengers" : isUnsigned ? "Free Agent" : null;
+
+  const TRAITS = [
+    { label: "Work Ethic",      key: "workEthic",     desc: "Higher = faster dev",       invert: false },
+    { label: "Tilt Resistance", key: "tiltResistance",desc: "Higher = bounces back",      invert: false },
+    { label: "Leadership",      key: "leadership",    desc: "Boosts team chemistry",      invert: false },
+    { label: "Ego",             key: "ego",           desc: "High = volatile",            invert: true  },
+    { label: "Meta Dependence", key: "metaDependence",desc: "High = risky on meta shifts",invert: true  },
   ];
 
   function traitColor(val, invert) {
@@ -177,99 +184,148 @@ function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, 
     return e >= 4 ? "#00e676" : e >= 3 ? "#ffeb3b" : "#ef5350";
   }
 
-  function ratingColor(v) {
-    if (v >= 90) return "#00e676";
-    if (v >= 80) return "#69f0ae";
-    if (v >= 70) return "#ffeb3b";
-    if (v >= 60) return "#ffa726";
-    return "#ef5350";
-  }
+  const contractColor = (player.contractYears ?? 2) <= 1 ? "#ff6450" : "var(--text)";
 
   return (
     <div className="player-modal-backdrop" onClick={onClose}>
-      <div className="player-modal" onClick={e => e.stopPropagation()}>
+      <div className="player-modal pm-wide" onClick={e => e.stopPropagation()}>
 
-        {/* ── Header ── */}
+        {/* ════ HEADER ════════════════════════════════════════════════════════ */}
         <div className="pm-header" style={{ borderTopColor: team?.color ?? "var(--accent)" }}>
           <div className="pm-identity">
+
+            {/* Name */}
             <div className="pm-name">{player.name}</div>
+
+            {/* Team · Region · Role · [SUB] */}
             <div className="pm-meta">
-              <span className="pm-team" style={{ color: team?.color }}>{team?.name ?? teamId}</span>
-              <span className="pm-role role-pill">{player.primary}</span>
+              {!isUnsigned && (
+                <span className="pm-team" style={{ color: team?.color }}>
+                  {team?.name ?? teamId}
+                </span>
+              )}
+              {isUnsigned && (
+                <span style={{ color: "#777", fontSize: "12px" }}>{statusLabel}</span>
+              )}
+              <span className="pm-dot">·</span>
+              <span className="pm-region-badge">{region}</span>
+              <span className="pm-dot">·</span>
+              <span className="role-pill pm-role">{player.primary}</span>
+              {player.secondary && (
+                <span className="pm-secondary muted">/ {player.secondary}</span>
+              )}
               {player.isSub && <span className="sub-label">SUB</span>}
             </div>
+
+            {/* Info strip: Age · POT · Salary · Contract · Dev */}
+            <div className="pm-info-strip">
+              <span><span className="pm-strip-lbl">Age</span> {player.age}</span>
+              <span>
+                <span className="pm-strip-lbl">POT</span>{" "}
+                <span style={{ color: ratingColor(player.potential), fontWeight: 700 }}>
+                  {player.potential}
+                </span>
+              </span>
+              <span><span className="pm-strip-lbl">Salary</span> ${(player.salary / 1000).toFixed(0)}k</span>
+              {player.contractYears != null && (
+                <span style={{ color: contractColor }}>
+                  {player.contractYears} yr{player.contractYears !== 1 ? "s" : ""}
+                  {player.contractYears <= 1 && " ⚠"}
+                </span>
+              )}
+              <span>
+                <span className="pm-strip-lbl">Dev</span>{" "}
+                {player.developmentCurve ?? "standard"}
+              </span>
+              {(player.experience ?? 0) > 0 && (
+                <span>
+                  <span className="pm-strip-lbl">Exp</span>{" "}
+                  {player.experience} season{player.experience !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
           </div>
+
+          {/* OVR block */}
           <div className="pm-ovr-block">
             <div className="pm-ovr" style={{ color: ratingColor(player.overall) }}>
               {player.overall}
             </div>
             <div className="pm-ovr-label">OVR</div>
+            {lastProg && lastProg.delta !== 0 && (
+              <div className="pm-ovr-delta" style={{
+                color: lastProg.delta > 0 ? "#69f0ae" : "#ef5350",
+              }}>
+                {lastProg.delta > 0 ? "▲" : "▼"}{Math.abs(lastProg.delta)}
+              </div>
+            )}
           </div>
+
           <button className="pm-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
+        {/* ════ BODY ══════════════════════════════════════════════════════════ */}
         <div className="pm-body">
-          {/* ── Attributes grid ── */}
-          <div className="pm-section">
-            <div className="pm-section-title">Attributes</div>
-            <div className="pm-attr-grid">
-              {RATING_KEYS.map(r => (
-                <div key={r.key} className="pm-attr-row">
-                  <span className="pm-attr-label">{r.label}</span>
-                  <div className="pm-attr-bar">
-                    <div
-                      className="pm-attr-fill"
-                      style={{ width: `${player[r.key]}%`, background: ratingColor(player[r.key]) }}
-                    />
-                  </div>
-                  <span className="pm-attr-val" style={{ color: ratingColor(player[r.key]) }}>
-                    {player[r.key]}
-                  </span>
-                </div>
-              ))}
-              <div className="pm-attr-row">
-                <span className="pm-attr-label">Potential</span>
-                <div className="pm-attr-bar">
-                  <div
-                    className="pm-attr-fill"
-                    style={{ width: `${player.potential}%`, background: ratingColor(player.potential) }}
-                  />
-                </div>
-                <span className="pm-attr-val" style={{ color: ratingColor(player.potential) }}>
-                  {player.potential}
-                </span>
-              </div>
-            </div>
-          </div>
 
-          {/* ── K/D Stats ── */}
-          <div className="pm-section">
-            <div className="pm-section-title">Performance</div>
-            <div className="pm-kd-summary">
-              <div className="pm-kd-stat">
-                <div className="pm-kd-val">{curKD}</div>
-                <div className="pm-kd-label">This Season K/D</div>
-                <div className="pm-kd-sub muted">{curMatches} matches</div>
+          {/* ── Performance summary bubbles ── */}
+          {(curMatches > 0 || history.length > 0) && (
+            <div className="pm-section">
+              <div className="pm-section-title">Performance</div>
+              <div className="pm-kd-summary">
+                {curMatches > 0 && (
+                  <div className="pm-kd-stat">
+                    <div className="pm-kd-val">{curKD}</div>
+                    <div className="pm-kd-label">This Season K/D</div>
+                    <div className="pm-kd-sub muted">{curMatches} match{curMatches !== 1 ? "es" : ""}</div>
+                  </div>
+                )}
+                {careerMatches > 0 && (
+                  <div className="pm-kd-stat">
+                    <div className="pm-kd-val">{careerKD}</div>
+                    <div className="pm-kd-label">Career K/D</div>
+                    <div className="pm-kd-sub muted">{careerMatches} total</div>
+                  </div>
+                )}
+                {lastProg && (
+                  <div className="pm-kd-stat">
+                    <div className="pm-kd-val" style={{
+                      color: lastProg.delta > 0 ? "#69f0ae" : lastProg.delta < 0 ? "#ef5350" : "#777"
+                    }}>
+                      {lastProg.delta > 0 ? "+" : ""}{lastProg.delta}
+                    </div>
+                    <div className="pm-kd-label">Last Offseason Δ</div>
+                    <div className="pm-kd-sub muted">
+                      {lastProg.eventType
+                        ? (lastProg.eventType === "breakout" ? "⚡ Breakout" : "⚡ Collapse")
+                        : (lastProg.delta === 0 ? "Plateau" : "Progression")}
+                    </div>
+                  </div>
+                )}
               </div>
-              {history.length > 0 && (
-                <div className="pm-kd-stat">
-                  <div className="pm-kd-val">{careerKD}</div>
-                  <div className="pm-kd-label">Career K/D</div>
-                  <div className="pm-kd-sub muted">{history.reduce((s, e) => s + e.matches, 0)} matches</div>
-                </div>
-              )}
             </div>
-            {history.length > 0 && (
+          )}
+
+          {/* ── Season history table ── */}
+          {history.length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-title">Season History</div>
               <table className="kd-history-table">
                 <thead>
-                  <tr><th>Season</th><th>G</th><th>K</th><th>D</th><th>K/D</th></tr>
+                  <tr>
+                    <th>Season</th>
+                    <th>G</th>
+                    <th>Kills</th>
+                    <th>Deaths</th>
+                    <th>K/D</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {history.map(e => {
-                    const kd = e.deaths > 0 ? (e.kills / e.deaths).toFixed(2) : "—";
+                    const kd = e.deaths > 0 ? (e.kills / e.deaths).toFixed(2)
+                             : e.kills > 0   ? e.kills.toFixed(2) : "—";
                     return (
                       <tr key={e.season}>
-                        <td>S{e.season}</td>
+                        <td style={{ fontWeight: 600 }}>S{e.season}</td>
                         <td>{e.matches}</td>
                         <td>{e.kills}</td>
                         <td>{e.deaths}</td>
@@ -279,66 +335,52 @@ function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, 
                   })}
                 </tbody>
               </table>
-            )}
-            {curMatches === 0 && history.length === 0 && (
-              <p className="muted" style={{ fontSize: 12 }}>No matches played yet.</p>
-            )}
+            </div>
+          )}
+
+          {/* ── Attributes – 2-column grid ── */}
+          <div className="pm-section">
+            <div className="pm-section-title">Attributes</div>
+            <div className="pm-attr-2col">
+              {RATING_KEYS.map(r => (
+                <div key={r.key} className="pm-attr-row">
+                  <span className="pm-attr-label">{r.label}</span>
+                  <div className="pm-attr-bar">
+                    <div className="pm-attr-fill"
+                      style={{ width: `${player[r.key]}%`, background: ratingColor(player[r.key]) }} />
+                  </div>
+                  <span className="pm-attr-val" style={{ color: ratingColor(player[r.key]) }}>
+                    {player[r.key]}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* ── Hidden traits (user team only) ── */}
           {isUserTeam && (
             <div className="pm-section">
               <div className="pm-section-title">Hidden Traits</div>
-              {traits.map(t => (
-                <div key={t.key} className="trait-row">
-                  <span className="trait-label">{t.label}</span>
-                  <span className="trait-dots">
-                    {[1,2,3,4,5].map(d => (
-                      <span
-                        key={d}
-                        className={`dot-pip ${d <= player[t.key] ? "filled" : ""}`}
-                        style={d <= player[t.key] ? { background: traitColor(player[t.key], t.invert) } : {}}
-                      />
-                    ))}
-                  </span>
-                  <span className="trait-desc muted">{t.desc}</span>
-                </div>
-              ))}
+              <div className="pm-traits-grid">
+                {TRAITS.map(t => (
+                  <div key={t.key} className="trait-row">
+                    <span className="trait-label">{t.label}</span>
+                    <span className="trait-dots">
+                      {[1,2,3,4,5].map(d => (
+                        <span
+                          key={d}
+                          className={`dot-pip ${d <= player[t.key] ? "filled" : ""}`}
+                          style={d <= player[t.key] ? { background: traitColor(player[t.key], t.invert) } : {}}
+                        />
+                      ))}
+                    </span>
+                    <span className="trait-desc muted">{t.desc}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* ── Bio ── */}
-          <div className="pm-section pm-bio">
-            <div className="pm-bio-row">
-              <span className="pm-bio-label">Age</span>
-              <span>{player.age}</span>
-            </div>
-            <div className="pm-bio-row">
-              <span className="pm-bio-label">Region</span>
-              <span>{player.region ?? "NA"}</span>
-            </div>
-            <div className="pm-bio-row">
-              <span className="pm-bio-label">Experience</span>
-              <span>{player.experience} season{player.experience !== 1 ? "s" : ""}</span>
-            </div>
-            <div className="pm-bio-row">
-              <span className="pm-bio-label">Dev Curve</span>
-              <span>{player.developmentCurve ?? "standard"}</span>
-            </div>
-            <div className="pm-bio-row">
-              <span className="pm-bio-label">Salary</span>
-              <span>${(player.salary / 1000).toFixed(0)}k</span>
-            </div>
-            {player.contractYears != null && (
-              <div className="pm-bio-row">
-                <span className="pm-bio-label">Contract</span>
-                <span style={{ color: player.contractYears <= 1 ? "#ff6450" : "var(--text)" }}>
-                  {player.contractYears} yr{player.contractYears !== 1 ? "s" : ""} remaining
-                  {player.contractYears === 1 && " ⚠ expiring"}
-                </span>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>

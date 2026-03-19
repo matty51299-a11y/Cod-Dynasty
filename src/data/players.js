@@ -11,7 +11,8 @@ function nameHash(str) {
 }
 
 // Helper to build a player object
-function mkPlayer(name, teamId, age, primary, secondary, ratings, hidden) {
+// region: "NA" | "EU" | "MENA" | "APAC" — defaults to "NA" (CDL is primarily NA)
+function mkPlayer(name, teamId, age, primary, secondary, ratings, hidden, region = "NA") {
   return {
     id: `${teamId}_${name.toLowerCase().replace(/\s/g, "_")}`,
     name,
@@ -19,6 +20,7 @@ function mkPlayer(name, teamId, age, primary, secondary, ratings, hidden) {
     age,
     primary,       // primary role
     secondary,     // secondary role
+    region,        // player's home region
     salary: (() => { const t = Math.max(0, (ratings.overall - 70) / 29); return Math.round((Math.pow(t, 2.5) * 575 + 25)) * 1000; })(),
     ...ratings,
     // hidden traits – not shown to player unless scouted
@@ -157,30 +159,30 @@ export function buildInitialRoster() {
     // ── PARIS GENTLE MATES ────────────────────────────────────────────────────
     mkPlayer("Ghosty",  "paris", 23, "Main AR",          "Flex",
       { overall:89, potential:88, gunny:81, awareness:88, objective:82, searchIQ:85, clutch:84, teamwork:85, composure:85, adaptability:83 },
-      { ego:2, workEthic:4, tiltResistance:4, leadership:4, metaDependence:2 }),
+      { ego:2, workEthic:4, tiltResistance:4, leadership:4, metaDependence:2 }, "EU"),
     mkPlayer("Envoy",   "paris", 24, "Search Specialist","Flex",
       { overall:86, potential:87, gunny:81, awareness:88, objective:78, searchIQ:91, clutch:85, teamwork:84, composure:87, adaptability:81 },
-      { ego:2, workEthic:4, tiltResistance:4, leadership:3, metaDependence:2 }),
+      { ego:2, workEthic:4, tiltResistance:4, leadership:3, metaDependence:2 }, "EU"),
     mkPlayer("Sib",     "paris", 22, "Flex",       "Entry SMG",
       { overall:88, potential:89, gunny:87, awareness:79, objective:73, searchIQ:79, clutch:83, teamwork:79, composure:80, adaptability:84 },
-      { ego:2, workEthic:4, tiltResistance:3, leadership:2, metaDependence:3 }),
+      { ego:2, workEthic:4, tiltResistance:3, leadership:2, metaDependence:3 }, "EU"),
     mkPlayer("Neptune", "paris", 21, "Slayer SMG",        "Flex",
       { overall:92, potential:91, gunny:83, awareness:77, objective:76, searchIQ:76, clutch:80, teamwork:79, composure:74, adaptability:86 },
-      { ego:2, workEthic:4, tiltResistance:3, leadership:2, metaDependence:3 }),
+      { ego:2, workEthic:4, tiltResistance:3, leadership:2, metaDependence:3 }, "EU"),
 
     // ── RIYADH FALCONS ────────────────────────────────────────────────────────
     mkPlayer("Exnid",   "riyadh", 23, "Entry SMG",       "Slayer SMG",
       { overall:84, potential:88, gunny:87, awareness:81, objective:76, searchIQ:80, clutch:85, teamwork:81, composure:82, adaptability:83 },
-      { ego:2, workEthic:4, tiltResistance:3, leadership:2, metaDependence:3 }),
+      { ego:2, workEthic:4, tiltResistance:3, leadership:2, metaDependence:3 }, "MENA"),
     mkPlayer("Pred",    "riyadh", 24, "Slayer SMG",       "Search Specialist",
       { overall:88, potential:88, gunny:89, awareness:84, objective:75, searchIQ:86, clutch:88, teamwork:82, composure:85, adaptability:82 },
-      { ego:2, workEthic:4, tiltResistance:4, leadership:3, metaDependence:2 }),
+      { ego:2, workEthic:4, tiltResistance:4, leadership:3, metaDependence:2 }, "MENA"),
     mkPlayer("Cellium", "riyadh", 24, "Main AR",         "Flex",
       { overall:93, potential:96, gunny:93, awareness:95, objective:86, searchIQ:93, clutch:95, teamwork:87, composure:94, adaptability:88 },
-      { ego:2, workEthic:5, tiltResistance:5, leadership:5, metaDependence:1 }),
+      { ego:2, workEthic:5, tiltResistance:5, leadership:5, metaDependence:1 }, "MENA"),
     mkPlayer("KiSMET",  "riyadh", 23, "Flex",            "Objective",
       { overall:87, potential:89, gunny:83, awareness:86, objective:86, searchIQ:84, clutch:84, teamwork:86, composure:84, adaptability:85 },
-      { ego:2, workEthic:4, tiltResistance:4, leadership:3, metaDependence:2 }),
+      { ego:2, workEthic:4, tiltResistance:4, leadership:3, metaDependence:2 }, "MENA"),
 
     // ── TORONTO KOI ───────────────────────────────────────────────────────────
     mkPlayer("CleanX",      "toronto", 23, "Slayer SMG",  "Entry SMG",
