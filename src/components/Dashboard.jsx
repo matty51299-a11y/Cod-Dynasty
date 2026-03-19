@@ -1,5 +1,5 @@
 // src/components/Dashboard.jsx
-// Main game hub: phase card, primary action, major event panel, recent results.
+// Main game hub: FM24-style grid dashboard with club banner, card grid, and full-width panels.
 
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
@@ -14,10 +14,16 @@ function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 
 function ratingColor(v) {
   if (v >= 90) return "#ffd700";
-  if (v >= 85) return "#00e676";
-  if (v >= 80) return "#69f0ae";
-  if (v >= 70) return "#ffeb3b";
-  return "#ef5350";
+  if (v >= 85) return "#34d399";
+  if (v >= 80) return "#6ee7b7";
+  if (v >= 70) return "#fbbf24";
+  return "#f87171";
+}
+
+function chemColor(chem) {
+  if (chem >= 80) return "var(--green)";
+  if (chem >= 60) return "var(--yellow)";
+  return "var(--red)";
 }
 
 export default function Dashboard({ setScreen }) {
@@ -38,7 +44,6 @@ export default function Dashboard({ setScreen }) {
   const stageName  = schedule.stages?.[stageIdx]?.name  ?? "Stage";
   const majorName  = schedule.majors?.[majorIdx]?.name  ?? "Major";
 
-  // Use stageStandings for in-stage record; cumulative for season total
   const stageStandings = schedule.stageStandings ?? {};
   const cumStandings   = schedule.standings ?? {};
   const myStage  = stageStandings[userTeamId] ?? { wins: 0, losses: 0, points: 0 };
@@ -50,11 +55,6 @@ export default function Dashboard({ setScreen }) {
   const isOffseason = phase === "offseason";
   const isContracts = phase === "contracts";
 
-  // Major entry state
-  const activeMajor = isMajor ? (schedule.majors?.[majorIdx] ?? null) : null;
-  const isEntered   = isMajor && (state.enteredMajorIdx ?? null) === majorIdx;
-  const bracket     = activeMajor?.bracket ?? null;
-
   // Stage progress
   const currentStage = isStage ? schedule.stages?.[stageIdx] : null;
   const remaining    = currentStage ? currentStage.matches.filter(m => !m.played).length : 0;
@@ -62,8 +62,8 @@ export default function Dashboard({ setScreen }) {
   const played       = totalMatches - remaining;
   const progress     = totalMatches > 0 ? Math.round((played / totalMatches) * 100) : 0;
 
-  // Top-5 mini standings from stageStandings
-  const top5 = isStage
+  // Top 5 mini standings
+  const top5 = (isStage || isMajor)
     ? CDL_TEAMS
         .map(t => ({ id: t.id, name: t.name, tag: t.tag, color: t.color,
                      rec: stageStandings[t.id] ?? { wins: 0, losses: 0, points: 0 } }))
@@ -71,7 +71,7 @@ export default function Dashboard({ setScreen }) {
         .slice(0, 5)
     : [];
 
-  // Next unplayed match for user's team in current stage
+  // Next unplayed match
   const nextMatchInStage = isStage && currentStage
     ? currentStage.matches.find(m => !m.played && (m.a === userTeamId || m.b === userTeamId))
     : null;
@@ -79,12 +79,10 @@ export default function Dashboard({ setScreen }) {
   const nextOppTeam = nextOppId ? CDL_TEAMS.find(t => t.id === nextOppId) : null;
   const nextOppRec  = nextOppId ? (stageStandings[nextOppId] ?? { wins: 0, losses: 0 }) : null;
 
-  // ── Highlights data ──────────────────────────────────────────────────────────
-  // Top player on user's team
+  // Highlights data
   const topPlayer = myPlayers.filter(p => !p.isSub).sort((a, b) => b.overall - a.overall)[0] ?? null;
 
-  // Top team by points in current standings view
-  const standingsForHighlights = isStage ? stageStandings : cumStandings;
+  const standingsForHighlights = (isStage || isMajor) ? stageStandings : cumStandings;
   const topTeamEntry = CDL_TEAMS
     .map(t => ({ t, rec: standingsForHighlights[t.id] ?? { wins: 0, losses: 0, points: 0 } }))
     .sort((a, b) => b.rec.points - a.rec.points)[0];
@@ -92,13 +90,11 @@ export default function Dashboard({ setScreen }) {
   const topTeamRecord = topTeamEntry?.rec ?? null;
   const topTeamHasMatches = (topTeamRecord?.wins ?? 0) + (topTeamRecord?.losses ?? 0) > 0;
 
-  // Biggest breakout and collapse from last offseason's progressionLog
   const progLog = progressionLog ?? [];
   const breakouts = progLog.filter(e => e.eventType === "breakout" && e.delta > 0).sort((a, b) => b.delta - a.delta);
   const collapses = progLog.filter(e => e.eventType === "collapse" && e.delta < 0).sort((a, b) => a.delta - b.delta);
   const biggestBreakout = breakouts[0] ?? null;
   const biggestCollapse = collapses[0] ?? null;
-  const showHighlights = topPlayer || topTeamHasMatches || biggestBreakout || biggestCollapse;
 
   const myLog = [...(schedule.matchLog || [])]
     .reverse()
@@ -107,10 +103,9 @@ export default function Dashboard({ setScreen }) {
 
   function toggleRow(i) { setExpandedIdx(prev => (prev === i ? null : i)); }
 
-  function enterTournament() {
-    dispatch({ type: "ENTER_MAJOR", majorIdx });
-    // Navigation is handled by MajorEntryOverlay / MajorTournamentOverlay overlays
-  }
+  const phaseChipClass = isMajor ? "db-phase-chip db-phase-chip-major"
+    : (isOffseason || isContracts) ? "db-phase-chip db-phase-chip-offseason"
+    : "db-phase-chip";
 
   const phaseLabel = isOffseason  ? "Offseason"
     : isContracts  ? "Contract Period"
@@ -121,139 +116,268 @@ export default function Dashboard({ setScreen }) {
   return (
     <div className="dashboard">
 
-      {/* ── Phase Card ── */}
-      <div className="phase-card" style={{ borderLeftColor: team?.color ?? "var(--accent)" }}>
-        <div className="pc-top">
-          <div className="pc-team-info">
-            <h2 className="pc-team-name" style={{ color: team?.color ?? "#fff" }}>
-              {team?.name ?? userTeamId}
-            </h2>
-            <span className="pc-phase-label">Season {season} · {phaseLabel}</span>
+      {/* ── Club Banner ── */}
+      <div className="db-club-banner" style={{ borderTop: `3px solid ${team?.color ?? "var(--accent)"}` }}>
+        <div className="db-cb-inner">
+          <div className="db-cb-left">
+            <div>
+              <h2 className="db-cb-team-name" style={{ color: team?.color ?? "var(--text-head)" }}>
+                {team?.name ?? userTeamId}
+              </h2>
+              <div className="db-cb-meta">
+                <span className={phaseChipClass}>{phaseLabel}</span>
+                <span className="db-season-tag">Season {season}</span>
+              </div>
+            </div>
+
+            <div className="db-stat-chips">
+              {isStage && (
+                <>
+                  <div className="db-stat-chip">
+                    <span className="db-stat-chip-label">{stageName}</span>
+                    <span className="db-stat-chip-value">{myStage.wins}W – {myStage.losses}L</span>
+                  </div>
+                  <div className="db-stat-chip">
+                    <span className="db-stat-chip-label">Stage Pts</span>
+                    <span className="db-stat-chip-value">{myStage.points}</span>
+                  </div>
+                  <div className="db-stat-chip">
+                    <span className="db-stat-chip-label">Season Pts</span>
+                    <span className="db-stat-chip-value">{mySeason.points}</span>
+                  </div>
+                </>
+              )}
+              {(isMajor || isPreChamps) && (
+                <>
+                  <div className="db-stat-chip">
+                    <span className="db-stat-chip-label">Season Record</span>
+                    <span className="db-stat-chip-value">{mySeason.wins}W – {mySeason.losses}L</span>
+                  </div>
+                  <div className="db-stat-chip">
+                    <span className="db-stat-chip-label">Season Pts</span>
+                    <span className="db-stat-chip-value">{mySeason.points}</span>
+                  </div>
+                </>
+              )}
+              {(isOffseason || isContracts) && (
+                <div className="db-stat-chip">
+                  <span className="db-stat-chip-label">Final Record</span>
+                  <span className="db-stat-chip-value">{mySeason.wins}W – {mySeason.losses}L</span>
+                </div>
+              )}
+              <div className="db-stat-chip">
+                <span className="db-stat-chip-label">Chemistry</span>
+                <span className="db-stat-chip-value" style={{ color: chemColor(chem) }}>
+                  {chem} <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-dim)" }}>({chemLabel(chem)})</span>
+                </span>
+              </div>
+            </div>
+
+            {isStage && totalMatches > 0 && (
+              <div className="db-progress">
+                <div className="db-progress-bar">
+                  <div
+                    className="db-progress-fill"
+                    style={{ width: `${progress}%`, background: team?.color ?? "var(--accent)" }}
+                  />
+                </div>
+                <span className="db-progress-label">{played} / {totalMatches} matches</span>
+              </div>
+            )}
           </div>
 
-          <div className="stat-row">
-            {isStage && (
+          <div className="db-cb-right">
+            {isStage && remaining > 0 && (
               <>
-                <Stat label={`${stageName}`} value={`${myStage.wins}W – ${myStage.losses}L`} />
-                <Stat label="Stage Pts"      value={myStage.points} />
-                <Stat label="Season Pts"     value={mySeason.points} />
+                <span className="db-cb-cta-hint">Skip ahead</span>
+                <button
+                  className="btn-cta"
+                  style={{ background: "var(--bg3)", color: "var(--text)", border: "1px solid var(--border)" }}
+                  onClick={() => { dispatch({ type: "SIM_STAGE" }); setExpandedIdx(null); }}
+                >
+                  Sim Rest of {stageName}
+                  <span className="btn-cta-badge" style={{ background: "rgba(255,255,255,0.1)" }}>{remaining} left</span>
+                </button>
               </>
             )}
-            {(isMajor || isPreChamps) && (
+            {isPreChamps && (
               <>
-                <Stat label="Season Record" value={`${mySeason.wins}W – ${mySeason.losses}L`} />
-                <Stat label="Season Pts"    value={mySeason.points} />
+                <span className="db-cb-cta-hint">Roster lock incoming</span>
+                <button className="btn-cta" onClick={() => dispatch({ type: "BEGIN_CHAMPS" })}>
+                  Begin Championship →
+                </button>
               </>
             )}
-            {(isOffseason || isContracts) && (
-              <Stat label="Final Record" value={`${mySeason.wins}W – ${mySeason.losses}L`} />
+            {isOffseason && (
+              <>
+                <span className="db-cb-cta-hint">Season complete</span>
+                <button className="btn-cta" onClick={() => dispatch({ type: "ENTER_CONTRACT_PHASE" })}>
+                  Review Contracts →
+                </button>
+              </>
             )}
-            <Stat label="Chemistry" value={`${chem} (${chemLabel(chem)})`} />
+            {isContracts && (
+              <>
+                <span className="db-cb-cta-hint">Review below then continue</span>
+                <button className="btn-cta" onClick={() => dispatch({ type: "ADVANCE_OFFSEASON" })}>
+                  Advance Offseason →
+                </button>
+              </>
+            )}
+            {isMajor && (
+              <span className="db-cb-cta-hint" style={{ fontSize: 12 }}>
+                Tournament event in progress — use the overlay above to proceed.
+              </span>
+            )}
           </div>
-        </div>
-
-        {/* Stage progress bar */}
-        {isStage && totalMatches > 0 && (
-          <div className="stage-progress">
-            <div className="sp-bar">
-              <div
-                className="sp-fill"
-                style={{ width: `${progress}%`, background: team?.color ?? "var(--accent)" }}
-              />
-            </div>
-            <span className="sp-label muted">{played} / {totalMatches} matches played</span>
-          </div>
-        )}
-
-        {/* ── Primary action ── */}
-        {/* During stage play the top-right "Play Matchday" control is the main
-            progression action. Only bulk/end-of-stage actions live here. */}
-        <div className="pc-actions">
-          {isStage && remaining > 0 && (
-            <button
-              className="btn-secondary pc-sim-rest"
-              onClick={() => { dispatch({ type: "SIM_STAGE" }); setExpandedIdx(null); }}
-            >
-              Sim Rest of {stageName}
-              <span className="pc-cta-badge">{remaining} left</span>
-            </button>
-          )}
-          {isMajor && !isEntered && (
-            <div className="pc-major-hint muted" style={{ fontSize: 12, padding: "8px 0" }}>
-              A tournament event is starting — enter it via the overlay above.
-            </div>
-          )}
-          {isPreChamps && (
-            <button
-              className="btn-accent pc-cta"
-              onClick={() => dispatch({ type: "BEGIN_CHAMPS" })}
-            >
-              Begin Championship →
-            </button>
-          )}
-          {isOffseason && (
-            <button
-              className="btn-accent pc-cta"
-              onClick={() => dispatch({ type: "ENTER_CONTRACT_PHASE" })}
-            >
-              Review Contracts →
-            </button>
-          )}
-          {isContracts && (
-            <button
-              className="btn-accent pc-cta"
-              onClick={() => dispatch({ type: "ADVANCE_OFFSEASON" })}
-            >
-              Advance Offseason →
-            </button>
-          )}
         </div>
       </div>
 
-      {/* ── Highlights grid ── */}
-      {showHighlights && (
-        <div className="highlights-grid">
-          {topPlayer && (
-            <div className="highlight-card" style={{ borderTopColor: team?.color ?? "var(--accent)" }}>
-              <div className="hl-label">Your Best Player</div>
-              <div className="hl-name">{topPlayer.name}</div>
-              <div className="hl-value" style={{ color: ratingColor(topPlayer.overall) }}>
+      {/* ── Card Grid ── */}
+      <div className="db-grid">
+
+        {/* Squad card — top player */}
+        {topPlayer && (
+          <div className="db-card" style={{ borderTopColor: team?.color ?? "var(--accent)" }}>
+            <div className="db-card-header">
+              Your Squad
+            </div>
+            <div className="db-card-body">
+              <div className="db-top-player-name">{topPlayer.name}</div>
+              <div className="db-top-player-ovr" style={{ color: ratingColor(topPlayer.overall) }}>
                 {topPlayer.overall}
               </div>
-              <div className="hl-sub">{topPlayer.primary} · OVR</div>
+              <div className="db-top-player-role" style={{ color: "var(--text-dim)" }}>
+                {topPlayer.primary} · Best OVR
+              </div>
+              <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-dim)" }}>
+                {myPlayers.filter(p => !p.isSub).length} starters
+                {myPlayers.filter(p => p.isSub).length > 0 && ` · ${myPlayers.filter(p => p.isSub).length} sub`}
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {topTeamHasMatches && topTeam && (
-            <div className="highlight-card" style={{ borderTopColor: topTeam.color }}>
-              <div className="hl-label">{isStage ? "Stage Leader" : "Season Leader"}</div>
-              <div className="hl-name" style={{ color: topTeam.color }}>{topTeam.name}</div>
-              <div className="hl-value" style={{ color: topTeam.color }}>{topTeamRecord.points}</div>
-              <div className="hl-sub">{topTeamRecord.wins}W – {topTeamRecord.losses}L · pts</div>
+        {/* Next Match card — stage only */}
+        {isStage && nextOppTeam && (
+          <div className="db-card" style={{ borderTopColor: "var(--accent)" }}>
+            <div className="db-card-header">
+              Next Match · {stageName}
             </div>
-          )}
-
-          {biggestBreakout && (
-            <div className="highlight-card hl-card-green">
-              <div className="hl-label">Breakout</div>
-              <div className="hl-name">{biggestBreakout.name}</div>
-              <div className="hl-value hl-val-green">+{biggestBreakout.delta}</div>
-              <div className="hl-sub">{biggestBreakout.oldOverall} → {biggestBreakout.newOverall} OVR</div>
+            <div className="db-card-body">
+              <div className="db-match-teams">
+                <span className="db-match-you" style={{ color: team?.color }}>
+                  {team?.tag ?? userTeamId}
+                </span>
+                <span className="db-match-vs">vs</span>
+                <span
+                  className="db-match-opp db-link"
+                  style={{ color: nextOppTeam.color }}
+                  onClick={() => openTeamHub(nextOppId)}
+                >
+                  {nextOppTeam.tag}
+                </span>
+              </div>
+              <div className="db-match-records">
+                <span>{myStage.wins}W – {myStage.losses}L</span>
+                <span>{nextOppRec.wins}W – {nextOppRec.losses}L</span>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-dim)" }}>
+                {nextOppTeam.name}
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {biggestCollapse && (
-            <div className="highlight-card hl-card-red">
-              <div className="hl-label">Collapse</div>
-              <div className="hl-name">{biggestCollapse.name}</div>
-              <div className="hl-value hl-val-red">{biggestCollapse.delta}</div>
-              <div className="hl-sub">{biggestCollapse.oldOverall} → {biggestCollapse.newOverall} OVR</div>
+        {/* Standings Snapshot card — stage/major */}
+        {top5.length > 0 && (
+          <div className="db-card" style={{ borderTopColor: "var(--border)" }}>
+            <div className="db-card-header">
+              {isStage ? `${stageName} Standings` : "Stage Standings"}
+              <button
+                style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 11, cursor: "pointer", padding: 0 }}
+                onClick={() => setScreen?.("standings")}
+              >
+                Full →
+              </button>
             </div>
-          )}
-        </div>
-      )}
+            <div className="db-card-body" style={{ gap: 0 }}>
+              {top5.map((t, i) => (
+                <div
+                  key={t.id}
+                  className={`db-standing-row ${t.id === userTeamId ? "db-standing-you" : ""}`}
+                >
+                  <span className="db-standing-rank">{i + 1}</span>
+                  <span className="db-standing-dot" style={{ background: t.color }} />
+                  <span
+                    className="db-standing-name db-link"
+                    style={{ color: t.id === userTeamId ? "var(--text-head)" : "var(--text)" }}
+                    onClick={() => openTeamHub(t.id)}
+                  >
+                    {t.tag}
+                  </span>
+                  <span className="db-standing-rec">{t.rec.wins}W–{t.rec.losses}L</span>
+                  <span className="db-standing-pts">{t.rec.points}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-      {/* ── Pre-Champs seeding preview ── */}
+        {/* Stage/Season Leader card */}
+        {topTeamHasMatches && topTeam && (
+          <div className="db-card" style={{ borderTopColor: topTeam.color }}>
+            <div className="db-card-header">
+              {(isStage || isMajor) ? "Stage Leader" : "Season Leader"}
+            </div>
+            <div className="db-card-body">
+              <div
+                className="db-hl-name db-link"
+                style={{ color: topTeam.color }}
+                onClick={() => openTeamHub(topTeam.id)}
+              >
+                {topTeam.name}
+              </div>
+              <div className="db-hl-val" style={{ color: topTeam.color }}>
+                {topTeamRecord.points}
+              </div>
+              <div className="db-hl-sub">
+                {topTeamRecord.wins}W – {topTeamRecord.losses}L · pts
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Breakout card */}
+        {biggestBreakout && (
+          <div className="db-card" style={{ borderTopColor: "var(--green)" }}>
+            <div className="db-card-header">Breakout</div>
+            <div className="db-card-body">
+              <div className="db-hl-name">{biggestBreakout.name}</div>
+              <div className="db-hl-val db-val-green">+{biggestBreakout.delta}</div>
+              <div className="db-hl-sub">
+                {biggestBreakout.oldOverall} → {biggestBreakout.newOverall} OVR
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Collapse card */}
+        {biggestCollapse && (
+          <div className="db-card" style={{ borderTopColor: "var(--red)" }}>
+            <div className="db-card-header">Collapse</div>
+            <div className="db-card-body">
+              <div className="db-hl-name">{biggestCollapse.name}</div>
+              <div className="db-hl-val db-val-red">{biggestCollapse.delta}</div>
+              <div className="db-hl-sub">
+                {biggestCollapse.oldOverall} → {biggestCollapse.newOverall} OVR
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Pre-Champs seeding (full-width) ── */}
       {isPreChamps && (
         <div className="prechamps-info-box">
           <div className="pib-header">
@@ -282,134 +406,83 @@ export default function Dashboard({ setScreen }) {
         </div>
       )}
 
-      {/* ── Contract review panel ── */}
+      {/* ── Contract review panel (full-width) ── */}
       {isContracts && (
         <ContractReviewPanel players={myPlayers} dispatch={dispatch} season={season} />
       )}
 
-      {/* ── Stage mini-standings ── */}
-      {isStage && top5.length > 0 && (
-        <div className="mini-standings">
-          <div className="ms-title">
-            {stageName} Standings
-            <button className="ms-full-link" onClick={() => setScreen?.("standings")}>
-              View full →
-            </button>
-          </div>
-          <div className="ms-rows">
-            {top5.map((t, i) => (
-              <div key={t.id} className={`ms-row ${t.id === userTeamId ? "ms-row-you" : ""}`}>
-                <span className="ms-rank">{i + 1}</span>
-                <span className="ms-dot" style={{ background: t.color }} />
-                <span
-                  className="ms-name team-link"
-                  style={{ color: t.color }}
-                  onClick={() => openTeamHub(t.id)}
-                >
-                  {t.tag}
-                </span>
-                <span className="ms-record muted">{t.rec.wins}W–{t.rec.losses}L</span>
-                <span className="ms-pts">{t.rec.points} pts</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Your Next Match preview (stage only) ── */}
-      {isStage && nextOppTeam && (
-        <div className="next-match-preview">
-          <div className="nmp-label">YOUR NEXT MATCH · {stageName}</div>
-          <div className="nmp-row">
-            <div className="nmp-team-side">
-              <span className="nmp-you-name" style={{ color: team?.color }}>{team?.name}</span>
-              <span className="nmp-record-you muted">{myStage.wins}W–{myStage.losses}L</span>
-            </div>
-            <span className="nmp-vs">vs</span>
-            <div className="nmp-team-side nmp-team-right">
-              <span
-                className="nmp-opp-name team-link"
-                style={{ color: nextOppTeam.color }}
-                onClick={() => openTeamHub(nextOppId)}
-              >
-                {nextOppTeam.name}
-              </span>
-              <span className="nmp-record-opp muted">{nextOppRec.wins}W–{nextOppRec.losses}L</span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Recent Results ── */}
-      <div className="section">
-        <h3>
+      <div className="db-results-card">
+        <div className="db-results-header">
           Recent Results
-          <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}> — click for breakdown</span>
-        </h3>
-        {myLog.length === 0 ? (
-          <p className="muted">No matches played yet.</p>
-        ) : (
-          <div className="recent-results-list">
-            {myLog.map((r, i) => {
-              const won    = r.winnerId === userTeamId;
-              const opp    = won ? r.loserName : r.winnerName;
-              const oppId  = won ? r.loserId : r.winnerId;
-              const isOpen = expandedIdx === i;
-              return (
-                <div
-                  key={i}
-                  className={`result-card ${won ? "rc-user-win" : "rc-user-loss"}`}
-                  onClick={() => toggleRow(i)}
-                >
-                  <div className="rc-main">
-                    <div className="rc-row-top">
-                      <span className={`rc-outcome ${won ? "rco-win" : "rco-loss"}`}>{won ? "W" : "L"}</span>
-                      <div className="rc-teams">
-                        <span
-                          className="rc-winner team-link"
-                          style={{ color: won ? (team?.color ?? "#fff") : teamColor(oppId) }}
-                          onClick={e => { e.stopPropagation(); openTeamHub(won ? userTeamId : oppId); }}
-                        >
-                          {won ? (team?.name ?? userTeamId) : opp}
-                        </span>
-                        <span className="rc-score">{r.score}</span>
-                        <span
-                          className="rc-loser team-link"
-                          style={{ color: won ? teamColor(oppId) : (team?.color ?? "#fff"), opacity: 0.7 }}
-                          onClick={e => { e.stopPropagation(); openTeamHub(won ? oppId : userTeamId); }}
-                        >
-                          {won ? opp : (team?.name ?? userTeamId)}
-                        </span>
+          <span className="db-results-hint">click for breakdown</span>
+        </div>
+        <div className="db-results-body">
+          {myLog.length === 0 ? (
+            <p className="muted" style={{ padding: "10px 6px" }}>No matches played yet.</p>
+          ) : (
+            <div className="recent-results-list">
+              {myLog.map((r, i) => {
+                const won    = r.winnerId === userTeamId;
+                const opp    = won ? r.loserName : r.winnerName;
+                const oppId  = won ? r.loserId : r.winnerId;
+                const isOpen = expandedIdx === i;
+                return (
+                  <div
+                    key={i}
+                    className={`result-card ${won ? "rc-user-win" : "rc-user-loss"}`}
+                    onClick={() => toggleRow(i)}
+                  >
+                    <div className="rc-main">
+                      <div className="rc-row-top">
+                        <span className={`rc-outcome ${won ? "rco-win" : "rco-loss"}`}>{won ? "W" : "L"}</span>
+                        <div className="rc-teams">
+                          <span
+                            className="rc-winner team-link"
+                            style={{ color: won ? (team?.color ?? "#fff") : teamColor(oppId) }}
+                            onClick={e => { e.stopPropagation(); openTeamHub(won ? userTeamId : oppId); }}
+                          >
+                            {won ? (team?.name ?? userTeamId) : opp}
+                          </span>
+                          <span className="rc-score">{r.score}</span>
+                          <span
+                            className="rc-loser team-link"
+                            style={{ color: won ? teamColor(oppId) : (team?.color ?? "#fff"), opacity: 0.7 }}
+                            onClick={e => { e.stopPropagation(); openTeamHub(won ? oppId : userTeamId); }}
+                          >
+                            {won ? opp : (team?.name ?? userTeamId)}
+                          </span>
+                        </div>
+                        <span className="rc-chevron">{isOpen ? "▲" : "▼"}</span>
                       </div>
-                      <span className="rc-chevron">{isOpen ? "▲" : "▼"}</span>
+                      <div className="rc-row-meta">
+                        <span className="rc-context">{r.stage}</span>
+                        {r.standoutName && (
+                          <span className="rc-standout">
+                            ⭐ <strong>{r.standoutName}</strong>
+                            {r.standoutKD > 0 && <span className="rc-standout-kd"> {r.standoutKD.toFixed(2)} K/D</span>}
+                          </span>
+                        )}
+                        {r.mapResults && r.mapResults.length > 0 && (
+                          <span className="rc-map-chips">
+                            {r.mapResults.map((m, mi) => (
+                              <span key={mi} className="rc-map-chip">{m.short}</span>
+                            ))}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="rc-row-meta">
-                      <span className="rc-context">{r.stage}</span>
-                      {r.standoutName && (
-                        <span className="rc-standout">
-                          ⭐ <strong>{r.standoutName}</strong>
-                          {r.standoutKD > 0 && <span className="rc-standout-kd"> {r.standoutKD.toFixed(2)} K/D</span>}
-                        </span>
-                      )}
-                      {r.mapResults && r.mapResults.length > 0 && (
-                        <span className="rc-map-chips">
-                          {r.mapResults.map((m, mi) => (
-                            <span key={mi} className="rc-map-chip">{m.short}</span>
-                          ))}
-                        </span>
-                      )}
-                    </div>
+                    {isOpen && (
+                      <div onClick={e => e.stopPropagation()}>
+                        <SeriesDetail result={r} />
+                      </div>
+                    )}
                   </div>
-                  {isOpen && (
-                    <div onClick={e => e.stopPropagation()}>
-                      <SeriesDetail result={r} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Champion banners ── */}
@@ -433,19 +506,7 @@ export default function Dashboard({ setScreen }) {
   );
 }
 
-function Stat({ label, value }) {
-  return (
-    <div className="stat-box">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-    </div>
-  );
-}
-
 // ── Contract Review Panel ─────────────────────────────────────────────────────
-// Shown during "contracts" phase. Players with contractYears === 1 are expiring
-// this offseason. User can extend (sets contractYears to 2/3/4 before decrement)
-// or let them walk (they'll automatically become free agents when offseason runs).
 function ContractReviewPanel({ players, dispatch, season }) {
   const starters  = players.filter(p => !p.isSub);
   const subs      = players.filter(p => p.isSub);
@@ -478,7 +539,7 @@ function ContractReviewPanel({ players, dispatch, season }) {
               <div className="cp-player-info">
                 <span className="cp-name">{p.name}</span>
                 <span className="cp-role">{p.primary}</span>
-                <span className="cp-ovr" style={{ color: p.overall >= 90 ? "#00e676" : p.overall >= 80 ? "#69f0ae" : "#ffeb3b" }}>
+                <span className="cp-ovr" style={{ color: p.overall >= 90 ? "var(--green)" : p.overall >= 80 ? "#6ee7b7" : "var(--yellow)" }}>
                   {p.overall} OVR
                 </span>
               </div>
@@ -515,13 +576,13 @@ function ContractReviewPanel({ players, dispatch, season }) {
         <div className="cp-section">
           <div className="cp-section-label">Under Contract</div>
           {locked.map(p => {
-            const remaining = (p.contractYears ?? 2) - 1;  // years left after offseason decrement
+            const remaining = (p.contractYears ?? 2) - 1;
             return (
               <div key={p.id} className="cp-row">
                 <div className="cp-player-info">
                   <span className="cp-name">{p.name}</span>
                   <span className="cp-role">{p.primary}</span>
-                  <span className="cp-ovr" style={{ color: p.overall >= 90 ? "#00e676" : p.overall >= 80 ? "#69f0ae" : "#ffeb3b" }}>
+                  <span className="cp-ovr" style={{ color: p.overall >= 90 ? "var(--green)" : p.overall >= 80 ? "#6ee7b7" : "var(--yellow)" }}>
                     {p.overall} OVR
                   </span>
                 </div>

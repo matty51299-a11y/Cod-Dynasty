@@ -253,6 +253,35 @@ Phase-aware hub. Shows:
 
 Core philosophy: **focus → action → result → world update**
 
+## Visual System (Current)
+
+**Palette (navy/slate dark theme):**
+```
+--bg: #0f1724        (page background)
+--bg2: #182235       (card surfaces)
+--bg3: #1f2b42       (elevated / inner elements)
+--border: #2a3a57    (card borders)
+--text: #e8eefc      (body text)
+--text-dim: #9db0d0  (labels, muted)
+--text-head: #f0f4ff (headings)
+--accent: #60a5fa    (blue accent)
+--green: #34d399     (wins, growth, positive)
+--red: #f87171       (losses, decline, negative)
+--yellow: #fbbf24    (warnings, major events, amber)
+--shadow: 0 2px 16px rgba(0,0,0,0.4)
+```
+
+**Card anatomy:** `background: --bg2`, `border: 1px solid --border`, colored 3px top border, `box-shadow: --shadow`, card header section + card body section.
+
+**Dashboard layout (FM24-style):**
+- Full-width club banner: team name, phase chip, stat chips row, progress bar, primary CTA
+- Card grid (`auto-fill minmax(230px, 1fr)`): Squad, Next Match, Standings Snapshot, Stage/Season Leader, Breakout, Collapse
+- Full-width panels below grid: Pre-Champs seeding, Contract review (phase-gated)
+- Full-width Recent Results card
+- Champion banners
+
+**Sidebar:** Left-border active indicator (3px accent), tinted active bg, box-shadow elevation.
+
 ---
 
 # 🔹 5. Known Limitations
@@ -275,9 +304,8 @@ Core philosophy: **focus → action → result → world update**
    - result reveal flow after user match
    - other results shown after user match resolves
 
-2. UI polish
-   - finalize sidebar navigation
-   - remove any remaining legacy top-tab usage
+2. ~~UI Polish — FM24-style dashboard overhaul~~ ✅ Done
+   - ~~navy/slate palette~~, ~~card grid dashboard~~, ~~sidebar improvements~~
 
 ---
 
