@@ -273,14 +273,15 @@ Core philosophy: **focus → action → result → world update**
 
 **Card anatomy:** `background: --bg2`, `border: 1px solid --border`, colored 3px top border, `box-shadow: --shadow`, card header section + card body section.
 
-**Dashboard layout (FM24-style):**
-- Full-width club banner: team name, phase chip, stat chips row, progress bar, primary CTA
-- Card grid (`auto-fill minmax(230px, 1fr)`): Squad, Next Match, Standings Snapshot, Stage/Season Leader, Breakout, Collapse
-- Full-width panels below grid: Pre-Champs seeding, Contract review (phase-gated)
-- Full-width Recent Results card
-- Champion banners
+**Dashboard layout (FM-style full-width two-column):**
+- Full-width club banner (team-color gradient wash, phase chip, stat chips, progress bar, CTA)
+- Two-column layout: main area (flex-1) + right panel (292px, sticky)
+  - **Main:** card grid (`auto-fill minmax(200px, 1fr)`): Squad, Next Match, Standings Snapshot, Leader, Breakout, Collapse; then full-width Pre-Champs/Contracts panels; Recent Results card; Champion banners
+  - **Right panel:** Full League Table (all 12 teams), Remaining Fixtures (stage only), Form Guide (last 5 W/L pips)
 
-**Sidebar:** Left-border active indicator (3px accent), tinted active bg, box-shadow elevation.
+**Sidebar:** Dark navy (#182235) hardcoded — stays dark against light page background. Left-border active indicator, tinted active bg, box-shadow elevation.
+
+**Topbar:** Dark navy (#182235) hardcoded — FM-style contrast header.
 
 ---
 
