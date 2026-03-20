@@ -8,18 +8,18 @@ function tag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 function color(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; }
 
 function kdColor(kd) {
-  if (kd >= 1.4) return "#00e676";
-  if (kd >= 1.1) return "#69f0ae";
-  if (kd >= 0.9) return "#ffeb3b";
-  if (kd >= 0.7) return "#ffa726";
-  return "#ef5350";
+  if (kd >= 1.4) return "var(--green)";
+  if (kd >= 1.1) return "var(--green)";
+  if (kd >= 0.9) return "var(--accent)";
+  if (kd >= 0.7) return "var(--text-dim)";
+  return "var(--red)";
 }
 
 function modeColor(short) {
-  if (short === "HP")  return "#4f8ef7";
-  if (short === "S&D") return "#ef5350";
-  if (short === "CTL") return "#00e676";
-  return "#888";
+  if (short === "HP")  return "var(--accent)";
+  if (short === "S&D") return "var(--red)";
+  if (short === "CTL") return "var(--green)";
+  return "var(--text-dim)";
 }
 
 // ── Player stats table ───────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ export default function SeriesDetail({ result }) {
       {/* ── MVP / standout callout ── */}
       {standoutName && standoutKD > 0 && (
         <div className="sd-standout">
-          <span className="sd-so-icon">⭐</span>
+          <span className="sd-so-icon">★</span>
           <div className="sd-so-body">
             <span className="sd-so-name">{standoutName}</span>
             <span className="sd-so-kd" style={{ color: kdColor(standoutKD) }}>

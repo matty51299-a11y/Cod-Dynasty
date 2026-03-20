@@ -9,11 +9,11 @@ import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 import PoolHealth from "./PoolHealth.jsx";
 
 function ratingColor(v) {
-  if (v >= 90) return "#00e676";
-  if (v >= 80) return "#69f0ae";
-  if (v >= 70) return "#ffeb3b";
-  if (v >= 60) return "#ffa726";
-  return "#ef5350";
+  if (v >= 90) return "#166534";
+  if (v >= 80) return "#15803d";
+  if (v >= 70) return "#1d4ed8";
+  if (v >= 60) return "#9a3412";
+  return "#dc2626";
 }
 
 const ROLES = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];
@@ -39,7 +39,7 @@ export default function Prospects() {
   const committed   = myStarters.reduce((s, p) => s + getSigningCost(p), 0);
   const remaining   = teamCap - committed;
   const budgetPct   = Math.min(100, Math.round((committed / teamCap) * 100));
-  const budgetColor = budgetPct >= 90 ? "#ef5350" : budgetPct >= 70 ? "#ffa726" : "#69f0ae";
+  const budgetColor = budgetPct >= 90 ? "#dc2626" : budgetPct >= 70 ? "#9a3412" : "#15803d";
 
   // Available prospects (not already on a team)
   const available = (prospects || []).filter(p => !p.teamId);

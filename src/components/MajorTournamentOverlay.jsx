@@ -96,7 +96,7 @@ function ChampionScreen({ major, dispatch }) {
         {/* Series MVP */}
         {gfResult?.standoutName && gfResult.standoutKD > 0 && (
           <div className="mto-champ-mvp">
-            ⭐ <strong>{gfResult.standoutName}</strong>
+            ★ <strong>{gfResult.standoutName}</strong>
             <span className="mto-champ-mvp-kd"> {gfResult.standoutKD.toFixed(2)} K/D · Finals MVP</span>
           </div>
         )}
@@ -139,7 +139,7 @@ function EliminatedBanner({ elimination, userTeamId }) {
       </div>
       {result.standoutName && result.standoutKD > 0 && (
         <div className="mto-elim-mvp">
-          ⭐ <strong>{result.standoutName}</strong>
+          ★ <strong>{result.standoutName}</strong>
           <span className="mto-elim-mvp-kd"> {result.standoutKD.toFixed(2)} K/D · Series MVP</span>
         </div>
       )}
@@ -265,7 +265,7 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
       {/* MVP — always visible, matches qualifier MVP block style */}
       {result.standoutName && result.standoutKD > 0 && (
         <div className="mto-bc-mvp-row">
-          <span className="mto-bc-mvp-star">⭐</span>
+          <span className="mto-bc-mvp-star">★</span>
           <strong className="mto-bc-mvp-name">{result.standoutName}</strong>
           <span className="mto-bc-mvp-kd">{result.standoutKD.toFixed(2)} K/D</span>
           <span className="mto-bc-mvp-label">MVP</span>

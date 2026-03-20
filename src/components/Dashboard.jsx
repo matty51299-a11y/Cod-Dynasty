@@ -511,7 +511,7 @@ export default function Dashboard({ setScreen }) {
                             <span className="rc-context">{r.stage}</span>
                             {r.standoutName && (
                               <span className="rc-standout">
-                                ⭐ <strong>{r.standoutName}</strong>
+                                ★ <strong>{r.standoutName}</strong>
                                 {r.standoutKD > 0 && (
                                   <span className="rc-standout-kd"> {r.standoutKD.toFixed(2)} K/D</span>
                                 )}

@@ -132,7 +132,7 @@ function ResultView({ result, userTeamId, latestBracket, majorName, roundName, o
       {/* Series MVP — same structure and classes as qualifier */}
       {result.standoutName && result.standoutKD > 0 && (
         <div className="nmo-result-mvp">
-          <span className="nmo-mvp-star">⭐</span>
+          <span className="nmo-mvp-star">★</span>
           <strong className="nmo-mvp-name">{result.standoutName}</strong>
           <span className="nmo-mvp-kd">{result.standoutKD.toFixed(2)} K/D</span>
           <span className="nmo-mvp-label">Series MVP</span>

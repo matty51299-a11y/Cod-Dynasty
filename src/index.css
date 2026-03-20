@@ -267,9 +267,8 @@ body { margin: 0; }
 }
 
 .db-phase-chip-major {
-  /* amber bg + dark text: #d97706 bg → #0f172a text = 6.1:1 ✅ */
-  background: var(--yellow);
-  color: var(--text-head);
+  background: #111111;
+  color: #ffffff;
   border: none;
 }
 
@@ -1834,7 +1833,7 @@ body { margin: 0; }
   display: inline-block;
   width: 6px; height: 6px;
   border-radius: 50%;
-  background: var(--yellow);
+  background: #111111;
   margin-left: 5px;
   vertical-align: middle;
   position: relative;
@@ -3188,6 +3187,20 @@ body { margin: 0; }
   align-items: center;
   justify-content: center;
   animation: meo-backdrop-in 0.3s ease both;
+
+  /* Dark-theme variable overrides — overlay is always dark */
+  --bg:        #0f1724;
+  --bg2:       #182235;
+  --bg3:       #1f2b42;
+  --border:    #2a3a57;
+  --text:      #e8eefc;
+  --text-dim:  #9db0d0;
+  --text-head: #f0f4ff;
+  --accent:    #60a5fa;
+  --green:     #34d399;
+  --red:       #f87171;
+  --yellow:    #f0f4ff;
+  --shadow:    0 2px 16px rgba(0,0,0,0.5);
 }
 
 @keyframes meo-backdrop-in {
@@ -3257,9 +3270,9 @@ body { margin: 0; }
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2.5px;
-  color: var(--yellow);
-  background: rgba(255, 235, 59, 0.1);
-  border: 1px solid rgba(255, 235, 59, 0.28);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   padding: 4px 13px;
   border-radius: 20px;
 }
@@ -3611,7 +3624,7 @@ body { margin: 0; }
   --accent:    #60a5fa;
   --green:     #34d399;
   --red:       #f87171;
-  --yellow:    #fbbf24;
+  --yellow:    #f0f4ff;
   --shadow:    0 2px 16px rgba(0,0,0,0.5);
 }
 
@@ -3631,7 +3644,7 @@ body { margin: 0; }
   --accent:    #60a5fa;
   --green:     #34d399;
   --red:       #f87171;
-  --yellow:    #fbbf24;
+  --yellow:    #f0f4ff;
   --shadow:    0 2px 16px rgba(0,0,0,0.5);
 }
 
@@ -4996,8 +5009,8 @@ body { margin: 0; }
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1px;
-  color: var(--text-head);
-  background: var(--yellow);
+  color: #ffffff;
+  background: #111111;
   border: none;
   padding: 2px 7px;
   border-radius: 10px;

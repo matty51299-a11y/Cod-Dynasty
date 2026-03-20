@@ -7,11 +7,11 @@ import { useGame }    from "../store/gameStore.jsx";
 import { CDL_TEAMS }  from "../data/teams.js";
 
 function kdColor(kd) {
-  if (kd >= 1.4) return "#00e676";
-  if (kd >= 1.1) return "#69f0ae";
-  if (kd >= 0.9) return "#ffeb3b";
-  if (kd >= 0.7) return "#ffa726";
-  return "#ef5350";
+  if (kd >= 1.4) return "var(--green)";
+  if (kd >= 1.1) return "var(--green)";
+  if (kd >= 0.9) return "var(--accent)";
+  if (kd >= 0.7) return "var(--text-dim)";
+  return "var(--red)";
 }
 
 export default function TeamHubOverlay() {
@@ -152,7 +152,7 @@ export default function TeamHubOverlay() {
                         {kd.toFixed(2)}
                       </span>
                     )}
-                    {isTop && <span className="th-p-star">⭐</span>}
+                    {isTop && <span className="th-p-star">★</span>}
                   </div>
                 );
               })}
@@ -163,7 +163,7 @@ export default function TeamHubOverlay() {
         {/* ── Top performer callout ── */}
         {topPerformer && (
           <div className="th-top-performer">
-            <span className="th-tp-star">⭐</span>
+            <span className="th-tp-star">★</span>
             <strong className="th-tp-name">{topPerformer.name}</strong>
             <span className="th-tp-kd" style={{ color: kdColor(topPerformer.kd) }}>
               {topPerformer.kd.toFixed(2)} K/D

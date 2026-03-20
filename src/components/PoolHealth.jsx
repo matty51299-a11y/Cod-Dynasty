@@ -16,7 +16,7 @@ import { getPoolSnapshot } from "../engine/poolReport.js";
 function statCell(label, value, warn) {
   return (
     <div style={{ textAlign: "center", minWidth: "80px" }}>
-      <div style={{ fontSize: "1.35rem", fontWeight: "bold", color: warn ? "#ffa726" : "#e0e0e0" }}>
+      <div style={{ fontSize: "1.35rem", fontWeight: "bold", color: warn ? "#9a3412" : "#1e293b" }}>
         {value}
       </div>
       <div style={{ fontSize: "0.70rem", color: "#888", marginTop: "2px" }}>{label}</div>
@@ -104,7 +104,7 @@ export default function PoolHealth({ prospects, challengersLog }) {
                 <div>
                   <div style={{ color: "#888", fontSize: "0.72rem", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>OVR</div>
                   {Object.entries(snap.ovrBuckets).map(([label, count]) => {
-                    const color = label === "80+" ? "#00e676" : label === "75–79" ? "#69f0ae" : label === "70–74" ? "#ffeb3b" : label === "65–69" ? "#ffa726" : "#ef5350";
+                    const color = label === "80+" ? "#166534" : label === "75–79" ? "#15803d" : label === "70–74" ? "#1d4ed8" : label === "65–69" ? "#9a3412" : "#dc2626";
                     return (
                       <div key={label} style={{ display: "grid", gridTemplateColumns: "46px 1fr", gap: "6px", alignItems: "center", marginBottom: "4px" }}>
                         <span style={{ fontSize: "0.72rem", color: "#888" }}>{label}</span>
@@ -153,7 +153,7 @@ export default function PoolHealth({ prospects, challengersLog }) {
                         <td style={{ padding: "3px 4px" }}>{p.name}</td>
                         <td style={{ padding: "3px 4px", textAlign: "center", color: "#aaa" }}>{p.age}</td>
                         <td style={{ padding: "3px 4px", textAlign: "center", fontWeight: "bold",
-                          color: p.ovr >= 80 ? "#00e676" : p.ovr >= 75 ? "#69f0ae" : p.ovr >= 70 ? "#ffeb3b" : "#ffa726" }}>
+                          color: p.ovr >= 80 ? "#15803d" : p.ovr >= 75 ? "#15803d" : p.ovr >= 70 ? "#1d4ed8" : "#9a3412" }}>
                           {p.ovr}
                         </td>
                         <td style={{ padding: "3px 4px", textAlign: "center", color: "#888" }}>{p.pot}</td>
@@ -189,11 +189,11 @@ export default function PoolHealth({ prospects, challengersLog }) {
                         <tr key={e.season} style={{ borderTop: "1px solid #1a1a1a" }}>
                           <td style={{ padding: "3px 8px", textAlign: "center", color: "#888" }}>{e.season}</td>
                           <td style={{ padding: "3px 8px", textAlign: "center", fontWeight: "bold",
-                            color: sizeOk ? "#69f0ae" : "#ffa726" }}>{e.poolSize}</td>
+                            color: sizeOk ? "#15803d" : "#9a3412" }}>{e.poolSize}</td>
                           <td style={{ padding: "3px 8px", textAlign: "center" }}>{e.avgAge}</td>
                           <td style={{ padding: "3px 8px", textAlign: "center" }}>{e.avgOvr}</td>
                           <td style={{ padding: "3px 8px", textAlign: "center" }}>{e.annualIntake}</td>
-                          <td style={{ padding: "3px 8px", textAlign: "center", color: e.topUpCount > 0 ? "#ffa726" : "#666" }}>{e.topUpCount}</td>
+                          <td style={{ padding: "3px 8px", textAlign: "center", color: e.topUpCount > 0 ? "#9a3412" : "#64748b" }}>{e.topUpCount}</td>
                           <td style={{ padding: "3px 8px", textAlign: "center" }}>{e.removedByRetirement}</td>
                           <td style={{ padding: "3px 8px", textAlign: "center" }}>{e.removedByCleanup}</td>
                           <td style={{ padding: "3px 8px", textAlign: "center", color: e.removedByCap > 0 ? "#ef5350" : "#666" }}>{e.removedByCap}</td>
