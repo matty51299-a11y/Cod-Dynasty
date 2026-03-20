@@ -762,8 +762,18 @@ function _buildFreshProspect(tier, idx, season) {
   // Name — Math.random() so classes vary between saves
   const name = FRESH_PROSPECT_NAMES[Math.floor(Math.random() * FRESH_PROSPECT_NAMES.length)];
 
-  // Age — mostly 18–20 for all tiers; ~15 % chance of 21
-  const age = Math.random() < 0.85 ? ri(18, 20) : 21;
+  // Age — varies by tier:
+  //   elite → always 18–20 (future stars enter young)
+  //   mid   → 70 % chance 18–20, 30 % chance 21–22
+  //   low   → 50 % chance 19–20, 50 % chance 21–22
+  let age;
+  if (tier === "elite") {
+    age = ri(18, 20);
+  } else if (tier === "mid") {
+    age = Math.random() < 0.70 ? ri(18, 20) : ri(21, 22);
+  } else {
+    age = Math.random() < 0.50 ? ri(19, 20) : ri(21, 22);
+  }
 
   // Role
   const role = Math.random() < 0.55 ? "SMG" : "AR";
@@ -792,16 +802,19 @@ function _buildFreshProspect(tier, idx, season) {
   const developmentCurve = curvePick < 0.25 ? "early" : curvePick < 0.75 ? "standard" : "late";
 
   // Overall + potential per tier
+  // Tier A (elite): clear future-star profile — 76–82 OVR, 85+ potential
+  // Tier B (mid):   solid prospects         — 68–75 OVR, 78–87 potential
+  // Tier C (low):   filler depth            — 60–67 OVR, 65–78 potential
   let overall, potential;
   if (tier === "elite") {
-    overall   = ri(75, 83);
-    potential = clamp(overall + ri(10, 15), 87, 95);
+    overall   = ri(76, 82);
+    potential = clamp(overall + ri(8, 13), 85, 92);
   } else if (tier === "mid") {
-    overall   = ri(65, 74);
-    potential = clamp(overall + ri(8, 14), 75, 88);
+    overall   = ri(68, 75);
+    potential = clamp(overall + ri(8, 14), 78, 87);
   } else {
-    overall   = ri(56, 68);
-    potential = clamp(overall + ri(5, 12), 65, 80);
+    overall   = ri(60, 67);
+    potential = clamp(overall + ri(5, 12), 65, 78);
   }
 
   // Individual stats
@@ -874,7 +887,7 @@ function _buildFreshProspect(tier, idx, season) {
 //
 // Pool targets: minimum 150  |  fill target 175  |  hard cap 200
 // Cleanup removes only clearly weak older players; 75+ OVR are shielded until 32.
-// Annual intake: ~20 youth (2–4 elite, 4–6 mid, rest low).
+// Annual intake: ~15 youth (2–3 Tier A elite, 8–10 Tier B mid, 3–5 Tier C low).
 // Top-up batch fires when pool < 150 after annual class, adds mid/low to reach 175.
 export function refreshProspectPool(prospects, season) {
   // ── Step 1: Remove old / weak unsigned challengers ───────────────────────
@@ -885,18 +898,26 @@ export function refreshProspectPool(prospects, season) {
     const age = p.age || 20;
     const ovr = p.overall || 70;
 
-    // Shield: never remove a strong unsigned player purely for age until 32+
-    // (they may be unsigned veterans that add depth and signing options)
+    // Shield: strong (75+ OVR) unsigned players kept until 32 — still valuable depth
     if (ovr >= 75 && age < 32) return true;
 
-    // Hard rule: age 30+ and clearly washed (below 68 OVR) — always removed
-    if (age >= 30 && ovr < 68) return false;
-    // Hard rule: age 28+ and weak (below 63 OVR) — always removed
-    if (age >= 28 && ovr < 63) return false;
-    // Soft rule: age 26+ and below 68 OVR — 60 % chance to remove
+    // Hard rules — always gone
+    if (age >= 30 && ovr < 68) return false;   // old and washed
+    if (age >= 28 && ovr < 63) return false;   // older and weak
+
+    // Age 27+ and not strong: 80 % chance to leave the scene
+    // (unsigned at 27 with sub-75 OVR — extremely unlikely to ever get signed)
+    if (age >= 27 && Math.random() < 0.80) return false;
+
+    // Age 25+ and OVR ≤ 62: clear dead-end, 70 % chance to walk away
+    if (age >= 25 && ovr <= 62 && Math.random() < 0.70) return false;
+
+    // Age 26+ and below 68 OVR — 60 % chance (existing soft rule)
     if (age >= 26 && ovr < 68 && Math.random() < 0.60) return false;
-    // Soft rule: age 24+ and below 60 OVR — 50 % chance to remove
+
+    // Age 24+ and below 60 OVR — 50 % chance (existing soft rule)
     if (age >= 24 && ovr < 60 && Math.random() < 0.50) return false;
+
     return true;
   });
 
@@ -907,9 +928,13 @@ export function refreshProspectPool(prospects, season) {
   const POOL_MIN    = 150; // trigger top-up below this
   const POOL_TARGET = 175; // fill up to this when topping up
 
-  const eliteCount = Math.floor(Math.random() * 3) + 2;   // 2–4
-  const midCount   = Math.floor(Math.random() * 3) + 4;   // 4–6
-  const lowCount   = Math.max(0, 20 - eliteCount - midCount);
+  // Annual class: ~15 total in three tiers matching user spec
+  //   Tier A (elite): 2–3 — rare future stars (18–20, OVR 76–82, POT 85+)
+  //   Tier B (mid):   8–10 — main bulk of class (18–22, OVR 68–75)
+  //   Tier C (low):   3–5 — depth filler (19–22, OVR 60–67)
+  const eliteCount = Math.floor(Math.random() * 2) + 2;   // 2–3
+  const midCount   = Math.floor(Math.random() * 3) + 8;   // 8–10
+  const lowCount   = Math.floor(Math.random() * 3) + 3;   // 3–5
 
   const newClass = [];
   let idx = 0;
