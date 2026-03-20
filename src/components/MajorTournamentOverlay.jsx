@@ -87,7 +87,7 @@ function ChampionScreen({ major, dispatch }) {
               {teamTag(gfResult.winnerId)}
             </span>
             <span className="mto-champ-res-score">{gfResult.score}</span>
-            <span className="mto-champ-res-side" style={{ color: teamColor(gfResult.loserId), opacity: 0.55 }}>
+            <span className="mto-champ-res-side" style={{ color: teamColor(gfResult.loserId) }}>
               {teamTag(gfResult.loserId)}
             </span>
           </div>
@@ -135,7 +135,7 @@ function EliminatedBanner({ elimination, userTeamId }) {
       <div className="mto-elim-matchup">
         <span style={{ color: teamColor(result.winnerId) }}>{teamTag(result.winnerId)}</span>
         <span className="mto-elim-score">{result.score}</span>
-        <span style={{ color: teamColor(result.loserId), opacity: 0.55 }}>{teamTag(result.loserId)}</span>
+        <span style={{ color: teamColor(result.loserId) }}>{teamTag(result.loserId)}</span>
       </div>
       {result.standoutName && result.standoutKD > 0 && (
         <div className="mto-elim-mvp">

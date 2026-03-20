@@ -3596,6 +3596,23 @@ body { margin: 0; }
   flex-direction: column;
   overflow: hidden;
   animation: mto-in 0.4s ease both;
+
+  /* ── Dark-theme variable overrides ───────────────────────────────────────
+     The overlay is always dark regardless of the page theme. Override every
+     CSS custom property so descendant selectors that use var(--*) get the
+     dark palette instead of the current light-green page values.       */
+  --bg:        #0f1724;
+  --bg2:       #182235;
+  --bg3:       #1f2b42;
+  --border:    #2a3a57;
+  --text:      #e8eefc;
+  --text-dim:  #9db0d0;
+  --text-head: #f0f4ff;
+  --accent:    #60a5fa;
+  --green:     #34d399;
+  --red:       #f87171;
+  --yellow:    #fbbf24;
+  --shadow:    0 2px 16px rgba(0,0,0,0.5);
 }
 
 .mto-backdrop-champ {
@@ -3604,6 +3621,18 @@ body { margin: 0; }
   align-items: center;
   justify-content: center;
   animation: mto-in 0.45s ease both;
+  --bg:        #0f1724;
+  --bg2:       #182235;
+  --bg3:       #1f2b42;
+  --border:    #2a3a57;
+  --text:      #e8eefc;
+  --text-dim:  #9db0d0;
+  --text-head: #f0f4ff;
+  --accent:    #60a5fa;
+  --green:     #34d399;
+  --red:       #f87171;
+  --yellow:    #fbbf24;
+  --shadow:    0 2px 16px rgba(0,0,0,0.5);
 }
 
 @keyframes mto-in {
@@ -3710,7 +3739,7 @@ body { margin: 0; }
 
 .mto-hero-count {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text);
   position: relative;
   z-index: 1;
 }
@@ -3734,7 +3763,7 @@ body { margin: 0; }
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 2.5px;
-  color: var(--text-dim);
+  color: var(--accent);
   margin-bottom: 18px;
   text-transform: uppercase;
 }
@@ -3761,8 +3790,8 @@ body { margin: 0; }
 
 .mto-nm-seed {
   font-size: 13px;
-  color: var(--text-dim);
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 700;
   flex-shrink: 0;
 }
 
@@ -3786,7 +3815,7 @@ body { margin: 0; }
 
 .mto-nm-vs {
   font-size: 14px;
-  color: var(--text-dim);
+  color: var(--text);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -3820,6 +3849,7 @@ body { margin: 0; }
   color: var(--text-dim);
   margin-bottom: 12px;
   text-transform: uppercase;
+  /* --text-dim resolves to #9db0d0 inside .mto-backdrop dark scope — readable */
 }
 
 .mto-bracket-rounds {
@@ -3845,7 +3875,7 @@ body { margin: 0; }
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  color: var(--text-dim);
+  color: var(--text);
 }
 
 .mto-round-name {
@@ -3903,7 +3933,7 @@ body { margin: 0; }
 .mto-bc-team:last-of-type { border-bottom: none; }
 
 .mbc-winner { background: rgba(255, 255, 255, 0.03); }
-.mbc-loser  { opacity: 0.5; }
+.mbc-loser  { opacity: 0.7; }
 
 .mto-bc-seed {
   font-size: 10px;
@@ -3927,7 +3957,7 @@ body { margin: 0; }
 }
 
 .mbc-score-win  { color: var(--green); }
-.mbc-score-loss { color: var(--red); opacity: 0.7; }
+.mbc-score-loss { color: var(--red); }
 
 .mto-bc-tbd .mto-bc-name { color: var(--text-dim); }
 
@@ -4266,7 +4296,7 @@ body { margin: 0; }
 
 .mto-bc-sc-loser {
   justify-content: flex-end;
-  opacity: 0.5;
+  opacity: 0.75;
 }
 
 .mto-bc-sc-tag {
