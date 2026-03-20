@@ -10,6 +10,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { calcTeamOvr } from "../engine/teamOvr.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -137,10 +138,12 @@ function getStakesLine(userTeamId, stageStandings, matchLog) {
 }
 
 // ── Pre-match view ────────────────────────────────────────────────────────────
-function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchdayCtx, onPlay }) {
+function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchdayCtx, onPlay, players }) {
   const { openTeamHub } = useTeamHub();
   const oppId  = nextMatch.a === userTeamId ? nextMatch.b : nextMatch.a;
   const stakes = getStakesLine(userTeamId, stageStandings, matchLog);
+  const userOvr = calcTeamOvr(userTeamId, players);
+  const oppOvr  = calcTeamOvr(oppId, players);
 
   function rec(id) {
     const r = stageStandings[id] ?? { wins: 0, losses: 0 };
@@ -167,6 +170,7 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
             {teamTag(userTeamId)}
           </div>
           <div className="nmo-team-rec">{rec(userTeamId)}</div>
+          <div className="nmo-team-ovr">{userOvr} OVR</div>
           <span className="nmo-you-badge">YOU</span>
         </div>
 
@@ -186,6 +190,7 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
             {teamTag(oppId)}
           </div>
           <div className="nmo-team-rec">{rec(oppId)}</div>
+          <div className="nmo-team-ovr">{oppOvr} OVR</div>
         </div>
       </div>
 
@@ -314,7 +319,7 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
 
   if (!isOpen || !state) return null;
 
-  const { schedule, userTeamId } = state;
+  const { schedule, userTeamId, players } = state;
   const stageIdx       = schedule.stageIdx ?? 0;
   const stage          = schedule.stages?.[stageIdx];
   const stageName      = stage?.name ?? "Stage";
@@ -362,6 +367,7 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
             matchLog={schedule.matchLog}
             matchdayCtx={matchdayCtx}
             onPlay={handlePlay}
+            players={players}
           />
         )}
 

@@ -4468,6 +4468,27 @@ body { margin: 0; }
   font-size: 11px;
 }
 
+.th-ovr-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.th-ovr-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.th-ovr-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 /* Stats */
 .th-stats {
   padding: 10px 20px;
@@ -4973,6 +4994,13 @@ body { margin: 0; }
 .nmo-team-rec {
   font-size: 11px;
   color: var(--text-dim);
+}
+
+.nmo-team-ovr {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
 }
 
 .nmo-you-badge {

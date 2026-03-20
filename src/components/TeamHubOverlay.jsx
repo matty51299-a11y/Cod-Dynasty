@@ -5,6 +5,7 @@
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { useGame }    from "../store/gameStore.jsx";
 import { CDL_TEAMS }  from "../data/teams.js";
+import { calcTeamOvr } from "../engine/teamOvr.js";
 
 function kdColor(kd) {
   if (kd >= 1.4) return "var(--green)";
@@ -25,6 +26,7 @@ export default function TeamHubOverlay() {
   if (!team) return null;
 
   const isUser    = openTeamId === userTeamId;
+  const teamOvr   = calcTeamOvr(openTeamId, players);
   const matchLog  = schedule?.matchLog ?? [];
   const phase     = schedule?.phase;
 
@@ -102,6 +104,10 @@ export default function TeamHubOverlay() {
           </div>
           <div className="th-rank muted">
             #{rank} in league · {seasonRec.wins}W–{seasonRec.losses}L · {seasonRec.points} pts
+          </div>
+          <div className="th-ovr-row">
+            <span className="th-ovr-label">Team OVR</span>
+            <span className="th-ovr-value" style={{ color: team.color }}>{teamOvr}</span>
           </div>
         </div>
 

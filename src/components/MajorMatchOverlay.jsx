@@ -11,6 +11,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { calcTeamOvr } from "../engine/teamOvr.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -38,11 +39,13 @@ function getWinConsequence(bracket, userTeamId, majorName) {
 }
 
 // ── Pre-match view ────────────────────────────────────────────────────────────
-function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay }) {
+function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay, players }) {
   const { openTeamHub } = useTeamHub();
   const oppId    = match.a === userTeamId ? match.b : match.a;
   const userSeed = seedNum(bracket, userTeamId, match.a === userTeamId ? match.seedA : match.seedB);
   const oppSeed  = seedNum(bracket, oppId,      match.a === userTeamId ? match.seedB : match.seedA);
+  const userOvr  = calcTeamOvr(userTeamId, players);
+  const oppOvr   = calcTeamOvr(oppId, players);
 
   return (
     <>
@@ -62,6 +65,7 @@ function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay
             {teamTag(userTeamId)}
           </div>
           {userSeed != null && <div className="nmo-team-rec">Seed #{userSeed}</div>}
+          <div className="nmo-team-ovr">{userOvr} OVR</div>
           <span className="nmo-you-badge">YOU</span>
         </div>
 
@@ -81,6 +85,7 @@ function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay
             {teamTag(oppId)}
           </div>
           {oppSeed != null && <div className="nmo-team-rec">Seed #{oppSeed}</div>}
+          <div className="nmo-team-ovr">{oppOvr} OVR</div>
         </div>
       </div>
 
@@ -190,7 +195,7 @@ export default function MajorMatchOverlay({ isOpen, onClose }) {
 
   if (!isOpen || !state) return null;
 
-  const { schedule, userTeamId, enteredMajorIdx } = state;
+  const { schedule, userTeamId, enteredMajorIdx, players } = state;
 
   // Derive bracket context — always reads latest state so result view is current
   const enteredMajor  = schedule.majors?.[enteredMajorIdx];
@@ -233,6 +238,7 @@ export default function MajorMatchOverlay({ isOpen, onClose }) {
             majorName={majorName}
             userTeamId={userTeamId}
             onPlay={handlePlay}
+            players={players}
           />
         )}
 
