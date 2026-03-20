@@ -22,6 +22,7 @@ import MajorEntryOverlay    from "./components/MajorEntryOverlay.jsx";
 import MajorTournamentOverlay from "./components/MajorTournamentOverlay.jsx";
 import OffseasonReport   from "./components/OffseasonReport.jsx";
 import TeamHubOverlay    from "./components/TeamHubOverlay.jsx";
+import NotificationsFeed from "./components/NotificationsFeed.jsx";
 import { CDL_TEAMS }     from "./data/teams.js";
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
   const [screen, setScreen]           = useState("home");
   const [confirmNew, setConfirmNew]   = useState(false);
   const [showMatchOverlay, setShowMatchOverlay] = useState(false);
+  const [showFeed, setShowFeed]       = useState(false);
 
   // On mount: auto-load a save if one exists
   useEffect(() => {
@@ -108,7 +110,7 @@ export default function App() {
 
       {/* ── App body: sidebar + main ── */}
       <div className="app-body">
-        <Sidebar screen={screen} setScreen={setScreen} />
+        <Sidebar screen={screen} setScreen={setScreen} onOpenFeed={() => setShowFeed(true)} />
 
         {/* Event overlays — sit above sidebar + main content */}
         <NextMatchOverlay
@@ -118,6 +120,7 @@ export default function App() {
         <MajorEntryOverlay />
         <MajorTournamentOverlay />
         <TeamHubOverlay />
+        <NotificationsFeed isOpen={showFeed} onClose={() => setShowFeed(false)} />
 
         {/* Screen content */}
         <main className="main-content">

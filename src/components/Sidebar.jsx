@@ -16,7 +16,7 @@ const NAV_ITEMS = [
   { id: "log",       icon: "▤",  label: "Match Log" },
 ];
 
-export default function Sidebar({ screen, setScreen }) {
+export default function Sidebar({ screen, setScreen, onOpenFeed }) {
   const { state } = useGame();
   if (!state) return null;
 
@@ -25,7 +25,7 @@ export default function Sidebar({ screen, setScreen }) {
   const phase = schedule.phase;
 
   // Phase pill text
-  const stageIdx = schedule.stageIdx ?? 0;
+  const stageIdx  = schedule.stageIdx ?? 0;
   const stageName = schedule.stages?.[stageIdx]?.name ?? "Stage";
   const majorName = schedule.majors?.[schedule.majorIdx ?? 0]?.name ?? "Major";
   const remaining = (() => {
@@ -42,11 +42,12 @@ export default function Sidebar({ screen, setScreen }) {
     return phase;
   })();
 
-  const pillClass = phase === "major" ? "sb-pill sb-pill-live"
+  const pillClass = phase === "major"    ? "sb-pill sb-pill-live"
                   : phase === "offseason" ? "sb-pill sb-pill-dim"
                   : "sb-pill";
 
-  const hasDevData = state.progressionLog?.length > 0;
+  const hasDevData  = state.progressionLog?.length > 0;
+  const unreadFeed  = (state.feed ?? []).filter(f => !f.read).length;
 
   return (
     <aside className="sidebar">
@@ -72,6 +73,15 @@ export default function Sidebar({ screen, setScreen }) {
             {item.id === "devreport" && hasDevData && <span className="sb-dot" />}
           </button>
         ))}
+
+        {/* Feed button — opens overlay, does not navigate screens */}
+        <button className="sb-item sb-feed-btn" onClick={onOpenFeed}>
+          <span className="sb-icon">◈</span>
+          <span className="sb-label">Feed</span>
+          {unreadFeed > 0 && (
+            <span className="sb-badge">{unreadFeed > 99 ? "99+" : unreadFeed}</span>
+          )}
+        </button>
       </nav>
 
       {/* Phase status pill at bottom */}
