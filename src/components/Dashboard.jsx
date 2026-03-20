@@ -11,6 +11,32 @@ import { useTeamHub } from "../store/teamHubContext.jsx";
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 
+// Darken a hex color until it meets the target contrast ratio vs white (#ffffff).
+// minRatio: 4.5 for body text, 3.0 for large/bold text (WCAG AA).
+function ensureContrast(hex, minRatio = 4.5) {
+  try {
+    if (!hex || !hex.startsWith('#') || hex.length !== 7) return hex;
+    const toLinear = c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    const lum = h => {
+      const r = parseInt(h.slice(1, 3), 16) / 255;
+      const g = parseInt(h.slice(3, 5), 16) / 255;
+      const b = parseInt(h.slice(5, 7), 16) / 255;
+      return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+    };
+    let factor = 1.0;
+    let current = hex;
+    while (factor >= 0.3) {
+      if (1.05 / (lum(current) + 0.05) >= minRatio) return current;
+      factor -= 0.05;
+      const ri = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
+      const gi = Math.round(parseInt(hex.slice(3, 5), 16) * factor);
+      const bi = Math.round(parseInt(hex.slice(5, 7), 16) * factor);
+      current = `#${ri.toString(16).padStart(2, '0')}${gi.toString(16).padStart(2, '0')}${bi.toString(16).padStart(2, '0')}`;
+    }
+    return current;
+  } catch { return hex; }
+}
+
 function ratingColor(v) {
   if (v >= 90) return "#b45309";   // dark gold (readable on light)
   if (v >= 85) return "#15803d";   // dark green
@@ -127,6 +153,8 @@ export default function Dashboard({ setScreen }) {
     : stageName;
 
   const teamHex = team?.color ?? "#2563eb";
+  const teamHexSafe = ensureContrast(teamHex, 3.0);   // large/bold text threshold
+  const teamHexBody = ensureContrast(teamHex, 4.5);   // body-size text threshold
   const bannerGradient = `linear-gradient(135deg, ${teamHex}18 0%, #ffffff 60%)`;
 
   return (
@@ -140,7 +168,7 @@ export default function Dashboard({ setScreen }) {
         <div className="db-cb-inner">
           <div className="db-cb-left">
             <div>
-              <h2 className="db-cb-team-name" style={{ color: teamHex }}>
+              <h2 className="db-cb-team-name" style={{ color: teamHexSafe }}>
                 {team?.name ?? userTeamId}
               </h2>
               <div className="db-cb-meta">
@@ -289,13 +317,13 @@ export default function Dashboard({ setScreen }) {
                 <div className="db-card-header">Next Match · {stageName}</div>
                 <div className="db-card-body">
                   <div className="db-match-teams">
-                    <span className="db-match-you" style={{ color: teamHex }}>
+                    <span className="db-match-you" style={{ color: teamHexBody }}>
                       {team?.tag ?? userTeamId}
                     </span>
                     <span className="db-match-vs">vs</span>
                     <span
                       className="db-match-opp db-link"
-                      style={{ color: nextOppTeam.color }}
+                      style={{ color: ensureContrast(nextOppTeam.color, 4.5) }}
                       onClick={() => openTeamHub(nextOppId)}
                     >
                       {nextOppTeam.tag}
@@ -463,7 +491,7 @@ export default function Dashboard({ setScreen }) {
                             <div className="rc-teams">
                               <span
                                 className="rc-winner team-link"
-                                style={{ color: won ? teamHex : teamColor(oppId) }}
+                                style={{ color: won ? teamHexBody : ensureContrast(teamColor(oppId)) }}
                                 onClick={e => { e.stopPropagation(); openTeamHub(won ? userTeamId : oppId); }}
                               >
                                 {won ? (team?.name ?? userTeamId) : opp}
@@ -471,7 +499,7 @@ export default function Dashboard({ setScreen }) {
                               <span className="rc-score">{r.score}</span>
                               <span
                                 className="rc-loser team-link"
-                                style={{ color: won ? teamColor(oppId) : teamHex, opacity: 0.65 }}
+                                style={{ color: won ? ensureContrast(teamColor(oppId)) : teamHexBody }}
                                 onClick={e => { e.stopPropagation(); openTeamHub(won ? oppId : userTeamId); }}
                               >
                                 {won ? opp : (team?.name ?? userTeamId)}
@@ -573,13 +601,13 @@ export default function Dashboard({ setScreen }) {
                   const oppRec  = stageStandings[oppId] ?? { wins: 0, losses: 0 };
                   return (
                     <div key={i} className="db-fixture-row">
-                      <span className="db-fixture-you" style={{ color: teamHex }}>
+                      <span className="db-fixture-you" style={{ color: teamHexBody }}>
                         {team?.tag ?? userTeamId}
                       </span>
                       <span className="db-fixture-vs">vs</span>
                       <span
                         className="db-fixture-opp"
-                        style={{ color: oppTeam?.color ?? "var(--text-head)" }}
+                        style={{ color: oppTeam ? ensureContrast(oppTeam.color, 4.5) : "var(--text-head)" }}
                         onClick={() => openTeamHub(oppId)}
                       >
                         {oppTeam?.tag ?? oppId}
