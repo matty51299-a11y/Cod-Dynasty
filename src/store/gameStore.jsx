@@ -5,7 +5,7 @@
 import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
 
@@ -248,6 +248,26 @@ function reducer(state, action) {
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajorRound({ ...state });
       return pushFeed(newState, detectMajorFeed(wasCompleted, newState, majorIdx));
+    }
+
+    // ── Interactive match result from MatchCenterOverlay ──────────────
+    case "COMMIT_USER_MATCH_RESULT": {
+      const majorIdx     = state.schedule?.majorIdx;
+      const wasCompleted = majorIdx != null
+        ? (state.schedule?.majors?.[majorIdx]?.completed ?? true)
+        : true;
+      const prevLogLen = state.schedule?.matchLog?.length ?? 0;
+      const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
+      const season     = state.season;
+
+      const newState = commitUserMatchResult({ ...state }, action.result);
+
+      const feedItems = [
+        ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
+        ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
+        ...(majorIdx != null ? detectMajorFeed(wasCompleted, newState, majorIdx) : []),
+      ];
+      return pushFeed(newState, feedItems);
     }
 
     case "ENTER_MAJOR":

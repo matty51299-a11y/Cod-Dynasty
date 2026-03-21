@@ -6,12 +6,11 @@
 // Adds only mmo-backdrop (z-index above tournament) and mmo-consequence
 // for tournament-specific outcome messaging.
 
-import { useEffect, useRef, useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
-import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { calcTeamOvr } from "../engine/teamOvr.js";
+import { useMatchCenter } from "../store/matchCenterContext.jsx";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -162,49 +161,19 @@ function ResultView({ result, userTeamId, latestBracket, majorName, roundName, o
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function MajorMatchOverlay({ isOpen, onClose }) {
-  const { state, dispatch } = useGame();
-  const [view, setView]               = useState("pre");
-  const [postSimResult, setPostSimResult] = useState(null);
-  const preSimLenRef = useRef(null);
-
-  // Reset when overlay opens
-  useEffect(() => {
-    if (isOpen) {
-      setView("pre");
-      setPostSimResult(null);
-      preSimLenRef.current = null;
-    }
-  }, [isOpen]);
-
-  // Detect result after SIM_NEXT_MAJOR_MATCH state update
-  useEffect(() => {
-    if (preSimLenRef.current === null) return;
-    const matchLog = state?.schedule?.matchLog ?? [];
-    if (matchLog.length <= preSimLenRef.current) return;
-
-    const { userTeamId } = state;
-    const newEntries = matchLog.slice(preSimLenRef.current);
-    const userEntry  = newEntries.find(
-      r => r.winnerId === userTeamId || r.loserId === userTeamId
-    ) ?? null;
-
-    setPostSimResult(userEntry);
-    preSimLenRef.current = null;
-    setView("result");
-  }, [state?.schedule?.matchLog?.length]); // eslint-disable-line
+  const { state } = useGame();
+  const { openMatchCenter } = useMatchCenter();
 
   if (!isOpen || !state) return null;
 
   const { schedule, userTeamId, enteredMajorIdx, players } = state;
 
-  // Derive bracket context — always reads latest state so result view is current
   const enteredMajor  = schedule.majors?.[enteredMajorIdx];
   const latestBracket = enteredMajor?.bracket ?? null;
   const majorName     = enteredMajor?.name ?? "";
 
-  // Find the user's current match (for pre view)
-  let userMatch  = null;
-  let roundName  = null;
+  let userMatch = null;
+  let roundName = null;
   if (latestBracket) {
     for (const round of latestBracket.rounds) {
       const m = round.matches.find(
@@ -215,22 +184,16 @@ export default function MajorMatchOverlay({ isOpen, onClose }) {
   }
 
   function handlePlay() {
-    preSimLenRef.current = schedule.matchLog?.length ?? 0;
-    dispatch({ type: "SIM_NEXT_MAJOR_MATCH" });
+    onClose();
+    openMatchCenter("major");
   }
-
-  // For result view: derive roundName from pre-existing postSimResult stage field
-  const resultRoundName = postSimResult?.stage?.split(" – ")[1] ?? roundName ?? "";
 
   return (
     <div className="mmo-backdrop" onClick={onClose}>
-      <div
-        className={`nmo-card ${view === "result" ? "nmo-card-result" : ""}`}
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="nmo-card" onClick={e => e.stopPropagation()}>
         <button className="nmo-close" onClick={onClose} aria-label="Close">✕</button>
 
-        {view === "pre" && userMatch && (
+        {userMatch && (
           <PreMatchView
             match={userMatch}
             bracket={latestBracket}
@@ -239,17 +202,6 @@ export default function MajorMatchOverlay({ isOpen, onClose }) {
             userTeamId={userTeamId}
             onPlay={handlePlay}
             players={players}
-          />
-        )}
-
-        {view === "result" && postSimResult && (
-          <ResultView
-            result={postSimResult}
-            userTeamId={userTeamId}
-            latestBracket={latestBracket}
-            majorName={majorName}
-            roundName={resultRoundName}
-            onClose={onClose}
           />
         )}
       </div>

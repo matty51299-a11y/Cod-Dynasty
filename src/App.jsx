@@ -5,7 +5,9 @@
 import { useEffect, useState } from "react";
 import { useGame, saveGame, loadGame, deleteSave } from "./store/gameStore.jsx";
 import "./engine/poolReport.js"; // registers window.poolReport() console utility
-import { TeamHubProvider } from "./store/teamHubContext.jsx";
+import { TeamHubProvider }        from "./store/teamHubContext.jsx";
+import { MatchCenterProvider }    from "./store/matchCenterContext.jsx";
+import MatchCenterOverlay         from "./components/MatchCenterOverlay.jsx";
 import TeamSelect        from "./components/TeamSelect.jsx";
 import Sidebar           from "./components/Sidebar.jsx";
 import NextMatchControl  from "./components/NextMatchControl.jsx";
@@ -72,6 +74,7 @@ export default function App() {
   }
 
   return (
+    <MatchCenterProvider>
     <TeamHubProvider>
     <div className="app">
       {/* ── Top bar ── */}
@@ -117,6 +120,7 @@ export default function App() {
           isOpen={showMatchOverlay}
           onClose={() => setShowMatchOverlay(false)}
         />
+        <MatchCenterOverlay />
         <MajorEntryOverlay />
         <MajorTournamentOverlay />
         <TeamHubOverlay />
@@ -137,5 +141,6 @@ export default function App() {
       </div>
     </div>
     </TeamHubProvider>
+    </MatchCenterProvider>
   );
 }

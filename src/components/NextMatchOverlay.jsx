@@ -11,6 +11,7 @@ import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { calcTeamOvr } from "../engine/teamOvr.js";
+import { useMatchCenter } from "../store/matchCenterContext.jsx";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -196,7 +197,7 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
 
       <div className="nmo-actions">
         <button className="btn-primary nmo-play-btn" onClick={onPlay}>
-          ▶ Play Matchday
+          ▶ Play Match
         </button>
       </div>
     </>
@@ -278,44 +279,8 @@ function ResultView({ result, userTeamId, preStandings, postStandings, matchLog,
 
 // ── Main overlay ──────────────────────────────────────────────────────────────
 export default function NextMatchOverlay({ isOpen, onClose }) {
-  const { state, dispatch } = useGame();
-
-  const [view, setView]         = useState("pre");
-  const [postSimData, setPostSimData] = useState(null);
-  // postSimData: { userResult, preStandings }
-
-  const preSimLenRef        = useRef(null); // matchLog length before dispatch
-  const preSimStandingsRef  = useRef(null); // standings snapshot before dispatch
-
-  // Reset whenever overlay opens
-  useEffect(() => {
-    if (isOpen) {
-      setView("pre");
-      setPostSimData(null);
-      preSimLenRef.current       = null;
-      preSimStandingsRef.current = null;
-    }
-  }, [isOpen]);
-
-  // Detect result after SIM_USER_MATCHDAY state update
-  useEffect(() => {
-    if (preSimLenRef.current === null) return;
-    const matchLog = state?.schedule?.matchLog ?? [];
-    if (matchLog.length <= preSimLenRef.current) return;
-
-    const newEntries = matchLog.slice(preSimLenRef.current);
-    const userEntry  = newEntries.find(
-      r => r.winnerId === state.userTeamId || r.loserId === state.userTeamId
-    ) ?? null;
-
-    setPostSimData({
-      userResult:   userEntry,
-      preStandings: preSimStandingsRef.current,
-    });
-    preSimLenRef.current       = null;
-    preSimStandingsRef.current = null;
-    setView("result");
-  }, [state?.schedule?.matchLog?.length]); // eslint-disable-line
+  const { state } = useGame();
+  const { openMatchCenter } = useMatchCenter();
 
   if (!isOpen || !state) return null;
 
@@ -337,29 +302,16 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
   })();
 
   function handlePlay() {
-    // Snapshot standings before the dispatch mutates state — pre vs post diff
-    const snapshot = {};
-    for (const [id, rec] of Object.entries(stageStandings)) {
-      snapshot[id] = { ...rec };
-    }
-    preSimStandingsRef.current = snapshot;
-    preSimLenRef.current = state.schedule.matchLog?.length ?? 0;
-    dispatch({ type: "SIM_USER_MATCHDAY" });
-  }
-
-  function handleClose() {
     onClose();
+    openMatchCenter("stage");
   }
 
   return (
-    <div className="nmo-backdrop" onClick={handleClose}>
-      <div
-        className={`nmo-card ${view === "result" ? "nmo-card-result" : ""}`}
-        onClick={e => e.stopPropagation()}
-      >
-        <button className="nmo-close" onClick={handleClose} aria-label="Close">✕</button>
+    <div className="nmo-backdrop" onClick={onClose}>
+      <div className="nmo-card" onClick={e => e.stopPropagation()}>
+        <button className="nmo-close" onClick={onClose} aria-label="Close">✕</button>
 
-        {view === "pre" && nextMatch && (
+        {nextMatch ? (
           <PreMatchView
             nextMatch={nextMatch}
             userTeamId={userTeamId}
@@ -369,27 +321,14 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
             onPlay={handlePlay}
             players={players}
           />
-        )}
-
-        {view === "pre" && !nextMatch && (
+        ) : (
           <div className="nmo-no-match">
             <div className="nmo-title">NO MATCH SCHEDULED</div>
             <p className="muted">No upcoming match found for your team in this stage.</p>
             <div className="nmo-actions">
-              <button className="btn-secondary" onClick={handleClose}>Close</button>
+              <button className="btn-secondary" onClick={onClose}>Close</button>
             </div>
           </div>
-        )}
-
-        {view === "result" && (
-          <ResultView
-            result={postSimData?.userResult ?? null}
-            userTeamId={userTeamId}
-            preStandings={postSimData?.preStandings ?? null}
-            postStandings={stageStandings}
-            matchLog={schedule.matchLog}
-            onClose={handleClose}
-          />
         )}
       </div>
     </div>
