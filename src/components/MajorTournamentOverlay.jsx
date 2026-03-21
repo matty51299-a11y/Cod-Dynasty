@@ -13,8 +13,8 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
-import MajorMatchOverlay from "./MajorMatchOverlay.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { useMatchCenter } from "../store/matchCenterContext.jsx";
 
 function teamName(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function teamTag(id)  { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
@@ -402,8 +402,8 @@ function SEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpanded
 export default function MajorTournamentOverlay() {
   const { state, dispatch } = useGame();
   const { openTeamHub } = useTeamHub();
-  const [expandedKey,      setExpandedKey]      = useState(null);
-  const [showMatchOverlay, setShowMatchOverlay]  = useState(false);
+  const { openMatchCenter } = useMatchCenter();
+  const [expandedKey, setExpandedKey] = useState(null);
 
   if (!state) return null;
 
@@ -419,23 +419,13 @@ export default function MajorTournamentOverlay() {
   const enteredMajor = schedule.majors?.[enteredIdx];
   const showChampion = !isMajorPhase && enteredMajor?.completed;
 
-  if (!showLive && !showChampion && !showMatchOverlay) return null;
-
-  const matchOverlay = (
-    <MajorMatchOverlay
-      isOpen={showMatchOverlay}
-      onClose={() => setShowMatchOverlay(false)}
-    />
-  );
+  if (!showLive && !showChampion) return null;
 
   if (showChampion) {
     return (
-      <>
-        {matchOverlay}
-        <div className="mto-backdrop mto-backdrop-champ">
-          <ChampionScreen major={enteredMajor} dispatch={dispatch} />
-        </div>
-      </>
+      <div className="mto-backdrop mto-backdrop-champ">
+        <ChampionScreen major={enteredMajor} dispatch={dispatch} />
+      </div>
     );
   }
 
@@ -449,7 +439,6 @@ export default function MajorTournamentOverlay() {
 
   return (
     <>
-      {matchOverlay}
 
       <div className="mto-backdrop">
         <div className="mto-scroll-area">
@@ -468,7 +457,7 @@ export default function MajorTournamentOverlay() {
                 userTeamId={userTeamId}
                 dispatch={dispatch}
                 major={major}
-                onPlayMatch={() => setShowMatchOverlay(true)}
+                onPlayMatch={() => openMatchCenter("major")}
               />
             )}
 
