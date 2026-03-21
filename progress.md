@@ -324,33 +324,6 @@ Core philosophy: **focus → action → result → world update**
 
 ---
 
-# 🔹 6. Next Priorities
-
-## HIGH PRIORITY
-
-1. Core match loop
-   - result reveal flow after user match
-   - other results shown after user match resolves
-
-2. ~~UI Polish — FM24-style dashboard overhaul~~ ✅ Done
-   - ~~navy/slate palette~~, ~~card grid dashboard~~, ~~sidebar improvements~~
-
----
-
-## MID PRIORITY
-
-3. ~~Prospect pool regeneration (yearly fresh wave)~~ ✅ Done
-4. History / records screen
-5. Contract salary cost on re-signing
-
----
-
-## LOW PRIORITY
-
-6. Narrative system (news, storylines)
-7. Opponent roster viewer
-8. Contract salary negotiation
-
 ---
 
 # 🔹 7. Key Principles (DO NOT BREAK)
