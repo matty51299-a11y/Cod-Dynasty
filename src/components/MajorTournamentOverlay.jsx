@@ -170,7 +170,7 @@ function EliminatedBanner({ elimination, userTeamId }) {
 }
 
 // ── Next match spotlight with sim controls ────────────────────────────────────
-function NextMatchCard({ bracket, curRound, userTeamId, dispatch, onPlayMatch }) {
+function NextMatchCard({ bracket, curRound, userTeamId, dispatch, onPlayMatch, major }) {
   if (curRound < 0) return null;
   const round = bracket.rounds[curRound];
   const next  = round?.matches.find(m => !m.played);
