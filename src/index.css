@@ -3277,6 +3277,17 @@ body { margin: 0; }
   border-radius: 20px;
 }
 
+.meo-badge-de {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.1);
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  padding: 4px 13px;
+  border-radius: 20px;
+}
+
 /* Title */
 .meo-title {
   font-size: 34px;
@@ -3429,6 +3440,46 @@ body { margin: 0; }
   color: var(--text-dim);
   font-size: 10px;
   flex-shrink: 0;
+}
+
+.meo-bye-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.meo-seeds-grid-de {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Bye row in entry overlay */
+.meo-um-bye-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.meo-um-bye-badge {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  padding: 5px 14px;
+  border-radius: 6px;
+}
+
+.meo-um-bye-note {
+  font-size: 11px;
+  text-align: center;
 }
 
 /* Enter CTA */
@@ -3874,6 +3925,32 @@ body { margin: 0; }
 @media (max-width: 600px) {
   .mto-bracket-rounds { flex-direction: column; }
 }
+
+/* ── DE bracket (WB / LB / GF sections) ──────────────────────────────────── */
+.mto-de-bracket {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mto-de-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mto-de-section-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  color: var(--text-dim);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mto-de-wb .mto-de-section-label { color: #60a5fa; }
+.mto-de-lb .mto-de-section-label { color: #f97316; }
+.mto-de-gf .mto-de-section-label { color: #facc15; }
 
 /* Round column */
 .mto-round {

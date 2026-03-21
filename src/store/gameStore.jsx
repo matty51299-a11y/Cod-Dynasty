@@ -130,13 +130,14 @@ function detectMajorFeed(wasCompleted, newState, majorIdx) {
     items.push(mkFeed("major_champ",  `${champTag} win ${major.name}`,    season, "major"));
   }
 
-  // QF eliminations
-  const qf = major.bracket?.rounds?.[0];
-  if (qf?.matches) {
-    for (const m of qf.matches) {
+  // First-round eliminations (round 0 losers in both SE and DE)
+  const firstRound = major.bracket?.rounds?.[0];
+  if (firstRound?.matches) {
+    for (const m of firstRound.matches) {
       if (m.result?.loserId) {
         const tag = CDL_TEAMS.find(t => t.id === m.result.loserId)?.tag ?? m.result.loserId;
-        items.push(mkFeed("major_elim", `${tag} out in Quarterfinals`, season, "major"));
+        const roundLabel = firstRound.name ?? "Round 1";
+        items.push(mkFeed("major_elim", `${tag} out in ${roundLabel}`, season, "major"));
       }
     }
   }
