@@ -205,7 +205,7 @@ export default function MajorEntryOverlay() {
                       <TeamLogo team={resolveTeamDisplay(id, schedule)} size={16} /> {team?.name ?? id} ({team?.tag ?? id})
                     </span>
                     <span className="meo-seed-rec">{team?.region ?? "-"} · OVR {team?.ovr ?? "-"}</span>
-                    <span className="you-badge">Qualifier #{idx + 1}</span>
+                    <span className="you-badge">{team?.qualifierLabel ?? `Qualifier #${idx + 1}`}</span>
                   </div>
                 );
               })}

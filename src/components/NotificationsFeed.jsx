@@ -23,6 +23,7 @@ const FEED_META = {
 const PHASE_LABEL = {
   stage:    "Stage",
   major:    "Major",
+  challengerQualifier: "Challenger Qualifier",
   preChamps:"Pre-Champs",
   offseason:"Offseason",
   contracts:"Contracts",

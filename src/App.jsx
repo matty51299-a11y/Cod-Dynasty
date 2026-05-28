@@ -21,6 +21,7 @@ import FreeAgency        from "./components/FreeAgency.jsx";
 import Prospects         from "./components/Prospects.jsx";
 import MatchLog          from "./components/MatchLog.jsx";
 import MajorEntryOverlay    from "./components/MajorEntryOverlay.jsx";
+import ChallengerQualifierOverlay from "./components/ChallengerQualifierOverlay.jsx";
 import MajorTournamentOverlay from "./components/MajorTournamentOverlay.jsx";
 import OffseasonReport   from "./components/OffseasonReport.jsx";
 import TeamHubOverlay    from "./components/TeamHubOverlay.jsx";
@@ -121,6 +122,7 @@ export default function App() {
           onClose={() => setShowMatchOverlay(false)}
         />
         <MatchCenterOverlay />
+        <ChallengerQualifierOverlay />
         <MajorEntryOverlay />
         <MajorTournamentOverlay />
         <TeamHubOverlay />

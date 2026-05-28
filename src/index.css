@@ -6464,3 +6464,64 @@ body { margin: 0; }
   font-weight: 700;
   border-radius: 8px;
 }
+
+/* ── CHALLENGER QUALIFIER OVERLAY ─────────────────────────────────────────── */
+.cqo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9800;
+  background: radial-gradient(circle at top, rgba(139, 92, 246, 0.24), rgba(7, 10, 19, 0.94) 45%, rgba(3, 5, 10, 0.98));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+.cqo-card {
+  width: min(1280px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(21, 25, 43, 0.98), rgba(10, 13, 24, 0.98));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+  padding: 24px;
+}
+.cqo-header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 18px; }
+.cqo-kicker { color: #c4b5fd; font-size: 12px; font-weight: 900; letter-spacing: 0.16em; }
+.cqo-header h1 { margin: 4px 0; font-size: clamp(34px, 5vw, 64px); letter-spacing: -0.05em; }
+.cqo-header p { margin: 0; color: var(--text-dim); }
+.cqo-status { border: 1px solid var(--border); border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+.cqo-status.pending { color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
+.cqo-status.complete { color: #22c55e; background: rgba(34, 197, 94, 0.12); }
+.cqo-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.cqo-panel, .cqo-qualified-card { border: 1px solid var(--border); border-radius: 18px; background: rgba(255,255,255,0.035); padding: 14px; }
+.cqo-panel-title { font-size: 13px; font-weight: 900; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+.cqo-table { display: grid; gap: 6px; }
+.cqo-row { display: grid; align-items: center; gap: 8px; min-height: 38px; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; background: rgba(0,0,0,0.16); padding: 7px 9px; font-size: 12px; }
+.cqo-field-table .cqo-row { grid-template-columns: 48px minmax(150px, 1.4fr) 54px 48px 62px 48px; }
+.cqo-results-table .cqo-row { grid-template-columns: 52px minmax(170px, 1.5fr) 58px 48px 86px; }
+.cqo-row-head { min-height: 28px; background: transparent; border-color: transparent; color: var(--text-dim); font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+.cqo-team { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-weight: 800; }
+.cqo-team span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cqo-seed { color: #c4b5fd; font-weight: 900; }
+.cqo-row.qualified { border-color: rgba(34,197,94,0.35); background: rgba(34,197,94,0.08); }
+.cqo-qualified-pill, .cqo-missed-pill { border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 900; text-transform: uppercase; text-align: center; }
+.cqo-qualified-pill { color: #22c55e; background: rgba(34,197,94,0.14); }
+.cqo-missed-pill { color: var(--text-dim); background: rgba(255,255,255,0.06); }
+.cqo-empty { min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: var(--text-dim); padding: 24px; }
+.cqo-empty h3 { color: var(--text); margin: 8px 0; }
+.cqo-empty-icon { font-size: 34px; color: #a78bfa; }
+.cqo-qualified-card { margin-top: 16px; }
+.cqo-qualified-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cqo-qualified-team { display: flex; align-items: center; gap: 10px; border: 1px solid rgba(34,197,94,0.25); border-radius: 14px; background: rgba(34,197,94,0.08); padding: 10px; }
+.cqo-qualified-team div { display: flex; flex-direction: column; min-width: 0; }
+.cqo-qualified-team strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cqo-qualified-team span { color: var(--text-dim); font-size: 11px; }
+.cqo-seed-large { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: rgba(167,139,250,0.18); color: #ddd6fe !important; font-weight: 900; }
+.cqo-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.cqo-primary { min-width: 210px; }
+@media (max-width: 980px) {
+  .cqo-grid, .cqo-qualified-grid { grid-template-columns: 1fr; }
+  .cqo-field-table .cqo-row, .cqo-results-table .cqo-row { grid-template-columns: 44px minmax(120px, 1fr) 50px 44px 64px; }
+  .cqo-field-table .cqo-row span:nth-child(3) { display: none; }
+}
