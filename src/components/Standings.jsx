@@ -93,20 +93,22 @@ export default function Standings() {
         <tbody>
           {sorted.map(({ team, record }, i) => {
             const ovr = calcTeamOvr(team.id, players);
+            const display = resolveTeamDisplay(team.id, schedule);
             return (
             <tr key={team.id} className={team.id === userTeamId ? "user-row" : ""}>
               <td style={{ borderLeft: `3px solid ${team.color}`, borderRadius: "6px 0 0 6px", paddingLeft: 8 }}>
                 {i + 1}
               </td>
-              <td>
-                <span className="dot" style={{ background: team.color }} />
+              <td className="standings-team-cell">
                 <span
-                  className="team-link"
-                  style={{ color: team.color }}
+                  className="team-link standings-team-link"
+                  style={{ color: display.color }}
                   onClick={() => openTeamHub(team.id)}
                 >
-                  <TeamLogo team={resolveTeamDisplay(team.id, schedule)} size={18} />
-                  {team.name}
+                  <span className="standings-team-logo-slot">
+                    <TeamLogo team={display} variant="table" className="standings-team-logo" />
+                  </span>
+                  <span className="standings-team-name">{display.name}</span>
                 </span>
                 {team.id === userTeamId && <span className="you-badge"> YOU</span>}
               </td>

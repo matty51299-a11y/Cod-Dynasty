@@ -877,7 +877,10 @@ body { margin: 0; }
 }
 
 /* ── STANDINGS ──────────────────────────────────────────────────────────────── */
-.standings-page { max-width: 700px; }
+.standings-page {
+  max-width: 1160px;
+  width: min(100%, 1160px);
+}
 .standings-page h2 { margin-bottom: 4px; color: var(--text-head); }
 
 .standings-table,
@@ -1152,7 +1155,7 @@ body { margin: 0; }
 
 .team-logo {
   object-fit: contain;
-  display: inline-block;
+  display: block;
   vertical-align: middle;
 }
 .team-logo-fallback {
@@ -1167,6 +1170,16 @@ body { margin: 0; }
   margin-right: 4px;
   vertical-align: middle;
 }
+.team-logo--table {
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+.team-logo-fallback--table {
+  font-size: 10px;
+  font-weight: 800;
+}
+.team-logo--bracket { object-fit: contain; }
+.team-logo--hero { object-fit: contain; }
 .db-banner-logo { margin-right: 10px; }
 .filter-group {
   display: flex;
@@ -2404,6 +2417,33 @@ body { margin: 0; }
 .standings-note {
   font-size: 11px;
   margin-bottom: 8px;
+}
+
+.standings-team-cell { min-width: 320px; }
+.standings-team-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.standings-team-logo-slot {
+  width: 40px;
+  min-width: 40px;
+  height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+}
+.standings-team-logo-slot .team-logo-fallback {
+  margin-right: 0;
+  border-width: 1.5px;
+}
+.standings-team-name {
+  font-weight: 600;
+  color: var(--text-head);
 }
 
 /* ── PLAYER MODAL ────────────────────────────────────────────────────────────── */
