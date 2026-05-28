@@ -129,6 +129,13 @@ function detectMajorFeed(wasCompleted, newState, majorIdx) {
     items.push(mkFeed("champs_champ", `${champTag} are World Champions!`, season, "major"));
   } else {
     items.push(mkFeed("major_champ",  `${champTag} win ${major.name}`,    season, "major"));
+    const awards = (major.pointsAwards ?? []).filter(a => (a.points ?? 0) > 0).sort((a, b) => a.place - b.place);
+    if (awards.length) {
+      const top = awards.slice(0, 4)
+        .map(a => `${CDL_TEAMS.find(t => t.id === a.teamId)?.tag ?? a.teamId} +${a.points}`)
+        .join(" · ");
+      items.push(mkFeed("major_points", `${major.name} points: ${top}`, season, "major"));
+    }
   }
 
   // First-round eliminations (round 0 losers in both SE and DE)

@@ -410,3 +410,8 @@ Player shape (key fields):
 - Manual Challenger override import now also creates missing rated players as unsigned prospects (deterministic defaults), applies overrides to existing players/prospects, and dedupes normalized-name collisions.
 - Challengers screen refreshed as a market-style "Challengers Circuit" view with hero chips, tabs, cleaner filters, readable archetype labels, shortlist stars, and collapsed debug Pool Health.
 - Added shared team-display + TeamLogo fallback component and wired logo-safe rendering into core surfaces (dashboard banner, standings, schedule, next match overlay, match center pre/final, match log), including temporary event-team metadata support.
+
+- Champs now uses a 16-team DE bracket: top 12 CDL teams by cumulative `standings` plus 4 temporary Challenger qualifiers (seeds 13–16), sharing the existing DE16 bracket builder/simulation path used by regular Majors.
+- MajorTournamentOverlay bracket match cards now render teams through shared `resolveTeamDisplay` + `TeamLogo` with compact logo badges and seed/tag alignment to avoid raw team-id/tag-only rendering in Major/Champs cards.
+
+- Regular Majors now award CDL placement points to CDL teams only (Major placements 1–12 mapped to 100/75/60/45/30/30/15/15/0/0/0/0) and add them to cumulative `standings` after bracket completion; Challenger event teams receive no CDL standings points.
