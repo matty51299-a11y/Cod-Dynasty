@@ -415,3 +415,11 @@ Player shape (key fields):
 - MajorTournamentOverlay bracket match cards now render teams through shared `resolveTeamDisplay` + `TeamLogo` with compact logo badges and seed/tag alignment to avoid raw team-id/tag-only rendering in Major/Champs cards.
 
 - Regular Majors now award CDL placement points to CDL teams only (Major placements 1–12 mapped to 100/75/60/45/30/30/15/15/0/0/0/0) and add them to cumulative `standings` after bracket completion; Challenger event teams receive no CDL standings points.
+- Challenger circuit identity pool now has **16 persistent teams** (up from 14), including newly added **High Treason** and **For Fun Black**.
+- `ensureChallengerTeams()` now performs safe save backfill/merge: if a save is missing teams (e.g., legacy 14-team saves), only missing teams are added and only missing roster slots are filled to 4 per team (regional-first, no duplicate assignment), while preserving existing circuit points/form/history.
+- Qualifier storage now includes per-team `score` in `schedule.challengerQualifierResults` in addition to season/major/team/placement/qualified/teamOvr/circuitPoints/form fields.
+- Challengers screen now includes a dedicated **Challenger Qualifier** section:
+  - Latest qualifier table (full ranked field, qualified/missed states, score/points/form delta)
+  - Empty state when no qualifier has run
+  - Compact qualifier history cards with season/major, winner, and top-4 qualified teams
+- Major Entry overlay now explicitly shows **Challenger Qualifiers (Seeds 13–16)** with qualifier ordering, team identity, region, and OVR so qualifier entrants are clearly visible before the event starts.

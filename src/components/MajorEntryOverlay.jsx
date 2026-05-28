@@ -61,6 +61,7 @@ export default function MajorEntryOverlay() {
   }
 
   const seedCount = bracket.seeds?.length ?? (isDE ? 12 : 8);
+  const challengerSeeds = (isDE && seedCount >= 16) ? bracket.seeds.slice(12, 16) : [];
   const formatStr = isDE
     ? `${seedCount} Teams · Double Elimination`
     : "Eight Teams · Single Elimination";
@@ -191,6 +192,26 @@ export default function MajorEntryOverlay() {
             })}
           </div>
         </div>
+        {!!challengerSeeds.length && (
+          <div className="meo-seeds-block anim-stagger" style={{ "--stagger": 4 }}>
+            <div className="meo-seeds-label">CHALLENGER QUALIFIERS (SEEDS 13–16)</div>
+            <div className="meo-seeds-grid meo-seeds-grid-de">
+              {challengerSeeds.map((id, idx) => {
+                const team = getTeamMeta(id, schedule);
+                return (
+                  <div key={`cq_${id}`} className="meo-seed-row">
+                    <span className="meo-seed-num">{idx + 13}</span>
+                    <span className="meo-seed-name">
+                      <TeamLogo team={resolveTeamDisplay(id, schedule)} size={16} /> {team?.name ?? id} ({team?.tag ?? id})
+                    </span>
+                    <span className="meo-seed-rec">{team?.region ?? "-"} · OVR {team?.ovr ?? "-"}</span>
+                    <span className="you-badge">Qualifier #{idx + 1}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── CTA ── */}
         <button
