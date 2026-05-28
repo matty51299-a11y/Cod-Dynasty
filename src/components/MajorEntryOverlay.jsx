@@ -33,7 +33,7 @@ export default function MajorEntryOverlay() {
 
   // Find the user's seed index (0-based)
   const userSeedIdx = bracket.seeds?.indexOf(userTeamId) ?? -1;
-  const userHasBye  = isDE && userSeedIdx >= 0 && userSeedIdx <= 3; // seeds 1–4
+  const userHasBye  = isDE && !isChamps && userSeedIdx >= 0 && userSeedIdx <= 3; // seeds 1–4 (no byes in Champs DE)
 
   // For seeds 5–12: find the opening WB Round 1 match
   const userWBR1Match = isDE && !userHasBye
@@ -57,8 +57,9 @@ export default function MajorEntryOverlay() {
     dispatch({ type: "ENTER_MAJOR", majorIdx });
   }
 
+  const seedCount = bracket.seeds?.length ?? (isDE ? 12 : 8);
   const formatStr = isDE
-    ? "12 Teams · Double Elimination"
+    ? `${seedCount} Teams · Double Elimination`
     : "Eight Teams · Single Elimination";
 
   return (
@@ -162,13 +163,13 @@ export default function MajorEntryOverlay() {
         {/* ── Seedings grid ── */}
         <div className="meo-seeds-block anim-stagger" style={{ "--stagger": 4 }}>
           <div className="meo-seeds-label">
-            {isDE ? "ALL 12 TEAMS" : "QUALIFIED TEAMS"}
+            {isDE && !isChamps ? `ALL ${seedCount} TEAMS` : "QUALIFIED TEAMS"}
           </div>
           <div className={`meo-seeds-grid ${isDE ? "meo-seeds-grid-de" : ""}`}>
             {bracket.seeds.map((id, i) => {
               const rec    = seedStandings[id] ?? { wins: 0, losses: 0, points: 0 };
               const isUser = id === userTeamId;
-              const hasBye = isDE && i <= 3;
+              const hasBye = isDE && !isChamps && i <= 3;
               return (
                 <div key={id} className={`meo-seed-row ${isUser ? "meo-seed-you" : ""}`}>
                   <span className="meo-seed-num">{i + 1}</span>

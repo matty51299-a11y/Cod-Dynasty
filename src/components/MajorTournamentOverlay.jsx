@@ -76,7 +76,7 @@ function teamsAlive(bracket, userTeamId) {
   }
 
   // Grand Final loser is eliminated even though they only have 1 loss in DE
-  const gfRound = isDE ? bracket.rounds[10] : bracket.rounds[2];
+  const gfRound = isDE ? bracket.rounds.find(r => r.type === "GF") : bracket.rounds[2];
   const gfPlayed = gfRound?.matches?.[0]?.played;
   if (gfPlayed) return 1; // champion only
 
@@ -91,7 +91,7 @@ function ChampionScreen({ major, dispatch }) {
   const champTeam = CDL_TEAMS.find(t => t.id === champId);
   const isDE     = bracket?.type === "DE";
   // Grand Final is last round
-  const gfRound  = isDE ? bracket?.rounds?.[10] : bracket?.rounds?.[2];
+  const gfRound  = isDE ? bracket?.rounds?.find(r => r.type === "GF") : bracket?.rounds?.[2];
   const gfResult = gfRound?.matches?.[0]?.result;
 
   return (
@@ -106,7 +106,7 @@ function ChampionScreen({ major, dispatch }) {
         <div className="mto-champ-name" style={{ color: champTeam?.color ?? "var(--text-head)" }}>
           {champTeam?.name ?? champId}
         </div>
-        <div className="mto-champ-subtitle">{isDE ? "Major Champion" : "Season Champions"}</div>
+        <div className="mto-champ-subtitle">{major.name === "Champs" ? "Season Champions" : isDE ? "Major Champion" : "Season Champions"}</div>
         {gfResult && (
           <div className="mto-champ-result">
             <span className="mto-champ-res-side mto-champ-res-winner" style={{ color: teamColor(gfResult.winnerId) }}>
@@ -338,40 +338,42 @@ function RoundSection({ round, roundIdx, bracket, isCurrentRound, userTeamId, ex
 }
 
 // ── DE bracket layout (WB / LB / GF sections) ────────────────────────────────
-// DE round indices: 0=WBR1 1=LBR1 2=WBR2 3=LBR2 4=LBR3 5=WBSF 6=LBR4 7=WBF 8=LBR5 9=LBF 10=GF
-const DE_WB_ROUNDS  = [0, 2, 5, 7];   // WB Round 1, WB Round 2, WB Semifinals, WB Final
-const DE_LB_ROUNDS  = [1, 3, 4, 6, 8, 9]; // LB Round 1–5 + LB Final
-const DE_GF_ROUNDS  = [10];            // Grand Final
-const DE_TBD_COUNTS = { 0:4, 2:4, 5:2, 7:1, 1:2, 3:2, 4:2, 6:2, 8:1, 9:1, 10:1 };
+// Groups rounds dynamically by round.type ("WB" / "LB" / "GF") so both the
+// 12-team Major bracket and the 8-team Champs bracket render correctly.
+const _LEGACY_TBD = { 0:4, 2:4, 5:2, 7:1, 1:2, 3:2, 4:2, 6:2, 8:1, 9:1, 10:1 };
 
 function DEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpandedKey }) {
   const rounds = bracket.rounds;
-  const mkSection = (indices, label, cls) => (
-    <div className={`mto-de-section ${cls}`}>
-      <div className="mto-de-section-label">{label}</div>
-      <div className="mto-bracket-rounds">
-        {indices.map(ri => (
-          <RoundSection
-            key={ri}
-            round={rounds[ri]}
-            roundIdx={ri}
-            bracket={bracket}
-            isCurrentRound={ri === curRound}
-            userTeamId={userTeamId}
-            expandedKey={expandedKey}
-            setExpandedKey={setExpandedKey}
-            tbd={DE_TBD_COUNTS[ri] ?? 1}
-          />
-        ))}
+  const mkSection = (type, label, cls) => {
+    const section = rounds.map((r, i) => ({ ...r, idx: i })).filter(r => r.type === type);
+    if (!section.length) return null;
+    return (
+      <div className={`mto-de-section ${cls}`}>
+        <div className="mto-de-section-label">{label}</div>
+        <div className="mto-bracket-rounds">
+          {section.map(r => (
+            <RoundSection
+              key={r.idx}
+              round={r}
+              roundIdx={r.idx}
+              bracket={bracket}
+              isCurrentRound={r.idx === curRound}
+              userTeamId={userTeamId}
+              expandedKey={expandedKey}
+              setExpandedKey={setExpandedKey}
+              tbd={r._tbd ?? _LEGACY_TBD[r.idx] ?? 1}
+            />
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="mto-de-bracket">
-      {mkSection(DE_WB_ROUNDS, "WINNERS BRACKET", "mto-de-wb")}
-      {mkSection(DE_LB_ROUNDS, "LOSERS BRACKET",  "mto-de-lb")}
-      {mkSection(DE_GF_ROUNDS, "GRAND FINAL",      "mto-de-gf")}
+      {mkSection("WB", "WINNERS BRACKET", "mto-de-wb")}
+      {mkSection("LB", "LOSERS BRACKET",  "mto-de-lb")}
+      {mkSection("GF", "GRAND FINAL",     "mto-de-gf")}
     </div>
   );
 }
