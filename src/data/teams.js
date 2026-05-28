@@ -2,6 +2,11 @@
 // The 12 CDL franchises for the 2026 season.
 // Each team has a unique id, display name, short tag, and primary color.
 
+import atlantaFazeLogo from "../assets/logos/Atlanta_FaZe_logo.png";
+import laThievesLogo from "../assets/logos/Cdl_la_thieves-red_la.png";
+import opticTexasLogo from "../assets/logos/Optic-Texas.png";
+import riyadhFalconsLogo from "../assets/logos/Riyadh_Falcons_logo.png";
+
 // budgetTier: 2–6 franchise spending capacity.
 //   6 = Riyadh Falcons only — highest budget in the CDL
 //   5 = top spenders (OpTic, FaZe, Paris) — can build star-heavy rosters
@@ -12,13 +17,13 @@ export const CDL_TEAMS = [
   { id: "boston",    name: "Boston Breach",          tag: "BOS",  color: "#C8102E", budgetTier: 2, logo: null },
   { id: "carolina",  name: "Carolina Royal Ravens",  tag: "CAR",  color: "#7B2D8B", budgetTier: 2 },
   { id: "cloud9",    name: "Cloud9 New York",        tag: "C9",   color: "#1B94DB", budgetTier: 2 },
-  { id: "faze",      name: "FaZe Vegas",             tag: "FaZe", color: "#CC0000", budgetTier: 5, logo: "/src/assets/logos/Atlanta_FaZe_logo.png" },
+  { id: "faze",      name: "FaZe Vegas",             tag: "FaZe", color: "#CC0000", budgetTier: 5, logo: atlantaFazeLogo },
   { id: "g2",        name: "G2 Minnesota",           tag: "G2",   color: "#56BE5A", budgetTier: 4 },
-  { id: "lat",       name: "Los Angeles Thieves",    tag: "LAT",  color: "#FF4500", budgetTier: 4, logo: "/src/assets/logos/Cdl_la_thieves-red_la.png" },
+  { id: "lat",       name: "Los Angeles Thieves",    tag: "LAT",  color: "#FF4500", budgetTier: 4, logo: laThievesLogo },
   { id: "miami",     name: "Miami Heretics",         tag: "MIA",  color: "#00B2A9", budgetTier: 4 },
-  { id: "optic",     name: "OpTic Texas",            tag: "OTX",  color: "#3BA03A", budgetTier: 5 },
+  { id: "optic",     name: "OpTic Texas",            tag: "OTX",  color: "#3BA03A", budgetTier: 5, logo: opticTexasLogo },
   { id: "paris",     name: "Paris Gentle Mates",     tag: "PGM",  color: "#0055A4", budgetTier: 5 },
-  { id: "riyadh",    name: "Riyadh Falcons",         tag: "RFL",  color: "#006C35", budgetTier: 6 },
+  { id: "riyadh",    name: "Riyadh Falcons",         tag: "RFL",  color: "#006C35", budgetTier: 6, logo: riyadhFalconsLogo },
   { id: "toronto",   name: "Toronto KOI",            tag: "TOR",  color: "#9B1CDB", budgetTier: 4 },
   { id: "vancouver", name: "Vancouver Surge",        tag: "VAN",  color: "#00AEEF", budgetTier: 2, logo: null },
 ];
