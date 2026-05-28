@@ -16,14 +16,14 @@ import { useGame }         from "../store/gameStore.jsx";
 import { useMatchCenter }  from "../store/matchCenterContext.jsx";
 import { CDL_TEAMS }       from "../data/teams.js";
 import { simMap, makeMatchRng, generateSeriesMods } from "../engine/matchSim.js";
-import { calcTeamOvr }     from "../engine/teamOvr.js";
 
-function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
-function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
-function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
+function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
+function teamColor(id, schedule) { return getTeamMeta(id, schedule)?.color ?? "#888"; }
+function teamName(id, schedule)  { return getTeamMeta(id, schedule)?.name  ?? id; }
+function teamTag(id, schedule)   { return getTeamMeta(id, schedule)?.tag   ?? id; }
 
-const MAP_MODES = ["Hardpoint", "Search & Destroy", "Control", "Hardpoint", "Search & Destroy"];
-const MODE_SHORT = { "Hardpoint": "HP", "Search & Destroy": "S&D", "Control": "CTL" };
+const MAP_MODES = ["Hardpoint", "Search & Destroy", "Overload", "Hardpoint", "Search & Destroy"];
+const MODE_SHORT = { "Hardpoint": "HP", "Search & Destroy": "S&D", "Overload": "OVR" };
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 const INIT = {
@@ -183,14 +183,14 @@ function reducer(state, action) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Scoreboard({ teamA, teamB, seriesScore, mapIdx, userTeamId }) {
+function Scoreboard({ teamA, teamB, seriesScore, mapIdx, userTeamId, schedule }) {
   const [wA, wB] = seriesScore;
   const mode     = MAP_MODES[mapIdx] ?? "";
   const short    = MODE_SHORT[mode] ?? "";
   return (
     <div className="mco-scoreboard">
       <div className={`mco-sb-team ${teamA.id === userTeamId ? "mco-sb-you" : ""}`}>
-        <span className="mco-sb-tag" style={{ color: teamColor(teamA.id) }}>{teamTag(teamA.id)}</span>
+        <span className="mco-sb-tag" style={{ color: teamColor(teamA.id, schedule) }}>{teamTag(teamA.id, schedule)}</span>
         {teamA.id === userTeamId && <span className="mco-sb-you-badge">YOU</span>}
       </div>
       <div className="mco-sb-score">
@@ -201,33 +201,33 @@ function Scoreboard({ teamA, teamB, seriesScore, mapIdx, userTeamId }) {
       </div>
       <div className={`mco-sb-team mco-sb-team-b ${teamB.id === userTeamId ? "mco-sb-you" : ""}`}>
         {teamB.id === userTeamId && <span className="mco-sb-you-badge">YOU</span>}
-        <span className="mco-sb-tag" style={{ color: teamColor(teamB.id) }}>{teamTag(teamB.id)}</span>
+        <span className="mco-sb-tag" style={{ color: teamColor(teamB.id, schedule) }}>{teamTag(teamB.id, schedule)}</span>
       </div>
     </div>
   );
 }
 
-function MomentumBar({ momentum, teamA, teamB }) {
+function MomentumBar({ momentum, teamA, teamB, schedule }) {
   const pct = Math.round(momentum * 100);
   return (
     <div className="mco-momentum-wrap">
-      <span className="mco-mom-label" style={{ color: teamColor(teamA.id) }}>{teamTag(teamA.id)}</span>
+      <span className="mco-mom-label" style={{ color: teamColor(teamA.id, schedule) }}>{teamTag(teamA.id, schedule)}</span>
       <div className="mco-momentum-bar">
         <div
           className="mco-momentum-fill"
           style={{
             width: `${pct}%`,
-            background: `linear-gradient(90deg, ${teamColor(teamA.id)}, ${teamColor(teamB.id)})`,
+            background: `linear-gradient(90deg, ${teamColor(teamA.id, schedule)}, ${teamColor(teamB.id, schedule)})`,
           }}
         />
         <div className="mco-momentum-marker" style={{ left: `${pct}%` }} />
       </div>
-      <span className="mco-mom-label" style={{ color: teamColor(teamB.id) }}>{teamTag(teamB.id)}</span>
+      <span className="mco-mom-label" style={{ color: teamColor(teamB.id, schedule) }}>{teamTag(teamB.id, schedule)}</span>
     </div>
   );
 }
 
-function PlayerRow({ pid, stats, teamId, userTeamId, isHeader }) {
+function PlayerRow({ pid, stats, teamId, userTeamId, isHeader, schedule }) {
   if (isHeader) {
     return (
       <div className="mco-player-row mco-player-header">
@@ -245,7 +245,7 @@ function PlayerRow({ pid, stats, teamId, userTeamId, isHeader }) {
 
   return (
     <div className={`mco-player-row ${isUser ? "mco-pr-user-team" : ""}`}>
-      <span className="mco-pr-name" style={isUser ? { color: teamColor(teamId) } : {}}>
+      <span className="mco-pr-name" style={isUser ? { color: teamColor(teamId, schedule) } : {}}>
         {stats.name}
       </span>
       <span className="mco-pr-k">{stats.kills}</span>
@@ -255,20 +255,21 @@ function PlayerRow({ pid, stats, teamId, userTeamId, isHeader }) {
   );
 }
 
-function LiveView({ teamA, teamB, currentMapStats, userTeamId }) {
+function LiveView({ teamA, teamB, currentMapStats, userTeamId, schedule }) {
   const aPlayers = teamA.players.slice(0, 4);
   const bPlayers = teamB.players.slice(0, 4);
 
   return (
     <div className="mco-live-view">
       <div className="mco-team-col">
-        <div className="mco-team-col-header" style={{ color: teamColor(teamA.id) }}>{teamTag(teamA.id)}</div>
-        <PlayerRow isHeader />
+        <div className="mco-team-col-header" style={{ color: teamColor(teamA.id, schedule) }}>{teamTag(teamA.id, schedule)}</div>
+        <PlayerRow isHeader schedule={schedule} />
         {aPlayers.map(p => (
           <PlayerRow
             key={p.id} pid={p.id}
             stats={currentMapStats?.[p.id] ?? { name: p.name, kills: "—", deaths: "—", kd: null }}
             teamId={teamA.id} userTeamId={userTeamId}
+            schedule={schedule}
           />
         ))}
       </div>
@@ -278,13 +279,14 @@ function LiveView({ teamA, teamB, currentMapStats, userTeamId }) {
       </div>
 
       <div className="mco-team-col">
-        <div className="mco-team-col-header" style={{ color: teamColor(teamB.id) }}>{teamTag(teamB.id)}</div>
-        <PlayerRow isHeader />
+        <div className="mco-team-col-header" style={{ color: teamColor(teamB.id, schedule) }}>{teamTag(teamB.id, schedule)}</div>
+        <PlayerRow isHeader schedule={schedule} />
         {bPlayers.map(p => (
           <PlayerRow
             key={p.id} pid={p.id}
             stats={currentMapStats?.[p.id] ?? { name: p.name, kills: "—", deaths: "—", kd: null }}
             teamId={teamB.id} userTeamId={userTeamId}
+            schedule={schedule}
           />
         ))}
       </div>
@@ -292,13 +294,13 @@ function LiveView({ teamA, teamB, currentMapStats, userTeamId }) {
   );
 }
 
-function MapHistoryRow({ mr, teamA, teamB }) {
+function MapHistoryRow({ mr, teamA, teamB, schedule }) {
   const won = mr.winnerId === teamA.id;
   return (
     <div className={`mco-map-history-row ${won ? "mco-mhr-a" : "mco-mhr-b"}`}>
       <span className="mco-mhr-map">Map {mr.mapNum} · {mr.short}</span>
       <span className="mco-mhr-score">
-        <span style={{ color: teamColor(mr.winnerId) }}>{teamTag(mr.winnerId)}</span>
+        <span style={{ color: teamColor(mr.winnerId, schedule) }}>{teamTag(mr.winnerId, schedule)}</span>
         <span className="mco-mhr-sc">{mr.scoreWinner}–{mr.scoreLoser}</span>
       </span>
     </div>
@@ -357,6 +359,13 @@ export default function MatchCenterOverlay() {
   }, [mcState.procs]);
 
   // Derive team objects from game state
+  function buildSide(id) {
+    const eventTeam = state?.schedule?.currentMajorEventTeams?.[id];
+    if (eventTeam) return { id: eventTeam.id, name: eventTeam.name, tag: eventTeam.tag, color: eventTeam.color, players: eventTeam.players || [] };
+    const meta = CDL_TEAMS.find(t => t.id === id) ?? { id, name: id, tag: id, color: "#888" };
+    return { id: meta.id, name: meta.name, tag: meta.tag, color: meta.color, players: (state.players || []).filter(p => p.teamId === id) };
+  }
+
   const teamA = (() => {
     if (!state || !ctx) return null;
     const { schedule, players, userTeamId } = state;
@@ -365,8 +374,7 @@ export default function MatchCenterOverlay() {
       const m = stage?.matches.find(mx => !mx.played && (mx.a === userTeamId || mx.b === userTeamId));
       if (!m) return null;
       const id = m.a;
-      const meta = CDL_TEAMS.find(t => t.id === id) ?? { id, name: id };
-      return { id: meta.id, name: meta.name, players: players.filter(p => p.teamId === id) };
+      return buildSide(id);
     }
     if (ctx.type === "major") {
       const bracket = schedule.majors?.[schedule.majorIdx]?.bracket;
@@ -375,8 +383,7 @@ export default function MatchCenterOverlay() {
         const m = round.matches.find(mx => !mx.played && (mx.a === userTeamId || mx.b === userTeamId));
         if (m) {
           const id = m.a;
-          const meta = CDL_TEAMS.find(t => t.id === id) ?? { id, name: id };
-          return { id: meta.id, name: meta.name, players: players.filter(p => p.teamId === id) };
+          return buildSide(id);
         }
       }
     }
@@ -391,8 +398,7 @@ export default function MatchCenterOverlay() {
       const m = stage?.matches.find(mx => !mx.played && (mx.a === userTeamId || mx.b === userTeamId));
       if (!m) return null;
       const id = m.b;
-      const meta = CDL_TEAMS.find(t => t.id === id) ?? { id, name: id };
-      return { id: meta.id, name: meta.name, players: players.filter(p => p.teamId === id) };
+      return buildSide(id);
     }
     if (ctx.type === "major") {
       const bracket = schedule.majors?.[schedule.majorIdx]?.bracket;
@@ -401,8 +407,7 @@ export default function MatchCenterOverlay() {
         const m = round.matches.find(mx => !mx.played && (mx.a === state.userTeamId || mx.b === state.userTeamId));
         if (m) {
           const id = m.b;
-          const meta = CDL_TEAMS.find(t => t.id === id) ?? { id, name: id };
-          return { id: meta.id, name: meta.name, players: players.filter(p => p.teamId === id) };
+          return buildSide(id);
         }
       }
     }
@@ -457,9 +462,13 @@ export default function MatchCenterOverlay() {
 
   // ── Pregame ──────────────────────────────────────────────────────────────────
   if (phase === "pregame") {
-    const userOvr = calcTeamOvr(userTeamId, state.players);
-    const oppId   = userTeamIsA ? teamB.id : teamA.id;
-    const oppOvr  = calcTeamOvr(oppId, state.players);
+    const teamOvr = t => {
+      const starters = (t.players || []).slice(0, 4).filter(p => !p.isSub);
+      if (!starters.length) return 0;
+      return Math.round(starters.reduce((s, p) => s + (p.overall || 0), 0) / starters.length);
+    };
+    const userOvr = userTeamIsA ? teamOvr(teamA) : teamOvr(teamB);
+    const oppOvr  = userTeamIsA ? teamOvr(teamB) : teamOvr(teamA);
     const ctxLabel = ctx.type === "major"
       ? (() => {
           const bracket = state.schedule.majors?.[state.schedule.majorIdx]?.bracket;
@@ -480,15 +489,15 @@ export default function MatchCenterOverlay() {
 
           <div className="mco-pg-matchup">
             <div className="mco-pg-team">
-              <div className="mco-pg-tag" style={{ color: teamColor(teamA.id) }}>{teamTag(teamA.id)}</div>
-              <div className="mco-pg-name">{teamName(teamA.id)}</div>
+              <div className="mco-pg-tag" style={{ color: teamColor(teamA.id, state.schedule) }}>{teamTag(teamA.id, state.schedule)}</div>
+              <div className="mco-pg-name">{teamName(teamA.id, state.schedule)}</div>
               <div className="mco-pg-ovr">{teamA.id === userTeamId ? userOvr : oppOvr} OVR</div>
               {teamA.id === userTeamId && <span className="mco-pg-you">YOU</span>}
             </div>
             <div className="mco-pg-vs">vs</div>
             <div className="mco-pg-team">
-              <div className="mco-pg-tag" style={{ color: teamColor(teamB.id) }}>{teamTag(teamB.id)}</div>
-              <div className="mco-pg-name">{teamName(teamB.id)}</div>
+              <div className="mco-pg-tag" style={{ color: teamColor(teamB.id, state.schedule) }}>{teamTag(teamB.id, state.schedule)}</div>
+              <div className="mco-pg-name">{teamName(teamB.id, state.schedule)}</div>
               <div className="mco-pg-ovr">{teamB.id === userTeamId ? userOvr : oppOvr} OVR</div>
               {teamB.id === userTeamId && <span className="mco-pg-you">YOU</span>}
             </div>
@@ -518,9 +527,9 @@ export default function MatchCenterOverlay() {
             <div className="mco-final-outcome">{userWon ? "VICTORY" : "DEFEAT"}</div>
             <div className="mco-final-score">{finalResult.score}</div>
             <div className="mco-final-teams">
-              <span style={{ color: teamColor(finalResult.winnerId) }}>{teamTag(finalResult.winnerId)}</span>
+              <span style={{ color: teamColor(finalResult.winnerId, state.schedule) }}>{teamTag(finalResult.winnerId, state.schedule)}</span>
               <span className="mco-final-dash"> — </span>
-              <span style={{ color: teamColor(finalResult.loserId), opacity: 0.6 }}>{teamTag(finalResult.loserId)}</span>
+              <span style={{ color: teamColor(finalResult.loserId, state.schedule), opacity: 0.6 }}>{teamTag(finalResult.loserId, state.schedule)}</span>
             </div>
           </div>
 
@@ -533,7 +542,7 @@ export default function MatchCenterOverlay() {
 
           <div className="mco-final-maps">
             {mapResults.map(mr => (
-              <MapHistoryRow key={mr.mapNum} mr={mr} teamA={teamA} teamB={teamB} />
+              <MapHistoryRow key={mr.mapNum} mr={mr} teamA={teamA} teamB={teamB} schedule={state.schedule} />
             ))}
           </div>
 
@@ -551,7 +560,7 @@ export default function MatchCenterOverlay() {
               const divider = p === teamB.players[0] ? "mco-fst-divider" : "";
               return (
                 <div key={p.id} className={`mco-fst-row ${p.teamId === userTeamId ? "mco-fst-user" : ""} ${divider}`}>
-                  <span className="mco-fst-name" style={{ color: teamColor(p.teamId) }}>{s.name}</span>
+                  <span className="mco-fst-name" style={{ color: teamColor(p.teamId, state.schedule) }}>{s.name}</span>
                   <span className="mco-fst-k">{s.kills}</span>
                   <span className="mco-fst-d">{s.deaths}</span>
                   <span className={`mco-fst-kd ${kdCls}`}>{s.kd?.toFixed(2)}</span>
@@ -586,6 +595,7 @@ export default function MatchCenterOverlay() {
           seriesScore={seriesScore}
           mapIdx={seriesMapIdx}
           userTeamId={userTeamId}
+          schedule={state.schedule}
         />
 
         {/* Momentum bar */}
@@ -606,7 +616,7 @@ export default function MatchCenterOverlay() {
               <>
                 {lastMapResult && (
                   <div className={`mco-map-winner ${lastMapResult.winnerId === userTeamId ? "mco-mw-user-win" : lastMapResult.loserId === userTeamId ? "mco-mw-user-loss" : ""}`}>
-                    <span style={{ color: teamColor(lastMapResult.winnerId) }}>{teamTag(lastMapResult.winnerId)}</span>
+                    <span style={{ color: teamColor(lastMapResult.winnerId, state.schedule) }}>{teamTag(lastMapResult.winnerId, state.schedule)}</span>
                     {" "}win Map {lastMapResult.mapNum} — {lastMapResult.short}
                     <span className="mco-mw-score"> {lastMapResult.scoreWinner}–{lastMapResult.scoreLoser}</span>
                   </div>
@@ -615,6 +625,7 @@ export default function MatchCenterOverlay() {
                   teamA={teamA} teamB={teamB}
                   currentMapStats={currentMapStats}
                   userTeamId={userTeamId}
+                  schedule={state.schedule}
                 />
               </>
             )}
@@ -629,7 +640,7 @@ export default function MatchCenterOverlay() {
             {mapResults.length === 0
               ? <div className="mco-history-empty muted">No maps played yet</div>
               : mapResults.map(mr => (
-                  <MapHistoryRow key={mr.mapNum} mr={mr} teamA={teamA} teamB={teamB} />
+                  <MapHistoryRow key={mr.mapNum} mr={mr} teamA={teamA} teamB={teamB} schedule={state.schedule} />
                 ))
             }
 
