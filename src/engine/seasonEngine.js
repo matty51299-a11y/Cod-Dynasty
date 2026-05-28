@@ -525,6 +525,31 @@ function _simOneChampsMatchDE(schedule, gameState, precomputedResult = null) {
   return { roundIdx, allComplete: false };
 }
 
+
+function _resolveMajorCompletion(major) {
+  const bracket = major?.bracket;
+  if (!major || !bracket) return false;
+  if (major.completed) return true;
+
+  const rounds = bracket.rounds || [];
+  const gfRound = rounds.find(r => r.type === "GF") || rounds[rounds.length - 1];
+  const gfMatch = gfRound?.matches?.[0] || null;
+
+  if (gfMatch?.played && gfMatch.result?.winnerId) {
+    bracket.champion = bracket.champion || gfMatch.result.winnerId;
+    major.completed = true;
+    return true;
+  }
+
+  const hasUnplayed = rounds.some(r => (r.matches || []).some(m => !m.played));
+  if (!hasUnplayed && bracket.champion) {
+    major.completed = true;
+    return true;
+  }
+
+  return false;
+}
+
 function _simOneMajorMatchDE16(schedule, gameState, precomputedResult = null) {
   const majorIdx = schedule.majorIdx;
   const major = schedule.majors[majorIdx];
@@ -829,7 +854,7 @@ export function simNextMajorMatch(gameState) {
 
   const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
   let nextState = gameState;
-  if (allComplete) nextState = _advanceMajorPhase(schedule, gameState);
+  if (allComplete || _resolveMajorCompletion(major)) nextState = _advanceMajorPhase(schedule, gameState);
 
   return { ...nextState, schedule: { ...schedule } };
 }
@@ -860,7 +885,7 @@ export function simMajorRound(gameState) {
     if (!rnd || rnd.matches.every(m => m.played)) break;
 
     const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
-    if (allComplete) {
+    if (allComplete || _resolveMajorCompletion(schedule.majors[schedule.majorIdx])) {
       gameState = _advanceMajorPhase(schedule, gameState);
       break;
     }
@@ -881,7 +906,7 @@ export function simMajor(gameState) {
   let safety = 0;
   while (!schedule.majors[targetIdx].completed && safety++ < 200) {
     const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
-    if (allComplete) {
+    if (allComplete || _resolveMajorCompletion(schedule.majors[schedule.majorIdx])) {
       gameState = _advanceMajorPhase(schedule, gameState);
       break;
     }
@@ -1716,7 +1741,11 @@ export function commitUserMatchResult(state, result) {
     if (stage.matches.every(m => m.played)) {
       schedule.phase    = "major";
       schedule.majorIdx = schedule.stageIdx;
-      schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE(schedule.stageStandings);
+      const cdlSeeds = Object.entries(schedule.stageStandings).sort((a,b)=>b[1].points-a[1].points).map(([id])=>id);
+      const eventTeams = simulateChallengerQualifier(state, schedule);
+      const majorSeeds = [...cdlSeeds, ...eventTeams.map(t=>t.id)];
+      schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
+      schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE16(majorSeeds);
     }
 
     schedule.currentMatchday++;
@@ -1740,7 +1769,7 @@ export function commitUserMatchResult(state, result) {
     _updateFormSimple(state.players.filter(p => p.teamId === result.teamBId).slice(0, 4), !teamAWon);
 
     let nextState = state;
-    if (allComplete) nextState = _advanceMajorPhase(schedule, state);
+    if (allComplete || _resolveMajorCompletion(schedule.majors[schedule.majorIdx])) nextState = _advanceMajorPhase(schedule, state);
 
     return { ...nextState, schedule: { ...schedule } };
   }
