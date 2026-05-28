@@ -30,7 +30,7 @@ const CHALLENGER_REGIONS = {
   omit_brooklyn: "NA", omit_noir: "NA", project_notorious: "NA", project_7: "EU",
   death_by_cabal: "EU", huntsmen: "NA", stallions: "NA", telluride_bush: "NA",
   next_threat_black: "NA", stallions_x_bush: "NA", omnia_ggs: "EU", five_fears: "EU",
-  faze_falcons: "MENA", for_fun_esports: "EU",
+  faze_falcons: "MENA", for_fun_esports: "EU", high_treason: "NA", for_fun_black: "EU",
 };
 const CHALLENGER_TEAM_POOL = [
   { id: "omit_brooklyn", name: "Omit Brooklyn", tag: "OBK", color: "#c084fc", logo: omitBrooklynLogo },
@@ -47,6 +47,8 @@ const CHALLENGER_TEAM_POOL = [
   { id: "five_fears", name: "Five Fears", tag: "5FR", color: "#f59e0b", logo: fiveFearsLogo },
   { id: "faze_falcons", name: "Faze Falcons", tag: "FF", color: "#ef4444", logo: fazeFalconsLogo },
   { id: "for_fun_esports", name: "For Fun Esports", tag: "FFE", color: "#38bdf8", logo: forFunEsportsLogo },
+  { id: "high_treason", name: "High Treason", tag: "HT", color: "#7f1d1d" },
+  { id: "for_fun_black", name: "For Fun Black", tag: "FFB", color: "#334155" },
 ];
 import { runProgression } from "./progression.js";
 import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand } from "./rosterAI.js";
@@ -280,7 +282,7 @@ function simulateChallengerQualifier(gameState, schedule, eventKey = "major") {
 
   const ptsFor = (pl) => (pl === 1 ? 25 : pl === 2 ? 20 : pl === 3 ? 15 : pl === 4 ? 10 : pl <= 8 ? 5 : 0);
   const qualified = results.slice(0, CHALLENGER_QUALIFIER_TEAMS);
-  const resObj = { season: schedule.season, majorIdx: schedule.majorIdx, teams: results.map(r => ({ teamId: r.teamId, placement: r.placement, teamOvr: r.ovr, qualified: r.placement <= 4, circuitPointsAwarded: ptsFor(r.placement), formBefore: r.formBefore, formAfter: r.formBefore + (r.placement <= 4 ? 2 : -1) })) };
+  const resObj = { season: schedule.season, majorIdx: schedule.majorIdx, teams: results.map(r => ({ teamId: r.teamId, placement: r.placement, teamOvr: r.ovr, score: Number(r.score.toFixed(2)), qualified: r.placement <= 4, circuitPointsAwarded: ptsFor(r.placement), formBefore: r.formBefore, formAfter: r.formBefore + (r.placement <= 4 ? 2 : -1) })) };
   schedule.challengerQualifierResults = [...(schedule.challengerQualifierResults || []), resObj];
   gameState.challengerTeams = (gameState.challengerTeams || []).map(t => {
     const row = resObj.teams.find(x => x.teamId === t.id);
@@ -293,22 +295,39 @@ function simulateChallengerQualifier(gameState, schedule, eventKey = "major") {
 }
 
 export function ensureChallengerTeams(gameState) {
-  if ((gameState.challengerTeams || []).length) return;
-  const teamDefs = CHALLENGER_TEAM_POOL.map(t => ({ ...t, region: CHALLENGER_REGIONS[t.id] ?? "NA", playerIds: [], circuitPoints: 0, form: 0, lastQualifierPlacement: null, qualifiedMajorIdxs: [] }));
+  const existing = gameState.challengerTeams || [];
+  const byId = new Map(existing.map(t => [t.id, t]));
+  const mkTeam = (base) => ({
+    ...base,
+    region: CHALLENGER_REGIONS[base.id] ?? "NA",
+    playerIds: [],
+    circuitPoints: 0,
+    form: 0,
+    lastQualifierPlacement: null,
+    qualifiedMajorIdxs: [],
+  });
+  const merged = CHALLENGER_TEAM_POOL.map(base => {
+    const cur = byId.get(base.id);
+    return cur ? { ...mkTeam(base), ...cur, ...base, region: cur.region ?? CHALLENGER_REGIONS[base.id] ?? "NA" } : mkTeam(base);
+  });
+
   const free = (gameState.prospects || []).filter(p => !p.teamId).sort((a,b)=>(b.overall??0)-(a.overall??0));
-  const used = new Set();
-  for (const team of teamDefs) {
-    const same = free.filter(p => !used.has(p.id) && ((p.region || team.region) === team.region)).slice(0, 4);
+  const used = new Set(merged.flatMap(t => t.playerIds || []));
+  for (const team of merged) {
+    const current = (team.playerIds || []).filter(pid => gameState.prospects?.some(p => p.id === pid) || gameState.players?.some(p => p.id === pid));
+    if (current.length >= 4) { team.playerIds = current.slice(0, 4); continue; }
+    const need = 4 - current.length;
+    const same = free.filter(p => !used.has(p.id) && ((p.region || team.region) === team.region)).slice(0, need);
     let picks = same;
-    if (picks.length < 4) picks = [...picks, ...free.filter(p => !used.has(p.id) && !picks.find(x => x.id === p.id)).slice(0, 4 - picks.length)];
-    team.playerIds = picks.slice(0, 4).map(p => p.id);
-    for (const p of picks.slice(0, 4)) {
+    if (picks.length < need) picks = [...picks, ...free.filter(p => !used.has(p.id) && !picks.find(x => x.id === p.id)).slice(0, need - picks.length)];
+    team.playerIds = [...current, ...picks.map(p => p.id)];
+    for (const p of picks) {
       used.add(p.id);
       p.challengerTeamId = team.id;
       if (!p.region) p.region = team.region;
     }
   }
-  gameState.challengerTeams = teamDefs;
+  gameState.challengerTeams = merged;
 }
 
 // ── Build 12-team Double-Elimination bracket (Majors 1–4) ────────────────────
