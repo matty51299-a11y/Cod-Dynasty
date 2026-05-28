@@ -7,7 +7,7 @@ import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
 
@@ -394,6 +394,12 @@ function reducer(state, action) {
 
     case "SIM_CHALLENGER_QUALIFIER":
       return simChallengerQualifier({ ...state });
+
+    case "SIM_NEXT_CHALLENGER_QUALIFIER_MATCH":
+      return simNextChallengerQualifierMatch({ ...state });
+
+    case "SIM_CHALLENGER_QUALIFIER_ROUND":
+      return simChallengerQualifierRound({ ...state });
 
     case "CONTINUE_FROM_CHALLENGER_QUALIFIER":
       return continueFromChallengerQualifier({ ...state });

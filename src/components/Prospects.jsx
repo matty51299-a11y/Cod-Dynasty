@@ -27,6 +27,19 @@ const ARCH_LABELS = {
   glue: "Glue Player", obj_spec: "Objective Specialist",
 };
 const TAB_KEYS = ["all", "veterans", "prospects", "proam", "shortlist"];
+
+function transactionLabel(type) {
+  return {
+    CDL_RELEASE_TO_CHALLENGERS: "CDL release to Challengers",
+    CHALLENGER_TO_POOL: "Moved to Challengers pool",
+    CHALLENGER_REPLACED: "Challenger replacement",
+    CHALLENGER_REFILL: "Challenger roster fill",
+    CDL_SIGNING: "CDL signing",
+    INACTIVE: "Inactive",
+    RETIREMENT: "Retirement",
+  }[type] || String(type || "Move").replaceAll("_", " ").toLowerCase().replace(/^./, c => c.toUpperCase());
+}
+
 function challengerStockLabel(p) {
   const ovr = p.overall ?? p.scoutedOverall ?? 70;
   const pot = p.potential ?? p.scoutedPotential ?? ovr;
@@ -189,7 +202,7 @@ export default function Prospects() {
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {(challengerTransactions || []).slice(-10).reverse().map((tx, i) => (
               <li key={`${tx.playerId}_${tx.season}_${i}`} style={{ marginBottom: 4 }}>
-                S{tx.season} · {tx.type} · {tx.note || `${tx.playerName} moved`}
+                S{tx.season} · {transactionLabel(tx.type)} · {tx.note || `${tx.playerName} moved`}
               </li>
             ))}
           </ul>

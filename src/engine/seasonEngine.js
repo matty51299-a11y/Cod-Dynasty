@@ -85,6 +85,10 @@ function majorSeed(season, majorIdx, roundIdx, matchIdx) {
   return season * 1_000_000 + majorIdx * 100_000 + (roundIdx + 1) * 10_000 + (matchIdx + 1) * 100 + 7;
 }
 
+function challengerQualifierSeed(season, majorIdx, roundIdx, matchIdx, matchNumber = 0) {
+  return season * 2_000_000 + (majorIdx + 1) * 200_000 + (roundIdx + 1) * 2_000 + (matchIdx + 1) * 37 + matchNumber * 17 + 97;
+}
+
 // ── Initial standings ─────────────────────────────────────────────────────────
 export function initStandings(teamIds) {
   return Object.fromEntries(teamIds.map(id => [id, { wins: 0, losses: 0, points: 0 }]));
@@ -351,16 +355,29 @@ function getExistingQualifierForMajor(schedule, majorIdx = schedule?.majorIdx) {
   );
 }
 
+function buildChallengerQualifierBracket(field) {
+  return buildMajorBracketDE16((field || []).slice().sort((a, b) => a.seed - b.seed).map(row => row.teamId));
+}
+
 function createChallengerQualifierEvent(gameState, schedule) {
   const majorIdx = schedule.stageIdx ?? schedule.majorIdx ?? 0;
   const existing = schedule.currentChallengerQualifier;
-  if (existing?.season === schedule.season && existing?.majorIdx === majorIdx) return existing;
+  if (existing?.season === schedule.season && existing?.majorIdx === majorIdx) {
+    if (!existing.bracket && !existing.completed) {
+      const field = existing.field?.length ? existing.field : buildChallengerQualifierField(gameState, { ...schedule, majorIdx });
+      return { ...existing, field, bracket: buildChallengerQualifierBracket(field), matchLog: existing.matchLog || [] };
+    }
+    return existing;
+  }
+  const field = buildChallengerQualifierField(gameState, { ...schedule, majorIdx });
   return {
     season: schedule.season,
     majorIdx,
     name: `Major ${majorIdx + 1} Qualifier`,
     completed: false,
-    field: buildChallengerQualifierField(gameState, { ...schedule, majorIdx }),
+    field,
+    bracket: buildChallengerQualifierBracket(field),
+    matchLog: [],
     results: [],
   };
 }
@@ -373,48 +390,125 @@ function enterChallengerQualifierPhase(gameState, schedule) {
   return { ...gameState, schedule: { ...schedule } };
 }
 
-export function simChallengerQualifier(gameState) {
-  const schedule = gameState.schedule;
-  if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+function challengerTeamObj(teamId, gameState, field = []) {
+  const row = field.find(r => r.teamId === teamId);
+  const base = (gameState.challengerTeams || []).find(t => t.id === teamId) || row || { id: teamId, name: teamId };
+  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
+  const roster = getChallengerRoster({ ...base, playerIds: row?.rosterIds || base.playerIds || [] }, gameState, cdlNames);
+  return { id: teamId, name: row?.teamName || base.name || teamId, players: roster };
+}
 
-  const majorIdx = schedule.majorIdx ?? schedule.stageIdx ?? 0;
-  const current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
-  if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
+function findNextBracketMatch(bracket) {
+  for (let r = 0; r < (bracket?.rounds || []).length; r++) {
+    const round = bracket.rounds[r];
+    const idx = (round.matches || []).findIndex(m => !m.played && m.a && m.b);
+    if (idx !== -1) return { roundIdx: r, round, matchIdx: idx, match: round.matches[idx] };
+  }
+  return null;
+}
 
-  const rng = seededRng(schedule.season * 9991 + (majorIdx + 1) * 379 + 41);
-  const field = (current.field?.length ? current.field : buildChallengerQualifierField(gameState, schedule));
-  const results = field.map((row) => {
-    const seedBonus = (17 - row.seed) * 0.28;
-    const rosterCompleteness = Math.min(4, row.rosterIds?.length ?? 0);
-    const disruptionPenalty = rosterCompleteness < 4 ? (4 - rosterCompleteness) * 3 : 0;
-    const formScore = (row.formBefore ?? 0) * 1.15;
-    const variance = (rng() + rng() + rng() - 1.5) * 8;
-    const upsetSwing = rng() < 0.16 ? (rng() * 10 - 2) : 0;
-    const performanceScore = (row.teamOvr ?? 65) + formScore + seedBonus - disruptionPenalty + variance + upsetSwing;
-    return { ...row, performanceScore: Number(performanceScore.toFixed(2)) };
-  }).sort((a, b) => b.performanceScore - a.performanceScore || a.seed - b.seed)
-    .map((row, idx) => {
-      const placement = idx + 1;
-      const circuitPointsAwarded = challengerPointsForPlacement(placement);
-      const qualified = placement <= CHALLENGER_QUALIFIER_TEAMS;
-      const formAfter = Math.max(-10, Math.min(10, (row.formBefore ?? 0) + (qualified ? 2 : placement <= 8 ? 0 : -1)));
-      return {
-        ...row,
-        placement,
-        qualified,
-        placementLabel: placementLabel(placement),
-        circuitPointsAwarded,
-        circuitPointsAfter: (row.circuitPointsBefore ?? 0) + circuitPointsAwarded,
-        formAfter,
-      };
-    });
+function _advanceQualifierBracket(bracket, roundIdx) {
+  const round = bracket.rounds[roundIdx];
+  if (!round.matches.every(m => m.played)) return false;
+  const winners = round.matches.map(m => m.result.winnerId);
+  const losers = round.matches.map(m => m.result.loserId);
+  switch (roundIdx) {
+    case 0:
+      bracket.rounds[1].matches = [{ a: losers[0], b: losers[1], played:false,result:null},{ a: losers[2], b: losers[3], played:false,result:null},{ a: losers[4], b: losers[5], played:false,result:null},{ a: losers[6], b: losers[7], played:false,result:null}];
+      bracket.rounds[2].matches = [{ a:winners[0], b:winners[1], played:false,result:null},{ a:winners[2], b:winners[3], played:false,result:null},{ a:winners[4], b:winners[5], played:false,result:null},{ a:winners[6], b:winners[7], played:false,result:null}];
+      break;
+    case 1: break;
+    case 2: {
+      bracket.rounds[5].matches = [{ a:winners[0], b:winners[1], played:false,result:null},{ a:winners[2], b:winners[3], played:false,result:null}];
+      const lb1w = bracket.rounds[1].matches.map(m=>m.result.winnerId);
+      bracket.rounds[3].matches = [{a:lb1w[0], b:losers[0], played:false,result:null},{a:lb1w[1], b:losers[1], played:false,result:null},{a:lb1w[2], b:losers[2], played:false,result:null},{a:lb1w[3], b:losers[3], played:false,result:null}];
+      break;
+    }
+    case 3: bracket.rounds[4].matches = [{a:winners[0],b:winners[1],played:false,result:null},{a:winners[2],b:winners[3],played:false,result:null}]; break;
+    case 4: bracket._lbr3Winners = winners; break;
+    case 5:
+      bracket.rounds[7].matches = [{ a:winners[0], b:winners[1], played:false,result:null }];
+      bracket.rounds[6].matches = [{ a: bracket._lbr3Winners[0], b: losers[0], played:false,result:null},{ a: bracket._lbr3Winners[1], b: losers[1], played:false,result:null}];
+      break;
+    case 6: bracket.rounds[8].matches = [{ a:winners[0], b:winners[1], played:false,result:null }]; break;
+    case 7: bracket._wbChampion=winners[0]; bracket._wbFLoser=losers[0]; _tryPopulateLBFinal(bracket); break;
+    case 8: _tryPopulateLBFinal(bracket); break;
+    case 9: bracket.rounds[10].matches = [{ a:bracket._wbChampion, b:winners[0], played:false,result:null }]; break;
+    case 10: bracket.champion=winners[0]; return true;
+  }
+  return false;
+}
 
-  const completed = { ...current, field, results, completed: true };
+function _simOneChallengerQualifierMatch(current, gameState, schedule) {
+  const bracket = current.bracket ?? buildChallengerQualifierBracket(current.field || []);
+  current.bracket = bracket;
+  const next = findNextBracketMatch(bracket);
+  if (!next) return { allComplete: !!bracket.champion, roundIdx: -1 };
+  const { roundIdx, round, matchIdx, match } = next;
+  const result = simMatch(
+    challengerTeamObj(match.a, gameState, current.field || []),
+    challengerTeamObj(match.b, gameState, current.field || []),
+    challengerQualifierSeed(schedule.season, current.majorIdx ?? schedule.majorIdx ?? 0, roundIdx, matchIdx, (current.matchLog || []).length)
+  );
+  match.played = true;
+  match.result = result;
+  current.matchLog = [...(current.matchLog || []), {
+    roundIdx,
+    roundName: round.name,
+    matchIdx,
+    teamAId: result.teamAId,
+    teamAName: result.teamAName,
+    teamBId: result.teamBId,
+    teamBName: result.teamBName,
+    winnerId: result.winnerId,
+    winnerName: result.winnerName,
+    loserId: result.loserId,
+    loserName: result.loserName,
+    score: result.score,
+  }];
+  const complete = _advanceQualifierBracket(bracket, roundIdx);
+  return { allComplete: complete, roundIdx };
+}
+
+function finalizeChallengerQualifier(gameState, schedule, current) {
+  if (current.completed && current.results?.length) return current;
+  const majorIdx = current.majorIdx ?? schedule.majorIdx ?? schedule.stageIdx ?? 0;
+  const placements = computeDE16Placements(current.bracket);
+  const records = {};
+  for (const match of current.matchLog || []) {
+    records[match.winnerId] = records[match.winnerId] || { wins: 0, losses: 0 };
+    records[match.loserId] = records[match.loserId] || { wins: 0, losses: 0 };
+    records[match.winnerId].wins += 1;
+    records[match.loserId].losses += 1;
+  }
+  const results = (current.field || []).map(row => {
+    const placement = placements[row.teamId] ?? 16;
+    const circuitPointsAwarded = challengerPointsForPlacement(placement);
+    const qualified = placement <= CHALLENGER_QUALIFIER_TEAMS;
+    const rec = records[row.teamId] || { wins: 0, losses: 0 };
+    const formAfter = Math.max(-10, Math.min(10, (row.formBefore ?? 0) + (qualified ? 2 : placement <= 8 ? 0 : -1)));
+    return {
+      ...row,
+      placement,
+      qualified,
+      placementLabel: placementLabel(placement),
+      circuitPointsAwarded,
+      circuitPointsAfter: (row.circuitPointsBefore ?? 0) + circuitPointsAwarded,
+      formAfter,
+      matchRecord: rec,
+      bracketResult: `${rec.wins}-${rec.losses}`,
+      performanceScore: `${rec.wins}-${rec.losses}`,
+    };
+  }).sort((a, b) => a.placement - b.placement || a.seed - b.seed);
+
+  const completed = { ...current, results, completed: true };
   const historyEntry = {
     season: schedule.season,
     majorIdx,
     source: "visibleQualifier",
     completed: true,
+    bracketType: "DE16",
+    matchLog: completed.matchLog || [],
     teams: results.map(r => ({
       season: schedule.season,
       majorIdx,
@@ -430,16 +524,15 @@ export function simChallengerQualifier(gameState) {
       formBefore: r.formBefore,
       formAfter: r.formAfter,
       qualified: r.qualified,
+      matchRecord: r.matchRecord,
+      bracketResult: r.bracketResult,
       score: r.performanceScore,
     })),
   };
-
   const alreadyStored = getExistingQualifierForMajor(schedule, majorIdx);
   schedule.challengerQualifierResults = alreadyStored
     ? (schedule.challengerQualifierResults || []).map(r => (r === alreadyStored ? historyEntry : r))
     : [...(schedule.challengerQualifierResults || []), historyEntry];
-  schedule.currentChallengerQualifier = completed;
-
   gameState.challengerTeams = (gameState.challengerTeams || []).map(t => {
     const row = results.find(x => x.teamId === t.id);
     return row ? {
@@ -450,7 +543,49 @@ export function simChallengerQualifier(gameState) {
       qualifiedMajorIdxs: row.qualified ? [...new Set([...(t.qualifiedMajorIdxs || []), majorIdx])] : (t.qualifiedMajorIdxs || []),
     } : t;
   });
+  return completed;
+}
 
+export function simNextChallengerQualifierMatch(gameState) {
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  const current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
+  if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
+  const working = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
+  const { allComplete } = _simOneChallengerQualifierMatch(working, gameState, schedule);
+  schedule.currentChallengerQualifier = allComplete ? finalizeChallengerQualifier(gameState, schedule, working) : working;
+  return { ...gameState, schedule: { ...schedule } };
+}
+
+export function simChallengerQualifierRound(gameState) {
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  let current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
+  if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
+  current = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
+  const next = findNextBracketMatch(current.bracket);
+  if (!next) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: finalizeChallengerQualifier(gameState, schedule, current) } };
+  const startRound = next.roundIdx;
+  let safety = 0;
+  while (safety++ < 20) {
+    const still = findNextBracketMatch(current.bracket);
+    if (!still || still.roundIdx !== startRound) break;
+    const { allComplete } = _simOneChallengerQualifierMatch(current, gameState, schedule);
+    if (allComplete) break;
+  }
+  schedule.currentChallengerQualifier = current.bracket?.champion ? finalizeChallengerQualifier(gameState, schedule, current) : current;
+  return { ...gameState, schedule: { ...schedule } };
+}
+
+export function simChallengerQualifier(gameState) {
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  let current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
+  if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
+  current = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
+  let safety = 0;
+  while (!current.bracket?.champion && safety++ < 80) _simOneChallengerQualifierMatch(current, gameState, schedule);
+  schedule.currentChallengerQualifier = finalizeChallengerQualifier(gameState, schedule, current);
   return { ...gameState, schedule: { ...schedule } };
 }
 
@@ -868,11 +1003,12 @@ function _simOneMajorMatchDE16(schedule, gameState, precomputedResult = null) {
       bracket.rounds[2].matches = [{ a:winners[0], b:winners[1], played:false,result:null},{ a:winners[2], b:winners[3], played:false,result:null},{ a:winners[4], b:winners[5], played:false,result:null},{ a:winners[6], b:winners[7], played:false,result:null}];
       break;
     case 1: break;
-    case 2:
+    case 2: {
       bracket.rounds[5].matches = [{ a:winners[0], b:winners[1], played:false,result:null},{ a:winners[2], b:winners[3], played:false,result:null}];
       const lb1w = bracket.rounds[1].matches.map(m=>m.result.winnerId);
       bracket.rounds[3].matches = [{a:lb1w[0], b:losers[0], played:false,result:null},{a:lb1w[1], b:losers[1], played:false,result:null},{a:lb1w[2], b:losers[2], played:false,result:null},{a:lb1w[3], b:losers[3], played:false,result:null}];
       break;
+    }
     case 3: bracket.rounds[4].matches = [{a:winners[0],b:winners[1],played:false,result:null},{a:winners[2],b:winners[3],played:false,result:null}]; break;
     case 4: bracket._lbr3Winners = winners; break;
     case 5:
