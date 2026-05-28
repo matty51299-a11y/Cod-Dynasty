@@ -3717,12 +3717,12 @@ body { margin: 0; }
 }
 
 .mto-content {
-  max-width: 860px;
+  width: min(96vw, 1720px);
   margin: 0 auto;
-  padding: 28px 20px 60px;
+  padding: 14px 12px 28px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 /* ── Hero header ───────────────────────────────────────────────────────────── */
@@ -3731,7 +3731,7 @@ body { margin: 0; }
   background: linear-gradient(160deg, #161028 0%, #0e0f1a 60%);
   border: 1px solid #2a2b42;
   border-radius: 14px;
-  padding: 36px 28px 28px;
+  padding: 20px 22px 16px;
   text-align: center;
   position: relative;
   overflow: hidden;
@@ -3765,7 +3765,7 @@ body { margin: 0; }
   border: 1px solid rgba(0, 230, 118, 0.2);
   padding: 4px 14px;
   border-radius: 20px;
-  margin-bottom: 18px;
+  margin-bottom: 10px;
   position: relative;
   z-index: 1;
 }
@@ -3780,12 +3780,12 @@ body { margin: 0; }
 }
 
 .mto-hero-name {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 900;
   letter-spacing: 6px;
   color: var(--text-head);
   line-height: 1;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   position: relative;
   z-index: 1;
 }
@@ -3814,7 +3814,7 @@ body { margin: 0; }
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 24px 24px 20px;
+  padding: 14px 16px 12px;
 }
 
 .mto-nm-user {
@@ -3828,7 +3828,7 @@ body { margin: 0; }
   font-weight: 800;
   letter-spacing: 2.5px;
   color: var(--accent);
-  margin-bottom: 18px;
+  margin-bottom: 10px;
   text-transform: uppercase;
 }
 
@@ -3837,7 +3837,7 @@ body { margin: 0; }
   align-items: center;
   justify-content: center;
   gap: 20px;
-  margin-bottom: 22px;
+  margin-bottom: 12px;
 }
 
 .mto-nm-team {
@@ -3860,7 +3860,7 @@ body { margin: 0; }
 }
 
 .mto-nm-name {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 800;
   line-height: 1.1;
 }
@@ -3903,7 +3903,8 @@ body { margin: 0; }
 /* ── Bracket ───────────────────────────────────────────────────────────────── */
 
 .mto-bracket-section {
-  margin-top: 4px;
+  margin-top: 0;
+  min-height: 0;
 }
 
 .mto-bracket-label {
@@ -3918,8 +3919,11 @@ body { margin: 0; }
 
 .mto-bracket-rounds {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
 }
 
 @media (max-width: 600px) {
@@ -3930,7 +3934,7 @@ body { margin: 0; }
 .mto-de-bracket {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .mto-de-section {
@@ -3954,8 +3958,8 @@ body { margin: 0; }
 
 /* Round column */
 .mto-round {
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 clamp(220px, 15vw, 290px);
+  min-width: 220px;
 }
 
 .mto-round-active .mto-round-header { color: var(--text-head); }
