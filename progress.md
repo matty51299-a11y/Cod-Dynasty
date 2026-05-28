@@ -398,3 +398,8 @@ Player shape (key fields):
   teamHistory: [{ season, teamId }],   // which team per season; travels with player
 }
 ```
+
+## Update 2026-05-28
+- Regular Majors now run as a 16-team DE event: 12 CDL seeds from `stageStandings` + 4 temporary Challenger qualifier seeds (13–16).
+- Added Challenger qualifier simulation from unsigned prospects and temporary event-team support via `schedule.currentMajorEventTeams`.
+- Added DE16 bracket build + simulation path for Majors while leaving Champs flow untouched.
