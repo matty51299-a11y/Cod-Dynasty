@@ -26,21 +26,27 @@ import fazeFalconsLogo from "../assets/logos/challengers/FazeFalconslogo.png";
 import forFunEsportsLogo from "../assets/logos/challengers/ForFunEsports.png";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
+const CHALLENGER_REGIONS = {
+  omit_brooklyn: "NA", omit_noir: "NA", project_notorious: "NA", project_7: "EU",
+  death_by_cabal: "EU", huntsmen: "NA", stallions: "NA", telluride_bush: "NA",
+  next_threat_black: "NA", stallions_x_bush: "NA", omnia_ggs: "EU", five_fears: "EU",
+  faze_falcons: "MENA", for_fun_esports: "EU",
+};
 const CHALLENGER_TEAM_POOL = [
-  { name: "Omit Brooklyn", tag: "OBK", color: "#c084fc", logo: omitBrooklynLogo },
-  { name: "Omit Noir", tag: "ONR", color: "#a78bfa", logo: omitNoirLogo },
-  { name: "Project Notorious", tag: "PNT", color: "#8b5cf6", logo: projectNotoriousLogo },
-  { name: "Project 7", tag: "P7", color: "#7c3aed" },
-  { name: "Death by Cabal", tag: "DBC", color: "#9333ea", logo: deathByCabalLogo },
-  { name: "Huntsmen", tag: "HNT", color: "#f43f5e", logo: huntsmenLogo },
-  { name: "Stallions", tag: "STL", color: "#fb7185", logo: stallionsLogo },
-  { name: "Telluride Bush", tag: "TB", color: "#22c55e", logo: tellurideBushLogo },
-  { name: "Next Threat Black", tag: "NTB", color: "#0ea5e9" },
-  { name: "Stallions x Bush", tag: "SXB", color: "#14b8a6" },
-  { name: "Omnia GGs", tag: "OMG", color: "#06b6d4" },
-  { name: "Five Fears", tag: "5FR", color: "#f59e0b", logo: fiveFearsLogo },
-  { name: "Faze Falcons", tag: "FF", color: "#ef4444", logo: fazeFalconsLogo },
-  { name: "For Fun Esports", tag: "FFE", color: "#38bdf8", logo: forFunEsportsLogo },
+  { id: "omit_brooklyn", name: "Omit Brooklyn", tag: "OBK", color: "#c084fc", logo: omitBrooklynLogo },
+  { id: "omit_noir", name: "Omit Noir", tag: "ONR", color: "#a78bfa", logo: omitNoirLogo },
+  { id: "project_notorious", name: "Project Notorious", tag: "PNT", color: "#8b5cf6", logo: projectNotoriousLogo },
+  { id: "project_7", name: "Project 7", tag: "P7", color: "#7c3aed" },
+  { id: "death_by_cabal", name: "Death by Cabal", tag: "DBC", color: "#9333ea", logo: deathByCabalLogo },
+  { id: "huntsmen", name: "Huntsmen", tag: "HNT", color: "#f43f5e", logo: huntsmenLogo },
+  { id: "stallions", name: "Stallions", tag: "STL", color: "#fb7185", logo: stallionsLogo },
+  { id: "telluride_bush", name: "Telluride Bush", tag: "TB", color: "#22c55e", logo: tellurideBushLogo },
+  { id: "next_threat_black", name: "Next Threat Black", tag: "NTB", color: "#0ea5e9" },
+  { id: "stallions_x_bush", name: "Stallions x Bush", tag: "SXB", color: "#14b8a6" },
+  { id: "omnia_ggs", name: "Omnia GGs", tag: "OMG", color: "#06b6d4" },
+  { id: "five_fears", name: "Five Fears", tag: "5FR", color: "#f59e0b", logo: fiveFearsLogo },
+  { id: "faze_falcons", name: "Faze Falcons", tag: "FF", color: "#ef4444", logo: fazeFalconsLogo },
+  { id: "for_fun_esports", name: "For Fun Esports", tag: "FFE", color: "#38bdf8", logo: forFunEsportsLogo },
 ];
 import { runProgression } from "./progression.js";
 import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand } from "./rosterAI.js";
@@ -263,19 +269,46 @@ function buildMajorBracketDE16(majorSeeds) {
 }
 
 function simulateChallengerQualifier(gameState, schedule, eventKey = "major") {
-  const unsignedProspects = (gameState.prospects || []).filter(p => !p.teamId);
-  const ranked = [...unsignedProspects].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
-  const identRng = seededRng(schedule.season * 1000 + (schedule.majorIdx ?? 0) * 17 + 7);
-  const identities = shuffle(CHALLENGER_TEAM_POOL, identRng).slice(0, CHALLENGER_QUALIFIER_TEAMS);
-  const teams = [];
-  for (let i = 0; i < CHALLENGER_QUALIFIER_TEAMS; i++) {
-    const roster = ranked.slice(i * 4, i * 4 + 4);
-    if (roster.length < 4) break;
-    const teamId = `challenger_${eventKey}_${schedule.majorIdx + 1}_${i + 1}`;
-    const identity = identities[i] ?? { name: `Challengers ${i + 1}`, tag: `CQ${i + 1}`, color: "#9b5cff" };
-    teams.push({ id: teamId, ...identity, players: roster });
+  ensureChallengerTeams(gameState);
+  const rng = seededRng(schedule.season * 9991 + ((schedule.majorIdx ?? 0) + 1) * 71 + (eventKey === "champs" ? 17 : 0));
+  const results = (gameState.challengerTeams || []).map((t) => {
+    const roster = t.playerIds.map(pid => gameState.prospects.find(p => p.id === pid) || gameState.players.find(p => p.id === pid)).filter(Boolean);
+    const ovr = Math.round(roster.reduce((s, p) => s + (p.overall ?? 65), 0) / Math.max(1, roster.length));
+    const score = ovr + (t.form ?? 0) * 0.6 + (t.circuitPoints ?? 0) * 0.03 + (rng() * 6 - 3);
+    return { teamId: t.id, roster, ovr, score, formBefore: t.form ?? 0 };
+  }).sort((a, b) => b.score - a.score).map((r, i) => ({ ...r, placement: i + 1 }));
+
+  const ptsFor = (pl) => (pl === 1 ? 25 : pl === 2 ? 20 : pl === 3 ? 15 : pl === 4 ? 10 : pl <= 8 ? 5 : 0);
+  const qualified = results.slice(0, CHALLENGER_QUALIFIER_TEAMS);
+  const resObj = { season: schedule.season, majorIdx: schedule.majorIdx, teams: results.map(r => ({ teamId: r.teamId, placement: r.placement, teamOvr: r.ovr, qualified: r.placement <= 4, circuitPointsAwarded: ptsFor(r.placement), formBefore: r.formBefore, formAfter: r.formBefore + (r.placement <= 4 ? 2 : -1) })) };
+  schedule.challengerQualifierResults = [...(schedule.challengerQualifierResults || []), resObj];
+  gameState.challengerTeams = (gameState.challengerTeams || []).map(t => {
+    const row = resObj.teams.find(x => x.teamId === t.id);
+    return row ? { ...t, circuitPoints: (t.circuitPoints ?? 0) + row.circuitPointsAwarded, form: Math.max(-10, Math.min(10, row.formAfter)), lastQualifierPlacement: row.placement, qualifiedMajorIdxs: row.qualified ? [...(t.qualifiedMajorIdxs || []), schedule.majorIdx] : (t.qualifiedMajorIdxs || []) } : t;
+  });
+  return qualified.map((r, i) => {
+    const base = gameState.challengerTeams.find(t => t.id === r.teamId);
+    return { id: `${eventKey}_qual_${schedule.season}_${(schedule.majorIdx ?? 0) + 1}_${i + 1}`, ...base, qualifierPlacement: r.placement, players: r.roster };
+  });
+}
+
+export function ensureChallengerTeams(gameState) {
+  if ((gameState.challengerTeams || []).length) return;
+  const teamDefs = CHALLENGER_TEAM_POOL.map(t => ({ ...t, region: CHALLENGER_REGIONS[t.id] ?? "NA", playerIds: [], circuitPoints: 0, form: 0, lastQualifierPlacement: null, qualifiedMajorIdxs: [] }));
+  const free = (gameState.prospects || []).filter(p => !p.teamId).sort((a,b)=>(b.overall??0)-(a.overall??0));
+  const used = new Set();
+  for (const team of teamDefs) {
+    const same = free.filter(p => !used.has(p.id) && ((p.region || team.region) === team.region)).slice(0, 4);
+    let picks = same;
+    if (picks.length < 4) picks = [...picks, ...free.filter(p => !used.has(p.id) && !picks.find(x => x.id === p.id)).slice(0, 4 - picks.length)];
+    team.playerIds = picks.slice(0, 4).map(p => p.id);
+    for (const p of picks.slice(0, 4)) {
+      used.add(p.id);
+      p.challengerTeamId = team.id;
+      if (!p.region) p.region = team.region;
+    }
   }
-  return teams;
+  gameState.challengerTeams = teamDefs;
 }
 
 // ── Build 12-team Double-Elimination bracket (Majors 1–4) ────────────────────

@@ -6,7 +6,7 @@ import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride, normalizePlayerName } from "../data/challengerRatingOverrides.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap, getResignDemand } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
 
@@ -171,7 +171,7 @@ function newGameState(userTeamId) {
     seen.add(key);
     return true;
   });
-  return {
+  const state = {
     userTeamId,
     season: 1,
     players,      // all pro players + any signed prospects (Roster reads from here)
@@ -185,6 +185,8 @@ function newGameState(userTeamId) {
     playerOvrHistory:  {},    // { [playerId]: [{ season, overall }, ...] }
     challengersLog:    [],    // per-season challengers pool snapshots (for Pool Health panel)
   };
+  ensureChallengerTeams(state);
+  return state;
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -196,7 +198,10 @@ function reducer(state, action) {
 
     case "LOAD_GAME":
       // Backfill `feed` for saves that predate this feature
-      return { ...action.state, feed: action.state?.feed ?? [] };
+      const loaded = { ...action.state, feed: action.state?.feed ?? [] };
+      ensureChallengerTeams(loaded);
+      loaded.schedule = { ...loaded.schedule, challengerQualifierResults: loaded.schedule?.challengerQualifierResults ?? [] };
+      return loaded;
 
     // ── Stage sims — detect streaks + standings changes ────────────────────
     case "SIM_NEXT_MATCH": {
@@ -423,6 +428,7 @@ function reducer(state, action) {
             ...state,
             players:  [...state.players, signed],
             prospects: state.prospects.filter(p => p.id !== playerId),
+            challengerTeams: (state.challengerTeams || []).map(t => t.id === signed.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
           }, `${signed.name} signed!`),
           [mkFeed("signing", `${tag} sign ${signed.name}`, state.season, phase)]
         );
@@ -446,6 +452,7 @@ function reducer(state, action) {
               scouted: true, contractYears: 2, teamHistory: historyUpdated,
             };
           }),
+          challengerTeams: (state.challengerTeams || []).map(t => t.id === target.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) } : t),
         }, `${target.name} signed!`),
         [mkFeed("signing", `${tag} sign ${target.name}`, state.season, phase)]
       );

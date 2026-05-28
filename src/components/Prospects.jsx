@@ -39,7 +39,7 @@ export default function Prospects() {
 
   if (!state) return null;
 
-  const { prospects, userTeamId, players, challengersLog } = state;
+  const { prospects, userTeamId, players, challengersLog, challengerTeams } = state;
   const myRoster = players.filter(p => p.teamId === userTeamId);
   const starterCount = myRoster.filter(p => !p.isSub).length;
   const subCount = myRoster.filter(p => p.isSub).length;
@@ -115,6 +115,19 @@ export default function Prospects() {
       <p className="muted scout-note">
         ⚠ Ratings shown are <em>scouted estimates</em> – true values revealed on signing.
       </p>
+      {!!challengerTeams?.length && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Challenger Teams</h3>
+          <table className="roster-table">
+            <thead><tr><th>Team</th><th>Region</th><th>OVR</th><th>Roster</th><th>Circuit</th><th>Form</th><th>Last Qual</th></tr></thead>
+            <tbody>{challengerTeams.map(t => {
+              const roster = t.playerIds.map(pid => prospects.find(p => p.id===pid) || players.find(p=>p.id===pid)).filter(Boolean);
+              const ovr = roster.length ? Math.round(roster.reduce((s,p)=>s+(p.overall??65),0)/roster.length) : 0;
+              return <tr key={t.id}><td>{t.tag} · {t.name}</td><td>{t.region}</td><td>{ovr}</td><td>{roster.map(p=>p.name).join(", ")}</td><td>{t.circuitPoints ?? 0}</td><td>{t.form ?? 0}</td><td>{t.lastQualifierPlacement ?? "-"}</td></tr>;
+            })}</tbody>
+          </table>
+        </div>
+      )}
       <div className="cm-tabs">
         {TAB_KEYS.map(k => <button key={k} className={`filter-btn ${tab===k?"active":""}`} onClick={()=>setTab(k)}>{k==="all"?"All Players":k==="veterans"?"CDL Veterans":k==="prospects"?"Prospects":k==="proam"?"Pro-Am Eligible":"Shortlist"}</button>)}
       </div>
