@@ -24,11 +24,16 @@ function seedNum(bracket, teamId, fallback) {
 
 // Derive the tournament consequence from the bracket state after the match.
 // Called only for the winning case; elimination is always shown when user lost.
-function getWinConsequence(bracket, userTeamId, majorName) {
+// wonRoundName: the round just won (used to infer next round before SF/GF are generated).
+function getWinConsequence(bracket, userTeamId, majorName, wonRoundName) {
   if (!bracket) return null;
   if (bracket.champion === userTeamId) {
     return { type: "champion", text: `${majorName} Champion` };
   }
+  // Infer next round from the round just won — reliable even before SF/GF matches are generated
+  if (wonRoundName === "Quarterfinals") return { type: "advanced", text: "Advanced to the Semifinals" };
+  if (wonRoundName === "Semifinals")    return { type: "advanced", text: "Advanced to the Grand Final" };
+  // Fallback: search bracket for next unplayed user match (works when user played last in a round)
   for (const round of bracket.rounds) {
     if (round.matches.some(m => !m.played && (m.a === userTeamId || m.b === userTeamId))) {
       return { type: "advanced", text: `Advanced to the ${round.name}` };
@@ -97,7 +102,7 @@ function PreMatchView({ match, bracket, roundName, majorName, userTeamId, onPlay
 function ResultView({ result, userTeamId, latestBracket, majorName, roundName, onClose }) {
   const { openTeamHub } = useTeamHub();
   const won        = result.winnerId === userTeamId;
-  const consequence = won ? getWinConsequence(latestBracket, userTeamId, majorName) : null;
+  const consequence = won ? getWinConsequence(latestBracket, userTeamId, majorName, roundName) : null;
 
   return (
     <>
