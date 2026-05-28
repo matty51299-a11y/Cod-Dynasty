@@ -2,10 +2,10 @@
 // Shared component: full breakdown of one simulated series.
 // Used by Dashboard recent results, MatchLog, and MajorBracket match cards.
 
-import { CDL_TEAMS } from "../data/teams.js";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
-function tag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
-function color(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; }
+function makeTag(schedule)   { return (id) => resolveTeamDisplay(id, schedule).tag ?? id; }
+function makeColor(schedule) { return (id) => resolveTeamDisplay(id, schedule).color ?? "#aaa"; }
 
 function kdColor(kd) {
   if (kd >= 1.4) return "var(--green)";
@@ -23,7 +23,7 @@ function modeColor(short) {
 }
 
 // ── Player stats table ───────────────────────────────────────────────────────
-function StatsTable({ teamId, teamName: tName, stats, won }) {
+function StatsTable({ teamId, teamName: tName, stats, won, color }) {
   const sorted = [...stats].sort((a, b) => (b.kd ?? 0) - (a.kd ?? 0));
 
   return (
@@ -69,8 +69,11 @@ function StatsTable({ teamId, teamName: tName, stats, won }) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export default function SeriesDetail({ result }) {
+export default function SeriesDetail({ result, schedule = null }) {
   if (!result) return null;
+
+  const tag = makeTag(schedule);
+  const color = makeColor(schedule);
 
   const {
     mapResults, playerStats,
@@ -174,12 +177,14 @@ export default function SeriesDetail({ result }) {
             teamName={teamAName}
             stats={statsA}
             won={teamAId === winnerId}
+            color={color}
           />
           <StatsTable
             teamId={teamBId}
             teamName={teamBName}
             stats={statsB}
             won={teamBId === winnerId}
+            color={color}
           />
         </div>
       </div>
