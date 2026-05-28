@@ -82,6 +82,77 @@ export function initStandings(teamIds) {
 }
 
 // ── Build season schedule ─────────────────────────────────────────────────────
+export const MAJOR_PLACEMENT_POINTS = {
+  1: 100,
+  2: 75,
+  3: 60,
+  4: 45,
+  5: 30,
+  6: 30,
+  7: 15,
+  8: 15,
+  9: 0,
+  10: 0,
+  11: 0,
+  12: 0,
+};
+
+function computeDE16Placements(bracket) {
+  if (!bracket?.rounds?.length) return {};
+  const losses = {};
+  const eliminated = [];
+  for (const round of bracket.rounds) {
+    for (const m of round.matches ?? []) {
+      if (!m.played || !m.result?.loserId) continue;
+      const lid = m.result.loserId;
+      losses[lid] = (losses[lid] ?? 0) + 1;
+      if (losses[lid] === 2) eliminated.push(lid);
+    }
+  }
+
+  const placements = {};
+  const buckets = [
+    { count: 4, places: [13, 14, 15, 16] },
+    { count: 4, places: [9, 10, 11, 12] },
+    { count: 2, places: [7, 8] },
+    { count: 2, places: [5, 6] },
+    { count: 1, places: [4] },
+    { count: 1, places: [3] },
+    { count: 1, places: [2] },
+  ];
+
+  let idx = 0;
+  for (const bucket of buckets) {
+    for (let i = 0; i < bucket.count && idx < eliminated.length; i++, idx++) {
+      placements[eliminated[idx]] = bucket.places[Math.min(i, bucket.places.length - 1)];
+    }
+  }
+
+  if (bracket.champion) placements[bracket.champion] = 1;
+  return placements;
+}
+
+function awardMajorPlacementPoints(schedule, majorIdx) {
+  if (majorIdx < 0 || majorIdx > 3) return;
+  const major = schedule.majors?.[majorIdx];
+  const bracket = major?.bracket;
+  if (!major?.completed || bracket?.type !== "DE16") return;
+
+  const placements = computeDE16Placements(bracket);
+  const cdlIds = new Set(CDL_TEAMS.map(t => t.id));
+  const awards = [];
+
+  for (const [teamId, place] of Object.entries(placements)) {
+    if (!cdlIds.has(teamId)) continue;
+    const pts = MAJOR_PLACEMENT_POINTS[place] ?? 0;
+    if (!schedule.standings?.[teamId]) continue;
+    schedule.standings[teamId].points += pts;
+    awards.push({ teamId, place, points: pts });
+  }
+
+  major.pointsAwards = awards.sort((a, b) => a.place - b.place);
+}
+
 export function buildSeason(season) {
   const teamIds = CDL_TEAMS.map(t => t.id);
   const rng = seededRng(season * 9999 + 1);
@@ -637,6 +708,9 @@ function _simOneMajorMatch(schedule, gameState, precomputedResult = null) {
 function _advanceMajorPhase(schedule, gameState) {
   const majorIdx = schedule.majorIdx;
   let nextState = gameState;
+
+  // Award Major placement points to CDL teams only (regular majors).
+  awardMajorPlacementPoints(schedule, majorIdx);
 
   // AI roster window after each regular major (not after Champs)
   if (majorIdx <= 3) nextState = runAIMajorRosterWindow(nextState, majorIdx);
