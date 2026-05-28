@@ -5,6 +5,7 @@
 import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
+import { applyChallengerRatingOverride, normalizePlayerName } from "../data/challengerRatingOverrides.js";
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap, getResignDemand } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
@@ -154,8 +155,15 @@ function detectMajorFeed(wasCompleted, newState, majorIdx) {
 
 // ── Initial state factory ─────────────────────────────────────────────────────
 function newGameState(userTeamId) {
-  const players  = buildInitialRoster();
-  const prospects = generateProspects(Date.now() % 999983);
+  const players  = buildInitialRoster().map(applyChallengerRatingOverride);
+  const rawProspects = generateProspects(Date.now() % 999983).map(applyChallengerRatingOverride);
+  const seen = new Set();
+  const prospects = rawProspects.filter((p) => {
+    const key = normalizePlayerName(p.name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   return {
     userTeamId,
     season: 1,

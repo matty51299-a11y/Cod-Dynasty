@@ -6,9 +6,10 @@
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 
-function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
-function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
-function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
+function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
+function teamColor(id, schedule) { return getTeamMeta(id, schedule)?.color ?? "#888"; }
+function teamName(id, schedule)  { return getTeamMeta(id, schedule)?.name  ?? id; }
+function teamTag(id, schedule)   { return getTeamMeta(id, schedule)?.tag   ?? id; }
 
 export default function MajorEntryOverlay() {
   const { state, dispatch } = useGame();
@@ -25,7 +26,7 @@ export default function MajorEntryOverlay() {
   if (!bracket || isEntered) return null;
 
   const isChamps = majorIdx === 4;
-  const isDE     = bracket.type === "DE";
+  const isDE     = bracket.type === "DE" || bracket.type === "DE16";
 
   const seedStandings = isChamps
     ? (schedule.standings ?? {})
@@ -91,8 +92,8 @@ export default function MajorEntryOverlay() {
                 <div className="meo-um-bye-row">
                   <div className="meo-um-team">
                     <span className="meo-um-seed">#{userSeedIdx + 1}</span>
-                    <span className="meo-um-name" style={{ color: teamColor(userTeamId) }}>
-                      {teamName(userTeamId)}
+                    <span className="meo-um-name" style={{ color: teamColor(userTeamId, schedule) }}>
+                      {teamName(userTeamId, schedule)}
                     </span>
                     <span className="meo-um-you">YOU</span>
                   </div>
@@ -109,8 +110,8 @@ export default function MajorEntryOverlay() {
                 <div className="meo-um-row">
                   <div className="meo-um-team">
                     <span className="meo-um-seed">#{userSeedIdx + 1}</span>
-                    <span className="meo-um-name" style={{ color: teamColor(userTeamId) }}>
-                      {teamName(userTeamId)}
+                    <span className="meo-um-name" style={{ color: teamColor(userTeamId, schedule) }}>
+                      {teamName(userTeamId, schedule)}
                     </span>
                     <span className="meo-um-you">YOU</span>
                   </div>
@@ -119,8 +120,8 @@ export default function MajorEntryOverlay() {
                     {userWBR1Opp != null ? (
                       <>
                         <span className="meo-um-seed">#{userWBR1OppSeedIdx + 1}</span>
-                        <span className="meo-um-name" style={{ color: teamColor(userWBR1Opp) }}>
-                          {teamName(userWBR1Opp)}
+                        <span className="meo-um-name" style={{ color: teamColor(userWBR1Opp, schedule) }}>
+                          {teamName(userWBR1Opp, schedule)}
                         </span>
                       </>
                     ) : (
@@ -136,8 +137,8 @@ export default function MajorEntryOverlay() {
                 <div className="meo-um-row">
                   <div className="meo-um-team">
                     <span className="meo-um-seed">#{userSeedIdx + 1}</span>
-                    <span className="meo-um-name" style={{ color: teamColor(userTeamId) }}>
-                      {teamName(userTeamId)}
+                    <span className="meo-um-name" style={{ color: teamColor(userTeamId, schedule) }}>
+                      {teamName(userTeamId, schedule)}
                     </span>
                     <span className="meo-um-you">YOU</span>
                   </div>
@@ -146,8 +147,8 @@ export default function MajorEntryOverlay() {
                     {userQFOpp != null ? (
                       <>
                         <span className="meo-um-seed">#{userQFOppSeed + 1}</span>
-                        <span className="meo-um-name" style={{ color: teamColor(userQFOpp) }}>
-                          {teamName(userQFOpp)}
+                        <span className="meo-um-name" style={{ color: teamColor(userQFOpp, schedule) }}>
+                          {teamName(userQFOpp, schedule)}
                         </span>
                       </>
                     ) : (
@@ -173,9 +174,9 @@ export default function MajorEntryOverlay() {
               return (
                 <div key={id} className={`meo-seed-row ${isUser ? "meo-seed-you" : ""}`}>
                   <span className="meo-seed-num">{i + 1}</span>
-                  <span className="meo-seed-dot" style={{ background: teamColor(id) }} />
-                  <span className="meo-seed-name" style={isUser ? { color: teamColor(id) } : {}}>
-                    {isUser ? teamName(id) : teamTag(id)}
+                  <span className="meo-seed-dot" style={{ background: teamColor(id, schedule) }} />
+                  <span className="meo-seed-name" style={isUser ? { color: teamColor(id, schedule) } : {}}>
+                    {isUser ? teamName(id, schedule) : teamTag(id, schedule)}
                   </span>
                   <span className="meo-seed-rec">{rec.wins}W–{rec.losses}L</span>
                   {hasBye && <span className="meo-bye-badge">Bye</span>}
