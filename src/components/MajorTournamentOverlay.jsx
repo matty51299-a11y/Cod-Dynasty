@@ -16,9 +16,10 @@ import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
 
-function teamName(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
-function teamTag(id)  { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
-function teamColor(id){ return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
+function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
+function teamName(id, schedule) { return getTeamMeta(id, schedule)?.name ?? id; }
+function teamTag(id, schedule)  { return getTeamMeta(id, schedule)?.tag ?? id; }
+function teamColor(id, schedule){ return getTeamMeta(id, schedule)?.color ?? "#888"; }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ function currentRoundIdx(bracket) {
 // Teams alive = those with fewer than 2 tournament losses (DE) or 1 loss (SE).
 function teamsAlive(bracket, userTeamId) {
   if (!bracket) return null;
-  const isDE = bracket.type === "DE";
+  const isDE = bracket.type === "DE" || bracket.type === "DE16";
   const maxLosses = isDE ? 1 : 0; // alive while losses <= maxLosses
 
   const lossCount = {};
