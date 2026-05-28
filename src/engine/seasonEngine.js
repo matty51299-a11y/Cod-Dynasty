@@ -168,6 +168,48 @@ function buildMajorBracketDE(standings) {
   };
 }
 
+// ── Build 8-team Double-Elimination bracket (Champs) ─────────────────────────
+// All 8 teams enter WB Round 1 — no byes. Seeded 1–8 from cumulative standings.
+// Round order:  0=WBR1  1=LBR1  2=WBSemis  3=LBR2  4=WBFinal  5=LBSemis  6=LBFinal  7=GF
+function buildChampsDE(standings, userTeamId) {
+  const sorted = Object.entries(standings)
+    .sort((a, b) => b[1].points - a[1].points)
+    .slice(0, 8)
+    .map(([id]) => id);
+
+  const s = sorted;
+  const wbR1 = [
+    { a: s[0], b: s[7], seedA: 1, seedB: 8, played: false, result: null },
+    { a: s[1], b: s[6], seedA: 2, seedB: 7, played: false, result: null },
+    { a: s[2], b: s[5], seedA: 3, seedB: 6, played: false, result: null },
+    { a: s[3], b: s[4], seedA: 4, seedB: 5, played: false, result: null },
+  ];
+
+  if (userTeamId) {
+    const ui = wbR1.findIndex(m => m.a === userTeamId || m.b === userTeamId);
+    if (ui > 0) { const [um] = wbR1.splice(ui, 1); wbR1.unshift(um); }
+  }
+
+  return {
+    seeds: sorted,
+    type: "DE",
+    rounds: [
+      { name: "WB Round 1",    type: "WB", _tbd: 4, matches: wbR1 },
+      { name: "LB Round 1",    type: "LB", _tbd: 2, matches: [] },
+      { name: "WB Semifinals", type: "WB", _tbd: 2, matches: [] },
+      { name: "LB Round 2",    type: "LB", _tbd: 2, matches: [] },
+      { name: "WB Final",      type: "WB", _tbd: 1, matches: [] },
+      { name: "LB Semifinals", type: "LB", _tbd: 1, matches: [] },
+      { name: "LB Final",      type: "LB", _tbd: 1, matches: [] },
+      { name: "Grand Final",   type: "GF", _tbd: 1, matches: [] },
+    ],
+    completed: false,
+    champion:    null,
+    _wbFLoser:   null,
+    _wbChampion: null,
+  };
+}
+
 // ── Internal: try to populate LB Final once both prerequisites are ready ──────
 function _tryPopulateLBFinal(bracket) {
   const lbR5 = bracket.rounds[8];
@@ -177,6 +219,106 @@ function _tryPopulateLBFinal(bracket) {
   bracket.rounds[9].matches = [
     { a: bracket._wbFLoser, b: lbR5Winner, played: false, result: null },
   ];
+}
+
+// Same helper for the 8-team Champs bracket (LB Semis at idx 5, LB Final at idx 6)
+function _tryPopulateChampsLBFinal(bracket) {
+  const lbSemis = bracket.rounds[5];
+  if (!lbSemis.matches.length || !lbSemis.matches[0]?.played) return;
+  if (!bracket._wbFLoser) return;
+  bracket.rounds[6].matches = [
+    { a: bracket._wbFLoser, b: lbSemis.matches[0].result.winnerId, played: false, result: null },
+  ];
+}
+
+// ── Internal: play one match in the 8-team Champs DE bracket ─────────────────
+function _simOneChampsMatchDE(schedule, gameState, precomputedResult = null) {
+  const major   = schedule.majors[4];
+  const bracket = major.bracket;
+
+  let roundIdx = -1;
+  for (let r = 0; r < bracket.rounds.length; r++) {
+    const rnd = bracket.rounds[r];
+    if (rnd.matches.length > 0 && rnd.matches.some(m => !m.played)) { roundIdx = r; break; }
+  }
+  if (roundIdx === -1) return { roundIdx: -1, allComplete: true };
+
+  const round    = bracket.rounds[roundIdx];
+  const matchIdx = round.matches.findIndex(m => !m.played);
+  const match    = round.matches[matchIdx];
+
+  const result = precomputedResult ?? (() => {
+    const seed  = majorSeed(schedule.season, 4, roundIdx, matchIdx);
+    const teamA = buildTeamObj(match.a, gameState);
+    const teamB = buildTeamObj(match.b, gameState);
+    return simMatch(teamA, teamB, seed);
+  })();
+
+  match.played = true;
+  match.result = result;
+  schedule.matchLog.push({ ...result, stage: `${major.name} – ${round.name}` });
+
+  const roundDone = round.matches.every(m => m.played);
+  if (!roundDone) return { roundIdx, allComplete: false };
+
+  const winners = round.matches.map(m => m.result.winnerId);
+  const losers  = round.matches.map(m => m.result.loserId);
+
+  switch (roundIdx) {
+    case 0: { // WB R1 → LB R1 + WB Semis
+      bracket.rounds[1].matches = [
+        { a: losers[0], b: losers[3], played: false, result: null },
+        { a: losers[1], b: losers[2], played: false, result: null },
+      ];
+      bracket.rounds[2].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+        { a: winners[2], b: winners[3], played: false, result: null },
+      ];
+      break;
+    }
+    case 1: break; // LB R1 done — LB R2 populated when WB Semis finishes
+
+    case 2: { // WB Semis → WB Final + LB R2 (using stored LB R1 winners)
+      bracket.rounds[4].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+      ];
+      const lbR1W = bracket.rounds[1].matches.map(m => m.result.winnerId);
+      bracket.rounds[3].matches = [
+        { a: lbR1W[0], b: losers[0], played: false, result: null },
+        { a: lbR1W[1], b: losers[1], played: false, result: null },
+      ];
+      break;
+    }
+    case 3: { // LB R2 → LB Semis
+      bracket.rounds[5].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+      ];
+      break;
+    }
+    case 4: { // WB Final → store champ + loser; try LB Final
+      bracket._wbChampion = winners[0];
+      bracket._wbFLoser   = losers[0];
+      _tryPopulateChampsLBFinal(bracket);
+      break;
+    }
+    case 5: { // LB Semis → try LB Final
+      _tryPopulateChampsLBFinal(bracket);
+      break;
+    }
+    case 6: { // LB Final → Grand Final
+      bracket.rounds[7].matches = [
+        { a: bracket._wbChampion, b: winners[0], played: false, result: null },
+      ];
+      break;
+    }
+    case 7: { // Grand Final → champion
+      bracket.champion = winners[0];
+      major.completed  = true;
+      return { roundIdx, allComplete: true };
+    }
+  }
+
+  return { roundIdx, allComplete: false };
 }
 
 // ── Internal: play one DE major match ─────────────────────────────────────────
@@ -402,13 +544,15 @@ export function beginChamps(gameState) {
   // Champs bracket seeded by cumulative season standings.points
   schedule.phase    = "major";
   schedule.majorIdx = 4;
-  schedule.majors[4].bracket = buildMajorBracket(schedule.standings, gameState.userTeamId);
+  schedule.majors[4].bracket = buildChampsDE(schedule.standings, gameState.userTeamId);
   return { ...gameState, schedule: { ...schedule } };
 }
 
 // ── Internal: unified one-match dispatcher ────────────────────────────────────
 function _dispatchOneMajorMatch(schedule, gameState) {
-  const bracket = schedule.majors[schedule.majorIdx]?.bracket;
+  const majorIdx = schedule.majorIdx;
+  if (majorIdx === 4) return _simOneChampsMatchDE(schedule, gameState);
+  const bracket = schedule.majors[majorIdx]?.bracket;
   return bracket?.type === "DE"
     ? _simOneMajorMatchDE(schedule, gameState)
     : _simOneMajorMatch(schedule, gameState);
@@ -1309,7 +1453,9 @@ export function commitUserMatchResult(state, result) {
     const bracket = schedule.majors[schedule.majorIdx]?.bracket;
     const isDE    = bracket?.type === "DE";
 
-    const { allComplete } = isDE
+    const { allComplete } = schedule.majorIdx === 4
+      ? _simOneChampsMatchDE(schedule, state, result)
+      : isDE
       ? _simOneMajorMatchDE(schedule, state, result)
       : _simOneMajorMatch(schedule, state, result);
 
