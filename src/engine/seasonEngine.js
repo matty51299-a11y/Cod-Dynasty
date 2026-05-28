@@ -52,6 +52,7 @@ const CHALLENGER_TEAM_POOL = [
 ];
 import { runProgression } from "./progression.js";
 import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand } from "./rosterAI.js";
+import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
 function seededRng(seed) {
@@ -274,8 +275,11 @@ function buildMajorBracketDE16(majorSeeds) {
 function simulateChallengerQualifier(gameState, schedule, eventKey = "major") {
   ensureChallengerTeams(gameState);
   const rng = seededRng(schedule.season * 9991 + ((schedule.majorIdx ?? 0) + 1) * 71 + (eventKey === "champs" ? 17 : 0));
+  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
   const results = (gameState.challengerTeams || []).map((t) => {
-    const roster = t.playerIds.map(pid => gameState.prospects.find(p => p.id === pid) || gameState.players.find(p => p.id === pid)).filter(Boolean);
+    const roster = t.playerIds
+      .map(pid => gameState.prospects.find(p => p.id === pid) || gameState.players.find(p => p.id === pid))
+      .filter(p => p && !isInactivePlayer(p) && !cdlNames.has(normalizePlayerName(p.name)));
     const ovr = Math.round(roster.reduce((s, p) => s + (p.overall ?? 65), 0) / Math.max(1, roster.length));
     const score = ovr + (t.form ?? 0) * 0.6 + (t.circuitPoints ?? 0) * 0.03 + (rng() * 6 - 3);
     return { teamId: t.id, roster, ovr, score, formBefore: t.form ?? 0 };
@@ -312,18 +316,37 @@ export function ensureChallengerTeams(gameState) {
     return cur ? { ...mkTeam(base), ...cur, ...base, region: cur.region ?? CHALLENGER_REGIONS[base.id] ?? "NA" } : mkTeam(base);
   });
 
-  const free = (gameState.prospects || []).filter(p => !p.teamId).sort((a,b)=>(b.overall??0)-(a.overall??0));
-  const used = new Set(merged.flatMap(t => t.playerIds || []));
+  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
+  const byPlayerId = new Map([...(gameState.players || []), ...(gameState.prospects || [])].map(p => [p.id, p]));
+  const used = new Set();
+  const usedNames = new Set();
   for (const team of merged) {
-    const current = (team.playerIds || []).filter(pid => gameState.prospects?.some(p => p.id === pid) || gameState.players?.some(p => p.id === pid));
-    if (current.length >= 4) { team.playerIds = current.slice(0, 4); continue; }
-    const need = 4 - current.length;
-    const same = free.filter(p => !used.has(p.id) && ((p.region || team.region) === team.region)).slice(0, need);
+    const current = [];
+    for (const pid of team.playerIds || []) {
+      const player = byPlayerId.get(pid);
+      const key = normalizePlayerName(player?.name);
+      if (!player || shouldExcludeFromChallengers(player, cdlNames, used, usedNames)) continue;
+      current.push(pid);
+      used.add(pid);
+      usedNames.add(key);
+      if (player.challengerTeamId == null) player.challengerTeamId = team.id;
+    }
+    team.playerIds = current.slice(0, 4);
+  }
+
+  const free = (gameState.prospects || [])
+    .filter(p => !p.teamId && !isInactivePlayer(p))
+    .sort((a,b)=>(b.overall??0)-(a.overall??0));
+  for (const team of merged) {
+    if (team.playerIds.length >= 4) continue;
+    const need = 4 - team.playerIds.length;
+    const same = free.filter(p => !shouldExcludeFromChallengers(p, cdlNames, used, usedNames) && ((p.region || team.region) === team.region)).slice(0, need);
     let picks = same;
-    if (picks.length < need) picks = [...picks, ...free.filter(p => !used.has(p.id) && !picks.find(x => x.id === p.id)).slice(0, need - picks.length)];
-    team.playerIds = [...current, ...picks.map(p => p.id)];
+    if (picks.length < need) picks = [...picks, ...free.filter(p => !shouldExcludeFromChallengers(p, cdlNames, used, usedNames) && !picks.find(x => x.id === p.id)).slice(0, need - picks.length)];
+    team.playerIds = [...team.playerIds, ...picks.map(p => p.id)];
     for (const p of picks) {
       used.add(p.id);
+      usedNames.add(normalizePlayerName(p.name));
       p.challengerTeamId = team.id;
       if (!p.region) p.region = team.region;
     }

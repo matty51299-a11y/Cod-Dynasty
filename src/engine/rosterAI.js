@@ -1,4 +1,5 @@
 import { CDL_TEAMS } from "../data/teams.js";
+import { buildCdlRosterNameSet, isCdlTeamId, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
 import { calcChemistry } from "./chemistry.js";
 
 const PHILOSOPHIES = ["win_now", "youth_upside", "chemistry_stability", "balanced_value", "high_risk_gamble"];
@@ -626,6 +627,9 @@ function scoreChallengerPickupCandidate(candidate, teamPlayers, evaluation, need
 }
 
 function signCandidate(candidate, teamId, players, prospects) {
+  const key = normalizePlayerName(candidate?.name);
+  const duplicateCdlName = key && players.some(p => p.id !== candidate.id && p.teamId && isCdlTeamId(p.teamId) && !isInactivePlayer(p) && normalizePlayerName(p.name) === key);
+  if (!candidate || isInactivePlayer(candidate) || duplicateCdlName) return { players, prospects, rejected: true };
   if (candidate.isProspect) {
     const signed = { ...candidate, teamId, scouted: true, isSub: false };
     return {
@@ -640,30 +644,60 @@ function signCandidate(candidate, teamId, players, prospects) {
   };
 }
 
+function txKey(tx) {
+  return [
+    tx.season ?? "",
+    tx.stageIdx ?? "",
+    tx.majorIdx ?? "",
+    tx.type ?? "",
+    tx.playerId ?? normalizePlayerName(tx.playerName),
+    normalizePlayerName(tx.playerName),
+    tx.fromTeamId ?? "",
+    tx.toTeamId ?? "",
+  ].join("|");
+}
+
 function pushTx(transactions, gameState, entry) {
-  return [...transactions, {
+  if (!entry?.type || !entry?.playerName) return transactions;
+  const tx = {
     season: gameState.season,
     stageIdx: gameState.schedule?.stageIdx ?? null,
     majorIdx: gameState.schedule?.majorIdx ?? null,
     ...entry,
-  }];
+  };
+  return transactions.some(existing => txKey(existing) === txKey(tx)) ? transactions : [...transactions, tx];
 }
 
 function refillAllChallengerRosters(challengerTeams, players, prospects) {
   const teams = (challengerTeams || []).map(t => ({ ...t, playerIds: [...(t.playerIds || [])] }));
-  const assigned = new Set(teams.flatMap(t => t.playerIds));
-  const allPool = [...players.filter(p => !p.teamId && p.status !== "inactive" && p.status !== "retired"), ...prospects.filter(p => !p.teamId && p.status !== "inactive" && p.status !== "retired")]
+  const cdlNames = buildCdlRosterNameSet(players);
+  const byId = new Map([...players, ...prospects].map(p => [p.id, p]));
+  const assigned = new Set();
+  const usedNames = new Set();
+  for (const team of teams) {
+    const cleanIds = [];
+    for (const pid of team.playerIds) {
+      const player = byId.get(pid);
+      const key = normalizePlayerName(player?.name);
+      if (!player || shouldExcludeFromChallengers(player, cdlNames, assigned, usedNames)) continue;
+      cleanIds.push(pid);
+      assigned.add(pid);
+      usedNames.add(key);
+    }
+    team.playerIds = cleanIds.slice(0, 4);
+  }
+  const allPool = [...players.filter(p => !p.teamId && !isInactivePlayer(p)), ...prospects.filter(p => !p.teamId && !isInactivePlayer(p))]
     .sort((a, b) => ((b.overall ?? 0) + (b.potential ?? 0) * 0.35) - ((a.overall ?? 0) + (a.potential ?? 0) * 0.35));
   for (const team of teams) {
-    team.playerIds = team.playerIds.filter((pid, idx, arr) => pid && arr.indexOf(pid) === idx);
     while (team.playerIds.length < 4) {
-      const sameRegion = allPool.find(p => !assigned.has(p.id) && (p.challengerTeamId == null) && (p.region === team.region));
-      const fallback = allPool.find(p => !assigned.has(p.id) && (p.challengerTeamId == null));
+      const sameRegion = allPool.find(p => !shouldExcludeFromChallengers(p, cdlNames, assigned, usedNames) && (p.challengerTeamId == null) && (p.region === team.region));
+      const fallback = allPool.find(p => !shouldExcludeFromChallengers(p, cdlNames, assigned, usedNames) && (p.challengerTeamId == null));
       const pick = sameRegion || fallback;
       if (!pick) break;
       pick.challengerTeamId = team.id;
       team.playerIds.push(pick.id);
       assigned.add(pick.id);
+      usedNames.add(normalizePlayerName(pick.name));
     }
   }
   return teams;
@@ -745,16 +779,21 @@ function fillMinimumRoster(teamId, players, prospects, rosterMovesLog, season, w
     const committed   = starters.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
     const budgetLeft  = getTeamCap(teamId) - committed;
 
+    const cdlNames = buildCdlRosterNameSet(cur.players);
     const pick = [
       ...cur.players.filter(p => !p.teamId && !p.isProspect),
       ...cur.prospects.filter(p => !p.teamId),
     ]
+      .filter(c => !isInactivePlayer(c))
+      .filter(c => !cdlNames.has(normalizePlayerName(c.name)))
       .filter(c => getSigningCost(c) <= budgetLeft)
       .sort((a, b) => (b.overall || 70) - (a.overall || 70))[0];
 
     if (!pick) break; // nothing affordable — stop rather than go over budget
 
-    cur = signCandidate(pick, teamId, cur.players, cur.prospects);
+    const signed = signCandidate(pick, teamId, cur.players, cur.prospects);
+    if (signed.rejected) break;
+    cur = signed;
     additions.push({ out: null, in: pick.name, fromChallengers: !!pick.isProspect, reason: "roster_fill" });
   }
 
@@ -908,10 +947,13 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       const committed     = teamNow.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
       const budgetLeft    = getTeamCap(team.id) - committed;
 
+      const cdlNames = buildCdlRosterNameSet(players);
       const candidates = [
         ...players.filter(p => p.teamId == null),
         ...prospects,
-      ].filter(c => c.status !== "inactive" && c.status !== "retired")
+      ].filter(c => !isInactivePlayer(c))
+        .filter(c => !cdlNames.has(normalizePlayerName(c.name)))
+        .filter(c => !players.some(p => p.id !== c.id && p.teamId && isCdlTeamId(p.teamId) && normalizePlayerName(p.name) === normalizePlayerName(c.name)))
         .filter(c => getSigningCost(c) <= budgetLeft);
 
       if (!candidates.length) continue;
@@ -931,6 +973,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       if (!pick) continue;
 
       const afterSign = signCandidate(pick, team.id, players, prospects);
+      if (afterSign.rejected) continue;
       players = afterSign.players;
       prospects = afterSign.prospects;
       if (pick.challengerTeamId) {

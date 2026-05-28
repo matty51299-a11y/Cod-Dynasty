@@ -5,9 +5,10 @@
 import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
-import { applyChallengerRatingOverride, normalizePlayerName } from "../data/challengerRatingOverrides.js";
+import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
+import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams } from "../engine/seasonEngine.js";
-import { getSigningCost, getTeamCap, getResignDemand } from "../engine/rosterAI.js";
+import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
 
 const SAVE_KEY  = "cdl_manager_save";
@@ -160,6 +161,93 @@ function detectMajorFeed(wasCompleted, newState, majorIdx) {
   return items;
 }
 
+
+function shouldRetireOnRelease(player) {
+  return (player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70);
+}
+
+function shouldMoveToChallengersOnRelease(player) {
+  return ((player.overall ?? 70) >= 75 || (player.age ?? 25) < 29) && !shouldRetireOnRelease(player);
+}
+
+function txKey(tx) {
+  return [
+    tx.season ?? "",
+    tx.stageIdx ?? "",
+    tx.majorIdx ?? "",
+    tx.type ?? "",
+    tx.playerId ?? normalizePlayerName(tx.playerName),
+    normalizePlayerName(tx.playerName),
+    tx.fromTeamId ?? "",
+    tx.toTeamId ?? "",
+  ].join("|");
+}
+
+function pushChallengerTransaction(transactions, state, entry) {
+  const playerName = entry.playerName || entry.name;
+  if (!entry?.type || !playerName) return transactions || [];
+  const tx = {
+    season: state.season,
+    stageIdx: state.schedule?.stageIdx ?? null,
+    majorIdx: state.schedule?.majorIdx ?? null,
+    ...entry,
+    playerName,
+  };
+  const key = txKey(tx);
+  return (transactions || []).some((existing) => txKey(existing) === key)
+    ? (transactions || [])
+    : [...(transactions || []), tx];
+}
+
+function cdlRosterHasName(players, name, exceptId = null) {
+  const key = normalizePlayerName(name);
+  if (!key) return false;
+  return (players || []).some((player) => (exceptId == null || player.id !== exceptId)
+    && player.teamId && isCdlTeamId(player.teamId) && !isInactivePlayer(player)
+    && normalizePlayerName(player.name) === key);
+}
+
+function cleanupDuplicateActiveAssignments(state) {
+  const cdlNames = buildCdlRosterNameSet(state.players || []);
+  const duplicateIds = new Set();
+  for (const group of findDuplicateActivePlayers(state)) {
+    for (const dup of group.duplicates) {
+      if (dup.location !== "cdl") duplicateIds.add(dup.player.id);
+    }
+  }
+
+  const prospects = (state.prospects || []).filter((prospect) => {
+    const key = normalizePlayerName(prospect.name);
+    return key && !cdlNames.has(key) && !duplicateIds.has(prospect.id) && !isInactivePlayer(prospect);
+  });
+
+  const players = (state.players || []).map((player) => {
+    const key = normalizePlayerName(player.name);
+    if (!player.teamId && key && (cdlNames.has(key) || duplicateIds.has(player.id))) {
+      return { ...player, challengerTeamId: null, status: "duplicate_hidden" };
+    }
+    return player;
+  });
+
+  const validIds = new Set([...players, ...prospects].filter((player) => !isInactivePlayer(player)).map((player) => player.id));
+  const nameById = new Map([...players, ...prospects].map((player) => [player.id, normalizePlayerName(player.name)]));
+  const assignedNames = new Set();
+  const challengerTeams = (state.challengerTeams || []).map((team) => {
+    const playerIds = [];
+    for (const pid of team.playerIds || []) {
+      const key = nameById.get(pid);
+      if (!pid || !validIds.has(pid) || !key || cdlNames.has(key) || assignedNames.has(key)) continue;
+      playerIds.push(pid);
+      assignedNames.add(key);
+    }
+    return { ...team, playerIds: playerIds.slice(0, 4) };
+  });
+
+  const cleaned = { ...state, players, prospects, challengerTeams };
+  ensureChallengerTeams(cleaned);
+  return cleaned;
+}
+
 // ── Initial state factory ─────────────────────────────────────────────────────
 function newGameState(userTeamId) {
   const players  = buildInitialRoster().map(applyChallengerRatingOverride);
@@ -187,7 +275,7 @@ function newGameState(userTeamId) {
     challengerTransactions: [],
   };
   ensureChallengerTeams(state);
-  return state;
+  return cleanupDuplicateActiveAssignments(state);
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -197,13 +285,15 @@ function reducer(state, action) {
     case "NEW_GAME":
       return newGameState(action.teamId);
 
-    case "LOAD_GAME":
+    case "LOAD_GAME": {
       // Backfill `feed` for saves that predate this feature
       const loaded = { ...action.state, feed: action.state?.feed ?? [] };
       ensureChallengerTeams(loaded);
-      loaded.schedule = { ...loaded.schedule, challengerQualifierResults: loaded.schedule?.challengerQualifierResults ?? [] };
-      loaded.challengerTransactions = loaded.challengerTransactions ?? [];
-      return loaded;
+      const cleaned = cleanupDuplicateActiveAssignments(loaded);
+      cleaned.schedule = { ...cleaned.schedule, challengerQualifierResults: cleaned.schedule?.challengerQualifierResults ?? [] };
+      cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
+      return cleaned;
+    }
 
     // ── Stage sims — detect streaks + standings changes ────────────────────
     case "SIM_NEXT_MATCH": {
@@ -413,6 +503,17 @@ function reducer(state, action) {
 
       const tag = CDL_TEAMS.find(t => t.id === userTeam)?.tag ?? userTeam;
       const phase = state.schedule?.phase ?? "stage";
+      const targetForDuplicateCheck = state.prospects.find(p => p.id === playerId)
+        || state.players.find(p => p.id === playerId);
+      if (!targetForDuplicateCheck || isInactivePlayer(targetForDuplicateCheck)) {
+        return addNotif(state, "Player is not available to sign.");
+      }
+      if (targetForDuplicateCheck.teamId === userTeam) {
+        return addNotif(state, `${targetForDuplicateCheck.name} is already on your roster.`);
+      }
+      if (cdlRosterHasName(state.players, targetForDuplicateCheck.name, targetForDuplicateCheck.id)) {
+        return addNotif(state, `${targetForDuplicateCheck.name} is already active on a CDL roster.`);
+      }
 
       const prospect = state.prospects.find(p => p.id === playerId);
 
@@ -431,11 +532,10 @@ function reducer(state, action) {
             players:  [...state.players, signed],
             prospects: state.prospects.filter(p => p.id !== playerId),
             challengerTeams: (state.challengerTeams || []).map(t => t.id === signed.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
-            challengerTransactions: [...(state.challengerTransactions || []), {
-              season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
+            challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
               type: "CDL_SIGNING", playerId: signed.id, playerName: signed.name, fromTeamId: signed.challengerTeamId ?? null, toTeamId: userTeam,
               note: `${tag} signed ${signed.name} from Challengers`,
-            }],
+            }),
           }, `${signed.name} signed!`),
           [mkFeed("signing", `${tag} sign ${signed.name}`, state.season, phase)]
         );
@@ -460,11 +560,10 @@ function reducer(state, action) {
             };
           }),
           challengerTeams: (state.challengerTeams || []).map(t => t.id === target.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) } : t),
-          challengerTransactions: [...(state.challengerTransactions || []), {
-            season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
+          challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
             type: "CDL_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.challengerTeamId ?? null, toTeamId: userTeam,
             note: `${tag} signed ${target.name}`,
-          }],
+          }),
         }, `${target.name} signed!`),
         [mkFeed("signing", `${tag} sign ${target.name}`, state.season, phase)]
       );
@@ -474,44 +573,44 @@ function reducer(state, action) {
     case "RELEASE_PLAYER": {
       const player = state.players.find(p => p.id === action.playerId);
       if (!player) return state;
+      const wasOnCdlRoster = !!player.teamId && isCdlTeamId(player.teamId) && !isInactivePlayer(player);
+      if (!wasOnCdlRoster) return addNotif(state, `${player.name || "Player"} is not on an active CDL roster.`);
 
       const tag   = CDL_TEAMS.find(t => t.id === player.teamId)?.tag ?? player.teamId ?? "FA";
       const phase = state.schedule?.phase ?? "stage";
       const feedItem = mkFeed("release", `${tag} release ${player.name}`, state.season, phase);
 
       if (player.isProspect) {
-        const releaseToRetire = (player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70);
+        const releaseToRetire = shouldRetireOnRelease(player);
         const released = { ...player, teamId: null, isSub: false, challengerTeamId: null };
         return pushFeed(
           addNotif({
             ...state,
             players:  state.players.filter(p => p.id !== action.playerId),
             prospects: releaseToRetire ? state.prospects : [...state.prospects, released],
-            challengerTransactions: [...(state.challengerTransactions || []), {
-              season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
+            challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
               type: releaseToRetire ? "RETIREMENT" : "CDL_RELEASE_TO_CHALLENGERS", playerId: released.id, playerName: released.name, fromTeamId: player.teamId, toTeamId: null,
               note: releaseToRetire ? `${released.name} retired after release` : `${released.name} moved to Challengers pool`,
-            }],
+            }),
           }, `${player.name} released.`),
           [feedItem]
         );
       }
 
+      const releaseToChallengers = shouldMoveToChallengersOnRelease(player);
+      const txType = releaseToChallengers ? "CDL_RELEASE_TO_CHALLENGERS" : "RETIREMENT";
       return pushFeed(
         addNotif({
           ...state,
           players: state.players.filter(p => p.id !== action.playerId),
-          prospects: (((player.overall ?? 70) >= 75 || (player.age ?? 25) < 29) && !((player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70)))
-            ? [...state.prospects, { ...player, teamId: null, isSub: false, challengerTeamId: null }]
+          prospects: releaseToChallengers
+            ? [...state.prospects, { ...player, teamId: null, isSub: false, challengerTeamId: null, contractYears: 0 }]
             : state.prospects,
-          challengerTransactions: [...(state.challengerTransactions || []), {
-            season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
-            type: (((player.overall ?? 70) >= 75 || (player.age ?? 25) < 29) && !((player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70))) ? "CDL_RELEASE_TO_CHALLENGERS" : "RETIREMENT",
+          challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
+            type: txType,
             playerId: player.id, playerName: player.name, fromTeamId: player.teamId, toTeamId: null,
-            note: (((player.overall ?? 70) >= 75 || (player.age ?? 25) < 29) && !((player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70)))
-              ? `${player.name} moved to Challengers pool`
-              : `${player.name} retired after release`,
-          }],
+            note: releaseToChallengers ? `${player.name} moved to Challengers pool` : `${player.name} retired after release`,
+          }),
         }, `${player.name} released.`),
         [feedItem]
       );
