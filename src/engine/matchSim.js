@@ -216,6 +216,79 @@ function killsForMap(player, won, mode, rng) {
   return Math.max(0, Math.round(base + roleMod + qualMod + wonMod + noise));
 }
 
+function _weightedAllocate(total, weights, mins = null) {
+  const n = weights.length;
+  const out = Array(n).fill(0);
+  let remaining = total;
+  if (mins) {
+    for (let i = 0; i < n; i++) {
+      const m = Math.max(0, mins[i] ?? 0);
+      out[i] += m;
+      remaining -= m;
+    }
+  }
+  if (remaining <= 0) return out;
+  const safeW = weights.map(w => Math.max(0.001, w));
+  const sum = safeW.reduce((s, w) => s + w, 0);
+  for (let i = 0; i < n; i++) out[i] += Math.floor((safeW[i] / sum) * remaining);
+  let used = out.reduce((s, v) => s + v, 0);
+  while (used < total) {
+    let bi = 0, bw = -1;
+    for (let i = 0; i < n; i++) if (safeW[i] > bw) { bw = safeW[i]; bi = i; }
+    out[bi]++; used++;
+  }
+  return out;
+}
+
+function _simSnDStats(teamAObj, teamBObj, scoreA, scoreB, aWon, modA, modB, rng, seriesMods) {
+  const rounds = scoreA + scoreB;
+  const winsA = scoreA, winsB = scoreB;
+  const a = teamAObj.players.slice(0, 4);
+  const b = teamBObj.players.slice(0, 4);
+  const deathsA = Object.fromEntries(a.map(p => [p.id, 0]));
+  const deathsB = Object.fromEntries(b.map(p => [p.id, 0]));
+
+  const aDeathW = modA.map((p, i) => Math.max(0.5, 1.25 - ((seriesMods[a[i].id] ?? 0) * 0.8) - ((p.composure ?? 60) - 60) / 80));
+  const bDeathW = modB.map((p, i) => Math.max(0.5, 1.25 - ((seriesMods[b[i].id] ?? 0) * 0.8) - ((p.composure ?? 60) - 60) / 80));
+
+  function pickVictims(teamPlayers, deathMap, need, deathWeights) {
+    const alive = teamPlayers.filter(p => deathMap[p.id] < rounds);
+    const picked = [];
+    for (let c = 0; c < need && alive.length; c++) {
+      const ws = alive.map(p => deathWeights[teamPlayers.findIndex(tp => tp.id === p.id)] * (1 + (rounds - deathMap[p.id]) * 0.05));
+      const sum = ws.reduce((s, v) => s + v, 0);
+      let roll = rng() * sum, idx = 0;
+      for (; idx < alive.length; idx++) { roll -= ws[idx]; if (roll <= 0) break; }
+      const v = alive.splice(Math.min(idx, alive.length - 1), 1)[0];
+      if (!v) break;
+      deathMap[v.id]++; picked.push(v.id);
+    }
+    return picked.length;
+  }
+
+  for (let r = 0; r < rounds; r++) {
+    const aWinsRound = r < winsA ? true : r >= winsA + winsB ? false : (r - winsA < winsB ? false : true);
+    const loserDeaths = rng() < 0.8 ? 4 : (rng() < 0.5 ? 3 : 2);
+    const winnerDeaths = rng() < 0.45 ? 0 : (rng() < 0.7 ? 1 : (rng() < 0.9 ? 2 : 3));
+    if (aWinsRound) {
+      pickVictims(b, deathsB, loserDeaths, bDeathW);
+      pickVictims(a, deathsA, winnerDeaths, aDeathW);
+    } else {
+      pickVictims(a, deathsA, loserDeaths, aDeathW);
+      pickVictims(b, deathsB, winnerDeaths, bDeathW);
+    }
+  }
+
+  const totalDeathsA = a.reduce((s, p) => s + deathsA[p.id], 0);
+  const totalDeathsB = b.reduce((s, p) => s + deathsB[p.id], 0);
+  const killWtsA = modA.map((p, i) => Math.max(0.5, (targetKDForMap(p, aWon, "Search & Destroy", rng, seriesMods[a[i].id] ?? 0) + 0.1)));
+  const killWtsB = modB.map((p, i) => Math.max(0.5, (targetKDForMap(p, !aWon, "Search & Destroy", rng, seriesMods[b[i].id] ?? 0) + 0.1)));
+  const killsA = _weightedAllocate(totalDeathsB, killWtsA);
+  const killsB = _weightedAllocate(totalDeathsA, killWtsB);
+
+  return { deathsA, deathsB, killsA, killsB };
+}
+
 // ── FORM UPDATE ───────────────────────────────────────────────────────────────
 function updateForm(player, won, rng) {
   const delta      = won ? ri(2, 8, rng) : ri(-8, -2, rng);
@@ -357,25 +430,46 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
   const scoreA = aWon ? winScore : loseScore;
   const scoreB = aWon ? loseScore : winScore;
 
-  // Per-player stats using modified attribute copies for strength, original refs for K/D formula
   const playerMapStats = {};
-  const allSlots = [
-    ...teamAObj.players.slice(0, 4).map((orig, i) => ({ orig, mod: modA[i], won: aWon,  tId: teamAObj.id })),
-    ...teamBObj.players.slice(0, 4).map((orig, i) => ({ orig, mod: modB[i], won: !aWon, tId: teamBObj.id })),
-  ];
+  const teamA4 = teamAObj.players.slice(0, 4);
+  const teamB4 = teamBObj.players.slice(0, 4);
+  const kTargetsA = teamA4.map((p, i) => targetKDForMap(modA[i], aWon, mapDef.mode, rng, seriesMods[p.id] ?? 0));
+  const kTargetsB = teamB4.map((p, i) => targetKDForMap(modB[i], !aWon, mapDef.mode, rng, seriesMods[p.id] ?? 0));
 
-  for (const { orig, mod, won, tId } of allSlots) {
-    const sm     = seriesMods[orig.id] ?? 0;
-    const kd     = targetKDForMap(mod, won, mapDef.mode, rng, sm);
-    const kills  = killsForMap(mod, won, mapDef.mode, rng);
-    const deaths = kills > 0 ? Math.max(1, Math.round(kills / kd)) : 1;
-    playerMapStats[orig.id] = {
-      name:   orig.name,
-      teamId: tId,
-      kills,
-      deaths,
-      kd: deaths > 0 ? +(kills / deaths).toFixed(2) : kills > 0 ? kills : 0,
-    };
+  let killsA, killsB, deathsA, deathsB;
+  if (mapDef.mode === "Search & Destroy") {
+    const snd = _simSnDStats(teamAObj, teamBObj, scoreA, scoreB, aWon, modA, modB, rng, seriesMods);
+    killsA = snd.killsA;
+    killsB = snd.killsB;
+    deathsA = teamA4.map(p => snd.deathsA[p.id]);
+    deathsB = teamB4.map(p => snd.deathsB[p.id]);
+  } else {
+    const lose = Math.min(scoreA, scoreB);
+    if (mapDef.mode === "Hardpoint") {
+      const close = lose >= 220 ? 2 : lose >= 170 ? 1 : 0;
+      const winTot = close === 2 ? ri(110, 140, rng) : close === 1 ? ri(100, 125, rng) : ri(90, 115, rng);
+      const loseTot = close === 2 ? ri(105, 135, rng) : close === 1 ? ri(90, 115, rng) : ri(70, 95, rng);
+      const tAWin = scoreA > scoreB;
+      const kA = tAWin ? winTot : loseTot;
+      const kB = tAWin ? loseTot : winTot;
+      killsA = _weightedAllocate(kA, kTargetsA);
+      killsB = _weightedAllocate(kB, kTargetsB);
+    } else { // Overload
+      const close = lose >= 2 ? 2 : lose >= 1 ? 1 : 0;
+      const range = close === 2 ? [100, 130] : close === 1 ? [85, 115] : [70, 95];
+      killsA = _weightedAllocate(ri(range[0], range[1], rng), kTargetsA);
+      killsB = _weightedAllocate(ri(range[0], range[1], rng), kTargetsB);
+    }
+    deathsA = _weightedAllocate(killsB.reduce((s, v) => s + v, 0), kTargetsA.map(k => 1 / Math.max(0.45, k)));
+    deathsB = _weightedAllocate(killsA.reduce((s, v) => s + v, 0), kTargetsB.map(k => 1 / Math.max(0.45, k)));
+  }
+
+  for (let i = 0; i < 4; i++) {
+    const aP = teamA4[i], bP = teamB4[i];
+    const aK = killsA[i] ?? 0, aD = deathsA[i] ?? 0;
+    const bK = killsB[i] ?? 0, bD = deathsB[i] ?? 0;
+    playerMapStats[aP.id] = { name: aP.name, teamId: teamAObj.id, kills: aK, deaths: aD, kd: aD > 0 ? +(aK / aD).toFixed(2) : aK };
+    playerMapStats[bP.id] = { name: bP.name, teamId: teamBObj.id, kills: bK, deaths: bD, kd: bD > 0 ? +(bK / bD).toFixed(2) : bK };
   }
 
   // Tilt propagation: losing team's players with low tilt resistance become tilted next map
