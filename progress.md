@@ -151,7 +151,18 @@ Each player has `contractYears` (integer, years remaining).
 
 **Signing:** `SIGN_PLAYER` gives all newly signed players `contractYears: 2`.
 
-**Re-sign action:** `RESIGN_PLAYER` sets `contractYears` to the chosen value (before decrement).
+**Re-sign action:** `RESIGN_PLAYER` accepts `{ playerId, years, salary }`. Validates budget (starters only, same hard-cap logic as `SIGN_PLAYER`) then sets `contractYears` and `salary`. `salary` is optional for backwards compatibility.
+
+**Salary demands:** `getResignDemand(player, dealLength, playerSeasonStats, season)` in `rosterAI.js` calculates deterministic re-sign demand (dealLength 1/2/3). Baseline = `getSigningCost(player)` with modifiers:
+- K/D: ±5–10% based on current season stats
+- Age: +5% (≤22), −5% (27–28), −10% (29+)
+- Potential: +3–8% for high-pot young players (age ≤25, pot ≥85/92)
+- Ego: +5–10% for high-ego players
+- Work ethic + leadership: −2% stability discount if combined avg ≥75
+- Deal length: 1yr ×0.90, 2yr baseline, 3yr ×1.12 (or ×0.95 for declining players age ≥28 OVR <80)
+- Rounded to nearest $5k
+
+**AI auto-renew:** unchanged (renews all AI 1-yr contracts to 2), but now also sets `salary` via `getResignDemand(p, 1, ...)` for display consistency.
 
 **Roster display:** Roster table shows a "Yrs" column (red if expiring). Player modal bio shows contract remaining with ⚠ warning when 1 yr left.
 
@@ -324,7 +335,7 @@ Core philosophy: **focus → action → result → world update**
 - Navigation system mid-transition (some legacy top-tab remnants)
 - No league narrative (news, storylines)
 - No opponent roster viewer
-- No contract salary negotiation (re-signing is free / year-only decision)
+- Budget display in ContractReviewPanel uses `getSigningCost()` for locked players, not `player.salary`; slight drift possible after multi-season progression (acceptable, consistent with rest of system)
 - OVR history and team history only populate after the first offseason (new games start with empty history)
 - `progressionLog` is replaced each offseason (not cumulative) — profile only shows "Last Offseason Δ" from it; full OVR history is now in `playerOvrHistory` instead
 - `isSub` field on players not yet fully wired for roster sub management — `calcTeamOvr` correctly excludes subs but the sub system itself is minimal
