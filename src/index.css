@@ -1130,6 +1130,25 @@ body { margin: 0; }
 .scout-note { margin-top: 4px; margin-bottom: 12px; }
 
 .filters { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+.cm-hero {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0 10px;
+}
+.cm-chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.cm-chip {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.cm-budget-bar { height: 6px; background: var(--bg3); border-radius: 999px; overflow: hidden; }
+.cm-budget-bar > div { height: 100%; border-radius: 999px; transition: width .25s ease; }
+.cm-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
 .filter-group {
   display: flex;
   align-items: center;
