@@ -685,6 +685,21 @@ function releasePlayer(player, players, prospects) {
       movedToChallengers: toProspect,
     };
   }
+  if (shouldRetire) {
+    return {
+      players: players.filter(p => p.id !== player.id),
+      prospects,
+      retired: { ...player, teamId: null, isSub: false },
+    };
+  }
+  if (shouldGoChall) {
+    const toProspect = { ...player, teamId: null, isSub: false, challengerTeamId: null, contractYears: 0 };
+    return {
+      players: players.filter(p => p.id !== player.id),
+      prospects: [...prospects, toProspect],
+      movedToChallengers: toProspect,
+    };
+  }
 
   if (shouldGoInactive) {
     return {
