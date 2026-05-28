@@ -5,6 +5,8 @@
 
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamColor(id, schedule) { return getTeamMeta(id, schedule)?.color ?? "#888"; }
@@ -93,6 +95,7 @@ export default function MajorEntryOverlay() {
                   <div className="meo-um-team">
                     <span className="meo-um-seed">#{userSeedIdx + 1}</span>
                     <span className="meo-um-name" style={{ color: teamColor(userTeamId, schedule) }}>
+                      <TeamLogo team={resolveTeamDisplay(userTeamId, schedule)} size={18} />{" "}
                       {teamName(userTeamId, schedule)}
                     </span>
                     <span className="meo-um-you">YOU</span>
@@ -121,6 +124,7 @@ export default function MajorEntryOverlay() {
                       <>
                         <span className="meo-um-seed">#{userWBR1OppSeedIdx + 1}</span>
                         <span className="meo-um-name" style={{ color: teamColor(userWBR1Opp, schedule) }}>
+                          <TeamLogo team={resolveTeamDisplay(userWBR1Opp, schedule)} size={18} />{" "}
                           {teamName(userWBR1Opp, schedule)}
                         </span>
                       </>
@@ -176,6 +180,7 @@ export default function MajorEntryOverlay() {
                   <span className="meo-seed-num">{i + 1}</span>
                   <span className="meo-seed-dot" style={{ background: teamColor(id, schedule) }} />
                   <span className="meo-seed-name" style={isUser ? { color: teamColor(id, schedule) } : {}}>
+                    <TeamLogo team={resolveTeamDisplay(id, schedule)} size={16} />{" "}
                     {isUser ? teamName(id, schedule) : teamTag(id, schedule)}
                   </span>
                   <span className="meo-seed-rec">{rec.wins}W–{rec.losses}L</span>
