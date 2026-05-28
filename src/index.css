@@ -5545,9 +5545,31 @@ body { margin: 0; }
 }
 
 .cp-row--expiring {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   border-color: rgba(220, 38, 38, 0.25);
   background: rgba(220, 38, 38, 0.05);
 }
+
+.cp-expiring-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.cp-expiring-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.cp-meta-sep { color: var(--border); }
 
 .cp-player-info {
   display: flex;
@@ -5633,12 +5655,12 @@ body { margin: 0; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 9px;
+  padding: 5px 10px;
   border-radius: 5px;
   border: 1px solid var(--border);
   background: var(--bg3);
   cursor: pointer;
-  min-width: 54px;
+  min-width: 80px;
   color: var(--text);
   transition: border-color 0.15s, background 0.15s;
 }
@@ -5667,6 +5689,16 @@ body { margin: 0; }
 .cp-deal-over {
   font-size: 10px;
   color: var(--red);
+  margin-top: 1px;
+}
+.cp-deal-delta {
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 1px;
+  letter-spacing: 0.01em;
+}
+.cp-deal-after {
+  font-size: 10px;
   margin-top: 1px;
 }
 

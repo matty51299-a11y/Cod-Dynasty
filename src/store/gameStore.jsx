@@ -340,7 +340,7 @@ function reducer(state, action) {
         const otherStarters = state.players.filter(
           p => p.teamId === state.userTeamId && !p.isSub && p.id !== playerId
         );
-        const committed = otherStarters.reduce((s, p) => s + getSigningCost(p), 0);
+        const committed = otherStarters.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
         const cap = getTeamCap(state.userTeamId);
         if (committed + salary > cap) {
           return addNotif(state, `Over budget — re-signing ${player.name} would exceed your cap.`);
@@ -378,7 +378,7 @@ function reducer(state, action) {
           const cap       = getTeamCap(userTeam);
           const committed = rosterNow
             .filter(p => !p.isSub)
-            .reduce((s, p) => s + getSigningCost(p), 0);
+            .reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
           const cost = getSigningCost(target);
           const over = committed + cost - cap;
           if (over > 0) {

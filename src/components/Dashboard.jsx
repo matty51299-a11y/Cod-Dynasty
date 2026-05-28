@@ -667,7 +667,7 @@ function ContractReviewPanel({ players, dispatch, season, userTeamId, playerSeas
   const locked   = starters.filter(p => (p.contractYears ?? 2) > 1);
 
   const cap        = getTeamCap(userTeamId);
-  const lockedCost = locked.reduce((s, p) => s + getSigningCost(p), 0);
+  const lockedCost = locked.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
   const space      = cap - lockedCost;
 
   function fmt(n) { return `$${Math.round(n / 1000)}k`; }
@@ -727,26 +727,35 @@ function ContractReviewPanel({ players, dispatch, season, userTeamId, playerSeas
             }));
             return (
               <div key={p.id} className="cp-row cp-row--expiring">
-                <div className="cp-player-info">
+                <div className="cp-expiring-header">
                   <span className="cp-name">{p.name}</span>
                   <span className="cp-role">{p.primary}</span>
                   <span className="cp-ovr"
                     style={{ color: p.overall >= 90 ? "#b45309" : p.overall >= 80 ? "#15803d" : "#d97706" }}>
                     {p.overall} OVR
                   </span>
-                  <span className="cp-current-salary">Current: {fmt(curSalary)}</span>
+                  <span className="cp-expiring-meta">
+                    Current <strong>{fmt(curSalary)}</strong>
+                    <span className="cp-meta-sep">·</span>
+                    Available <strong style={{ color: space > 0 ? "var(--green)" : "var(--red)" }}>
+                      {fmt(Math.max(0, space))}
+                    </strong>
+                  </span>
                 </div>
                 <div className="cp-demand-options">
                   {demands.map(d => {
-                    const canAfford = d.demand <= space;
+                    const canAfford  = d.demand <= space;
+                    const delta      = d.demand - curSalary;
+                    const afterSpace = space - d.demand;
+                    const deltaColor = delta > 0 ? "var(--red)" : delta < 0 ? "var(--green)" : "var(--text-dim)";
+                    const deltaLabel = delta === 0
+                      ? "no change"
+                      : `${delta > 0 ? "▲" : "▼"} ${fmt(Math.abs(delta))}`;
                     return (
                       <button
                         key={d.label}
                         className={`cp-deal-btn${canAfford ? "" : " cp-deal-btn--over"}`}
                         disabled={!canAfford}
-                        title={canAfford
-                          ? `Re-sign for ${d.label} at ${fmt(d.demand)}`
-                          : `Over budget by ${fmt(d.demand - space)}`}
                         onClick={() => dispatch({
                           type: "RESIGN_PLAYER",
                           playerId: p.id,
@@ -756,7 +765,13 @@ function ContractReviewPanel({ players, dispatch, season, userTeamId, playerSeas
                       >
                         <span className="cp-deal-length">{d.label}</span>
                         <span className="cp-deal-price">{fmt(d.demand)}</span>
-                        {!canAfford && <span className="cp-deal-over">✕</span>}
+                        <span className="cp-deal-delta" style={{ color: deltaColor }}>{deltaLabel}</span>
+                        {canAfford
+                          ? <span className="cp-deal-after" style={{ color: afterSpace < 50000 ? "var(--yellow)" : "var(--text-dim)" }}>
+                              after: {fmt(afterSpace)}
+                            </span>
+                          : <span className="cp-deal-over">over by {fmt(d.demand - space)}</span>
+                        }
                       </button>
                     );
                   })}
@@ -772,6 +787,7 @@ function ContractReviewPanel({ players, dispatch, season, userTeamId, playerSeas
           <div className="cp-section-label">Under Contract</div>
           {locked.map(p => {
             const rem = (p.contractYears ?? 2) - 1;
+            const salary = p.salary ?? getSigningCost(p);
             return (
               <div key={p.id} className="cp-row">
                 <div className="cp-player-info">
@@ -781,6 +797,7 @@ function ContractReviewPanel({ players, dispatch, season, userTeamId, playerSeas
                     style={{ color: p.overall >= 90 ? "#b45309" : p.overall >= 80 ? "#15803d" : "#d97706" }}>
                     {p.overall} OVR
                   </span>
+                  <span className="cp-current-salary">{fmt(salary)}/yr</span>
                 </div>
                 <span className="cp-years-remaining">
                   {rem} yr{rem !== 1 ? "s" : ""} remaining

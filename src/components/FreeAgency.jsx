@@ -29,7 +29,7 @@ export default function FreeAgency() {
   // ── Budget calc ─────────────────────────────────────────────────────────
   const myStarters  = players.filter(p => p.teamId === userTeamId && !p.isSub);
   const teamCap     = getTeamCap(userTeamId);
-  const committed   = myStarters.reduce((s, p) => s + getSigningCost(p), 0);
+  const committed   = myStarters.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
   const remaining   = teamCap - committed;
   const budgetPct   = Math.min(100, Math.round((committed / teamCap) * 100));
   const budgetColor = budgetPct >= 90 ? "#dc2626" : budgetPct >= 70 ? "#9a3412" : "#15803d";
