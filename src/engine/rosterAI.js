@@ -93,6 +93,16 @@ export function getResignDemand(player, dealLength, playerSeasonStats, season) {
   return Math.round(base / 5000) * 5000;
 }
 
+
+function getCurrentKD(player, playerSeasonStats, season) {
+  if (!player?.id || !playerSeasonStats || season == null) return 1;
+  const rows = (playerSeasonStats[player.id] || []).filter(r => r.season === season && (r.matches || 0) > 0);
+  if (!rows.length) return 1;
+  const kills = rows.reduce((sum, r) => sum + (r.kills || 0), 0);
+  const deaths = rows.reduce((sum, r) => sum + (r.deaths || 0), 0);
+  return deaths > 0 ? kills / deaths : kills > 0 ? kills : 1;
+}
+
 function getRosterSigningCost(players, teamId) {
   return getStarters(players, teamId)
     .reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);

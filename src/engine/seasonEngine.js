@@ -144,7 +144,7 @@ function awardMajorPlacementPoints(schedule, majorIdx) {
   if (majorIdx < 0 || majorIdx > 3) return;
   const major = schedule.majors?.[majorIdx];
   const bracket = major?.bracket;
-  if (!major?.completed || bracket?.type !== "DE16") return;
+  if (!major?.completed || bracket?.type !== "DE16" || major.pointsAwarded) return;
 
   const placements = computeDE16Placements(bracket);
   const cdlIds = new Set(CDL_TEAMS.map(t => t.id));
@@ -159,6 +159,7 @@ function awardMajorPlacementPoints(schedule, majorIdx) {
   }
 
   major.pointsAwards = awards.sort((a, b) => a.place - b.place);
+  major.pointsAwarded = true;
 }
 
 export function buildSeason(season) {
@@ -550,6 +551,55 @@ function _resolveMajorCompletion(major) {
   return false;
 }
 
+export function debugMajorBracketState(major, gameState = null) {
+  const bracket = major?.bracket;
+  const cdlIds = new Set(CDL_TEAMS.map(t => t.id));
+  const eventIds = new Set(Object.keys(gameState?.schedule?.currentMajorEventTeams || {}));
+  const playerTeamIds = new Set((gameState?.players || []).map(p => p.teamId).filter(Boolean));
+  const prospectTeamIds = new Set((gameState?.prospects || []).map(p => p.teamId || p.challengerTeamId).filter(Boolean));
+  const knownIds = new Set([...cdlIds, ...eventIds, ...playerTeamIds, ...prospectTeamIds, ...(bracket?.seeds || [])]);
+  const rounds = bracket?.rounds || [];
+  const matchRows = rounds.flatMap((round, roundIdx) => (round.matches || []).map((match, matchIdx) => ({ roundIdx, roundName: round.name, matchIdx, match })));
+  const nextSimmable = matchRows.find(({ match }) => !match.played && match.a && match.b) || null;
+  const blockedMatches = matchRows
+    .filter(({ match }) => !match.played && (!match.a || !match.b))
+    .map(({ roundIdx, roundName, matchIdx, match }) => ({ roundIdx, roundName, matchIdx, a: match.a ?? null, b: match.b ?? null }));
+  const invalidTeamMatches = gameState ? matchRows
+    .filter(({ match }) => [match.a, match.b].some(id => id && !knownIds.has(id)))
+    .map(({ roundIdx, roundName, matchIdx, match }) => ({ roundIdx, roundName, matchIdx, a: match.a ?? null, b: match.b ?? null })) : [];
+
+  return {
+    bracketType: bracket?.type ?? null,
+    majorCompleted: !!major?.completed,
+    bracketCompleted: !!bracket?.completed,
+    champion: major?.champion ?? bracket?.champion ?? null,
+    totalMatches: matchRows.length,
+    completedMatches: matchRows.filter(({ match }) => match.played).length,
+    pendingMatches: matchRows.filter(({ match }) => !match.played).length,
+    pendingMatchesWithBothTeams: matchRows
+      .filter(({ match }) => !match.played && match.a && match.b)
+      .map(({ roundIdx, roundName, matchIdx, match }) => ({ roundIdx, roundName, matchIdx, a: match.a, b: match.b })),
+    blockedMatches,
+    invalidTeamMatches,
+    nextSimmableMatch: nextSimmable ? {
+      roundIdx: nextSimmable.roundIdx,
+      roundName: nextSimmable.roundName,
+      matchIdx: nextSimmable.matchIdx,
+      a: nextSimmable.match.a,
+      b: nextSimmable.match.b,
+    } : null,
+    unresolvedRounds: rounds
+      .map((round, roundIdx) => ({
+        roundIdx,
+        roundName: round.name,
+        matchCount: round.matches?.length || 0,
+        unresolvedSlots: (round.matches || []).filter(m => !m.played && (!m.a || !m.b)).length,
+        unplayedReady: (round.matches || []).filter(m => !m.played && m.a && m.b).length,
+      }))
+      .filter(round => round.unresolvedSlots > 0 || round.unplayedReady > 0),
+  };
+}
+
 function _simOneMajorMatchDE16(schedule, gameState, precomputedResult = null) {
   const majorIdx = schedule.majorIdx;
   const major = schedule.majors[majorIdx];
@@ -789,9 +839,6 @@ function _advanceMajorPhase(schedule, gameState) {
   // Award Major placement points to CDL teams only (regular majors).
   awardMajorPlacementPoints(schedule, majorIdx);
 
-  // AI roster window after each regular major (not after Champs)
-  if (majorIdx <= 3) nextState = runAIMajorRosterWindow(nextState, majorIdx);
-
   const teamIds = CDL_TEAMS.map(t => t.id);
 
   if (majorIdx <= 3) schedule.currentMajorEventTeams = null;
@@ -814,6 +861,10 @@ function _advanceMajorPhase(schedule, gameState) {
     schedule.phase    = "offseason";
     schedule.majorIdx = null;
   }
+
+  // AI roster window after each regular major (not after Champs), once the
+  // schedule has safely left the Major phase.
+  if (majorIdx <= 3) nextState = runAIMajorRosterWindow(nextState, majorIdx);
 
   return nextState;
 }
@@ -850,7 +901,11 @@ export function simNextMajorMatch(gameState) {
   if (schedule.phase !== "major") return gameState;
 
   const major = schedule.majors[schedule.majorIdx];
-  if (!major || major.completed) return gameState;
+  if (!major) return gameState;
+  if (major.completed) {
+    const nextState = _advanceMajorPhase(schedule, gameState);
+    return { ...nextState, schedule: { ...schedule } };
+  }
 
   const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
   let nextState = gameState;
@@ -865,7 +920,11 @@ export function simMajorRound(gameState) {
   if (schedule.phase !== "major") return gameState;
 
   const major = schedule.majors[schedule.majorIdx];
-  if (!major || major.completed) return gameState;
+  if (!major) return gameState;
+  if (major.completed) {
+    const nextState = _advanceMajorPhase(schedule, gameState);
+    return { ...nextState, schedule: { ...schedule } };
+  }
 
   // Snapshot which round we're starting in so we stop after it finishes
   let startRound = -1;
@@ -901,15 +960,29 @@ export function simMajor(gameState) {
 
   const targetIdx = schedule.majorIdx;
   const major     = schedule.majors[targetIdx];
-  if (!major || major.completed) return gameState;
+  if (!major) return gameState;
+  if (major.completed) {
+    const nextState = _advanceMajorPhase(schedule, gameState);
+    return { ...nextState, schedule: { ...schedule } };
+  }
 
   let safety = 0;
   while (!schedule.majors[targetIdx].completed && safety++ < 200) {
+    const before = debugMajorBracketState(schedule.majors[targetIdx], gameState);
     const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
+    const after = debugMajorBracketState(schedule.majors[targetIdx], gameState);
+    if (after.completedMatches === before.completedMatches && !allComplete) {
+      console.warn("Major simulation stopped without progress", after);
+      break;
+    }
     if (allComplete || _resolveMajorCompletion(schedule.majors[schedule.majorIdx])) {
       gameState = _advanceMajorPhase(schedule, gameState);
       break;
     }
+  }
+
+  if (safety >= 200 && !schedule.majors[targetIdx].completed) {
+    console.warn("Major simulation hit safety limit", debugMajorBracketState(schedule.majors[targetIdx], gameState));
   }
 
   return { ...gameState, schedule: { ...schedule } };
