@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
+import { calcTeamOvr } from "../engine/teamOvr.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 
@@ -67,6 +68,7 @@ export default function Dashboard({ setScreen }) {
   const team      = CDL_TEAMS.find(t => t.id === userTeamId);
   const myPlayers = players.filter(p => p.teamId === userTeamId);
   const chem      = calcChemistry(myPlayers);
+  const teamOvr   = calcTeamOvr(userTeamId, players);
 
   const phase      = schedule.phase;
   const stageIdx   = schedule.stageIdx  ?? schedule.currentStage ?? 0;
@@ -219,6 +221,12 @@ export default function Dashboard({ setScreen }) {
                   <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-dim)", marginLeft: 4 }}>
                     ({chemLabel(chem)})
                   </span>
+                </span>
+              </div>
+              <div className="db-stat-chip">
+                <span className="db-stat-chip-label">Team OVR</span>
+                <span className="db-stat-chip-value" style={{ color: ratingColor(teamOvr) }}>
+                  {teamOvr}
                 </span>
               </div>
             </div>

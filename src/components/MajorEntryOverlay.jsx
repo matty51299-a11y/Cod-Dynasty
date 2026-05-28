@@ -25,21 +25,41 @@ export default function MajorEntryOverlay() {
   if (!bracket || isEntered) return null;
 
   const isChamps = majorIdx === 4;
+  const isDE     = bracket.type === "DE";
 
-  // Correct standings source
   const seedStandings = isChamps
     ? (schedule.standings ?? {})
     : (schedule.stageStandings ?? schedule.standings ?? {});
 
-  const userSeed    = bracket.seeds?.indexOf(userTeamId) ?? -1;
-  const userQF      = bracket.rounds?.[0]?.matches?.find(m => m.a === userTeamId || m.b === userTeamId);
-  const userOpp     = userQF ? (userQF.a === userTeamId ? userQF.b : userQF.a) : null;
-  const userOppSeed = userOpp != null ? (bracket.seeds?.indexOf(userOpp) ?? -1) : -1;
+  // Find the user's seed index (0-based)
+  const userSeedIdx = bracket.seeds?.indexOf(userTeamId) ?? -1;
+  const userHasBye  = isDE && userSeedIdx >= 0 && userSeedIdx <= 3; // seeds 1–4
+
+  // For seeds 5–12: find the opening WB Round 1 match
+  const userWBR1Match = isDE && !userHasBye
+    ? bracket.rounds?.[0]?.matches?.find(m => m.a === userTeamId || m.b === userTeamId)
+    : null;
+  const userWBR1Opp = userWBR1Match
+    ? (userWBR1Match.a === userTeamId ? userWBR1Match.b : userWBR1Match.a)
+    : null;
+  const userWBR1OppSeedIdx = userWBR1Opp != null
+    ? (bracket.seeds?.indexOf(userWBR1Opp) ?? -1)
+    : -1;
+
+  // For SE Champs: use existing QF logic
+  const userQF = !isDE
+    ? bracket.rounds?.[0]?.matches?.find(m => m.a === userTeamId || m.b === userTeamId)
+    : null;
+  const userQFOpp     = userQF ? (userQF.a === userTeamId ? userQF.b : userQF.a) : null;
+  const userQFOppSeed = userQFOpp != null ? (bracket.seeds?.indexOf(userQFOpp) ?? -1) : -1;
 
   function enter() {
     dispatch({ type: "ENTER_MAJOR", majorIdx });
-    // No tab navigation — MajorTournamentOverlay takes over when isEntered becomes true
   }
+
+  const formatStr = isDE
+    ? "12 Teams · Double Elimination"
+    : "Eight Teams · Single Elimination";
 
   return (
     <div className="meo-backdrop">
@@ -49,6 +69,7 @@ export default function MajorEntryOverlay() {
         <div className="meo-badges anim-stagger" style={{ "--stagger": 0 }}>
           <span className="meo-badge-event">TOURNAMENT EVENT</span>
           {isChamps && <span className="meo-badge-champs">WORLD CHAMPIONSHIP</span>}
+          {isDE && !isChamps && <span className="meo-badge-de">DOUBLE ELIMINATION</span>}
         </div>
 
         {/* ── Title ── */}
@@ -56,45 +77,98 @@ export default function MajorEntryOverlay() {
           {major.name.toUpperCase()}
         </div>
         <div className="meo-season anim-stagger" style={{ "--stagger": 2 }}>
-          Season {schedule.season} · Eight Teams · Single Elimination
+          Season {schedule.season} · {formatStr}
         </div>
 
-        {/* ── Your opening match ── */}
-        {userSeed >= 0 && (
+        {/* ── User's tournament situation ── */}
+        {userSeedIdx >= 0 && (
           <div className="meo-user-match anim-stagger" style={{ "--stagger": 3 }}>
-            <div className="meo-um-label">YOUR OPENING MATCH</div>
-            <div className="meo-um-row">
-              <div className="meo-um-team">
-                <span className="meo-um-seed">#{userSeed + 1}</span>
-                <span className="meo-um-name" style={{ color: teamColor(userTeamId) }}>
-                  {teamName(userTeamId)}
-                </span>
-                <span className="meo-um-you">YOU</span>
-              </div>
-              <span className="meo-um-vs">vs</span>
-              <div className="meo-um-team meo-um-team-opp">
-                {userOpp != null ? (
-                  <>
-                    <span className="meo-um-seed">#{userOppSeed + 1}</span>
-                    <span className="meo-um-name" style={{ color: teamColor(userOpp) }}>
-                      {teamName(userOpp)}
+            {isDE && userHasBye ? (
+              // Seeds 1–4: earned a WB Round 1 bye
+              <>
+                <div className="meo-um-label">YOUR OPENING ROUND</div>
+                <div className="meo-um-bye-row">
+                  <div className="meo-um-team">
+                    <span className="meo-um-seed">#{userSeedIdx + 1}</span>
+                    <span className="meo-um-name" style={{ color: teamColor(userTeamId) }}>
+                      {teamName(userTeamId)}
                     </span>
-                  </>
-                ) : (
-                  <span className="muted">TBD</span>
-                )}
-              </div>
-            </div>
+                    <span className="meo-um-you">YOU</span>
+                  </div>
+                  <div className="meo-um-bye-badge">WB Round 1 Bye</div>
+                  <div className="meo-um-bye-note muted">
+                    You enter in WB Round 2 — earned by finishing in the top 4
+                  </div>
+                </div>
+              </>
+            ) : isDE && userWBR1Match ? (
+              // Seeds 5–12: show WB Round 1 opening match
+              <>
+                <div className="meo-um-label">YOUR OPENING MATCH · WB ROUND 1</div>
+                <div className="meo-um-row">
+                  <div className="meo-um-team">
+                    <span className="meo-um-seed">#{userSeedIdx + 1}</span>
+                    <span className="meo-um-name" style={{ color: teamColor(userTeamId) }}>
+                      {teamName(userTeamId)}
+                    </span>
+                    <span className="meo-um-you">YOU</span>
+                  </div>
+                  <span className="meo-um-vs">vs</span>
+                  <div className="meo-um-team meo-um-team-opp">
+                    {userWBR1Opp != null ? (
+                      <>
+                        <span className="meo-um-seed">#{userWBR1OppSeedIdx + 1}</span>
+                        <span className="meo-um-name" style={{ color: teamColor(userWBR1Opp) }}>
+                          {teamName(userWBR1Opp)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="muted">TBD</span>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : !isDE && userQF ? (
+              // SE Champs: show Quarterfinal match
+              <>
+                <div className="meo-um-label">YOUR OPENING MATCH</div>
+                <div className="meo-um-row">
+                  <div className="meo-um-team">
+                    <span className="meo-um-seed">#{userSeedIdx + 1}</span>
+                    <span className="meo-um-name" style={{ color: teamColor(userTeamId) }}>
+                      {teamName(userTeamId)}
+                    </span>
+                    <span className="meo-um-you">YOU</span>
+                  </div>
+                  <span className="meo-um-vs">vs</span>
+                  <div className="meo-um-team meo-um-team-opp">
+                    {userQFOpp != null ? (
+                      <>
+                        <span className="meo-um-seed">#{userQFOppSeed + 1}</span>
+                        <span className="meo-um-name" style={{ color: teamColor(userQFOpp) }}>
+                          {teamName(userQFOpp)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="muted">TBD</span>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
         )}
 
         {/* ── Seedings grid ── */}
         <div className="meo-seeds-block anim-stagger" style={{ "--stagger": 4 }}>
-          <div className="meo-seeds-label">QUALIFIED TEAMS</div>
-          <div className="meo-seeds-grid">
+          <div className="meo-seeds-label">
+            {isDE ? "ALL 12 TEAMS" : "QUALIFIED TEAMS"}
+          </div>
+          <div className={`meo-seeds-grid ${isDE ? "meo-seeds-grid-de" : ""}`}>
             {bracket.seeds.map((id, i) => {
               const rec    = seedStandings[id] ?? { wins: 0, losses: 0, points: 0 };
               const isUser = id === userTeamId;
+              const hasBye = isDE && i <= 3;
               return (
                 <div key={id} className={`meo-seed-row ${isUser ? "meo-seed-you" : ""}`}>
                   <span className="meo-seed-num">{i + 1}</span>
@@ -103,6 +177,7 @@ export default function MajorEntryOverlay() {
                     {isUser ? teamName(id) : teamTag(id)}
                   </span>
                   <span className="meo-seed-rec">{rec.wins}W–{rec.losses}L</span>
+                  {hasBye && <span className="meo-bye-badge">Bye</span>}
                   {isUser && <span className="you-badge">YOU</span>}
                 </div>
               );

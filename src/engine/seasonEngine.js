@@ -126,9 +126,186 @@ function buildMajorBracket(standings, userTeamId) {
   };
 }
 
+// ── Build 12-team Double-Elimination bracket (Majors 1–4) ────────────────────
+// Seeds 1–4 get a WB Round 1 bye; seeds 5–12 play WB Round 1.
+// rounds[] order defines simulation order (each round's inputs are always ready).
+function buildMajorBracketDE(standings) {
+  const sorted = Object.entries(standings)
+    .sort((a, b) => b[1].points - a[1].points)
+    .map(([id]) => id); // all 12 teams, seed 1 = index 0
+
+  const s = sorted;
+  // WB Round 1: 5v12, 6v11, 7v10, 8v9
+  const wbR1Matches = [
+    { a: s[4], b: s[11], seedA: 5, seedB: 12, played: false, result: null },
+    { a: s[5], b: s[10], seedA: 6, seedB: 11, played: false, result: null },
+    { a: s[6], b: s[9],  seedA: 7, seedB: 10, played: false, result: null },
+    { a: s[7], b: s[8],  seedA: 8, seedB:  9, played: false, result: null },
+  ];
+
+  return {
+    seeds: sorted,
+    type: "DE",
+    rounds: [
+      { name: "WB Round 1",    type: "WB", matches: wbR1Matches },
+      { name: "LB Round 1",    type: "LB", matches: [] },
+      { name: "WB Round 2",    type: "WB", matches: [] },
+      { name: "LB Round 2",    type: "LB", matches: [] },
+      { name: "LB Round 3",    type: "LB", matches: [] },
+      { name: "WB Semifinals", type: "WB", matches: [] },
+      { name: "LB Round 4",    type: "LB", matches: [] },
+      { name: "WB Final",      type: "WB", matches: [] },
+      { name: "LB Round 5",    type: "LB", matches: [] },
+      { name: "LB Final",      type: "LB", matches: [] },
+      { name: "Grand Final",   type: "GF", matches: [] },
+    ],
+    completed: false,
+    champion: null,
+    _wbr2LosersHigh: null,
+    _lbr3Winners: null,
+    _wbFLoser: null,
+    _wbChampion: null,
+  };
+}
+
+// ── Internal: try to populate LB Final once both prerequisites are ready ──────
+function _tryPopulateLBFinal(bracket) {
+  const lbR5 = bracket.rounds[8];
+  if (!lbR5.matches.length || !lbR5.matches[0]?.played) return;
+  if (!bracket._wbFLoser) return;
+  const lbR5Winner = lbR5.matches[0].result.winnerId;
+  bracket.rounds[9].matches = [
+    { a: bracket._wbFLoser, b: lbR5Winner, played: false, result: null },
+  ];
+}
+
+// ── Internal: play one DE major match ─────────────────────────────────────────
+// precomputedResult: if provided, skips simMatch and uses it directly (interactive play).
+function _simOneMajorMatchDE(schedule, gameState, precomputedResult = null) {
+  const majorIdx = schedule.majorIdx;
+  const major    = schedule.majors[majorIdx];
+  const bracket  = major.bracket;
+
+  let roundIdx = -1;
+  for (let r = 0; r < bracket.rounds.length; r++) {
+    const round = bracket.rounds[r];
+    if (round.matches.length > 0 && round.matches.some(m => !m.played)) {
+      roundIdx = r;
+      break;
+    }
+  }
+  if (roundIdx === -1) return { roundIdx: -1, allComplete: true };
+
+  const round    = bracket.rounds[roundIdx];
+  const matchIdx = round.matches.findIndex(m => !m.played);
+  const match    = round.matches[matchIdx];
+
+  const result = precomputedResult ?? (() => {
+    const seed  = majorSeed(schedule.season, majorIdx, roundIdx, matchIdx);
+    const teamA = buildTeamObj(match.a, gameState);
+    const teamB = buildTeamObj(match.b, gameState);
+    return simMatch(teamA, teamB, seed);
+  })();
+
+  match.played = true;
+  match.result = result;
+  schedule.matchLog.push({ ...result, stage: `${major.name} – ${round.name}` });
+
+  const roundDone = round.matches.every(m => m.played);
+  if (!roundDone) return { roundIdx, allComplete: false };
+
+  const winners = round.matches.map(m => m.result.winnerId);
+  const losers  = round.matches.map(m => m.result.loserId);
+  const seeds   = bracket.seeds;
+
+  switch (roundIdx) {
+    case 0: { // WB Round 1 → populate LB R1 + WB R2
+      bracket.rounds[1].matches = [
+        { a: losers[0], b: losers[3], played: false, result: null },
+        { a: losers[1], b: losers[2], played: false, result: null },
+      ];
+      bracket.rounds[2].matches = [
+        { a: seeds[0], b: winners[3], seedA: 1, played: false, result: null },
+        { a: seeds[1], b: winners[2], seedA: 2, played: false, result: null },
+        { a: seeds[2], b: winners[1], seedA: 3, played: false, result: null },
+        { a: seeds[3], b: winners[0], seedA: 4, played: false, result: null },
+      ];
+      break;
+    }
+    case 1: break; // LB R1 done — LB R2 populated after WB R2
+
+    case 2: { // WB Round 2 → populate WB SF + LB R2; store high losers
+      bracket.rounds[5].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+        { a: winners[2], b: winners[3], played: false, result: null },
+      ];
+      const lbR1W = bracket.rounds[1].matches.map(m => m.result.winnerId);
+      bracket.rounds[3].matches = [
+        { a: lbR1W[0], b: losers[2], played: false, result: null },
+        { a: lbR1W[1], b: losers[3], played: false, result: null },
+      ];
+      bracket._wbr2LosersHigh = [losers[0], losers[1]];
+      break;
+    }
+    case 3: { // LB R2 → populate LB R3
+      const hl = bracket._wbr2LosersHigh;
+      bracket.rounds[4].matches = [
+        { a: winners[0], b: hl[0], played: false, result: null },
+        { a: winners[1], b: hl[1], played: false, result: null },
+      ];
+      break;
+    }
+    case 4: { // LB R3 done — store for LB R4 (populated after WB SF)
+      bracket._lbr3Winners = winners;
+      break;
+    }
+    case 5: { // WB Semifinals → populate WB Final + LB R4
+      bracket.rounds[7].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+      ];
+      const lbR3W = bracket._lbr3Winners;
+      bracket.rounds[6].matches = [
+        { a: lbR3W[0], b: losers[0], played: false, result: null },
+        { a: lbR3W[1], b: losers[1], played: false, result: null },
+      ];
+      break;
+    }
+    case 6: { // LB R4 → populate LB R5
+      bracket.rounds[8].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+      ];
+      break;
+    }
+    case 7: { // WB Final → store WB champ + loser; try GF
+      bracket._wbChampion = winners[0];
+      bracket._wbFLoser   = losers[0];
+      _tryPopulateLBFinal(bracket);
+      break;
+    }
+    case 8: { // LB R5 → try LB Final
+      _tryPopulateLBFinal(bracket);
+      break;
+    }
+    case 9: { // LB Final → populate Grand Final
+      bracket.rounds[10].matches = [
+        { a: bracket._wbChampion, b: winners[0], played: false, result: null },
+      ];
+      break;
+    }
+    case 10: { // Grand Final → champion
+      bracket.champion  = winners[0];
+      major.completed   = true;
+      return { roundIdx, allComplete: true };
+    }
+  }
+
+  return { roundIdx, allComplete: false };
+}
+
 // ── Internal: play exactly ONE unplayed major match ───────────────────────────
 // Mutates schedule in place. Returns { roundIdx, allComplete }.
-function _simOneMajorMatch(schedule, gameState) {
+// precomputedResult: if provided, skips simMatch and uses it directly (interactive play).
+function _simOneMajorMatch(schedule, gameState, precomputedResult = null) {
   const majorIdx = schedule.majorIdx;
   const major    = schedule.majors[majorIdx];
   const bracket  = major.bracket;
@@ -148,10 +325,12 @@ function _simOneMajorMatch(schedule, gameState) {
   const matchIdx = round.matches.findIndex(m => !m.played);
   const match    = round.matches[matchIdx];
 
-  const seed  = majorSeed(schedule.season, majorIdx, roundIdx, matchIdx);
-  const teamA = buildTeamObj(match.a, gameState);
-  const teamB = buildTeamObj(match.b, gameState);
-  const result = simMatch(teamA, teamB, seed);
+  const result = precomputedResult ?? (() => {
+    const seed  = majorSeed(schedule.season, majorIdx, roundIdx, matchIdx);
+    const teamA = buildTeamObj(match.a, gameState);
+    const teamB = buildTeamObj(match.b, gameState);
+    return simMatch(teamA, teamB, seed);
+  })();
 
   match.played = true;
   match.result = result;
@@ -227,6 +406,14 @@ export function beginChamps(gameState) {
   return { ...gameState, schedule: { ...schedule } };
 }
 
+// ── Internal: unified one-match dispatcher ────────────────────────────────────
+function _dispatchOneMajorMatch(schedule, gameState) {
+  const bracket = schedule.majors[schedule.majorIdx]?.bracket;
+  return bracket?.type === "DE"
+    ? _simOneMajorMatchDE(schedule, gameState)
+    : _simOneMajorMatch(schedule, gameState);
+}
+
 // ── PUBLIC: Simulate one major match ──────────────────────────────────────────
 export function simNextMajorMatch(gameState) {
   const schedule = gameState.schedule;
@@ -235,7 +422,7 @@ export function simNextMajorMatch(gameState) {
   const major = schedule.majors[schedule.majorIdx];
   if (!major || major.completed) return gameState;
 
-  const { allComplete } = _simOneMajorMatch(schedule, gameState);
+  const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
   let nextState = gameState;
   if (allComplete) nextState = _advanceMajorPhase(schedule, gameState);
 
@@ -262,12 +449,12 @@ export function simMajorRound(gameState) {
   if (startRound === -1) return gameState;
 
   let safety = 0;
-  while (safety++ < 20) {
+  while (safety++ < 50) {
     const bracket = schedule.majors[schedule.majorIdx].bracket;
     const rnd     = bracket.rounds[startRound];
     if (!rnd || rnd.matches.every(m => m.played)) break;
 
-    const { allComplete } = _simOneMajorMatch(schedule, gameState);
+    const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
     if (allComplete) {
       gameState = _advanceMajorPhase(schedule, gameState);
       break;
@@ -287,8 +474,8 @@ export function simMajor(gameState) {
   if (!major || major.completed) return gameState;
 
   let safety = 0;
-  while (!schedule.majors[targetIdx].completed && safety++ < 100) {
-    const { allComplete } = _simOneMajorMatch(schedule, gameState);
+  while (!schedule.majors[targetIdx].completed && safety++ < 200) {
+    const { allComplete } = _dispatchOneMajorMatch(schedule, gameState);
     if (allComplete) {
       gameState = _advanceMajorPhase(schedule, gameState);
       break;
@@ -310,7 +497,7 @@ export function simNextMatch(gameState) {
     // Stage done → build Major bracket from stageStandings (keep snapshot intact)
     schedule.phase    = "major";
     schedule.majorIdx = schedule.stageIdx;  // Stage N → Major N (indices align)
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings, gameState.userTeamId);
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE(schedule.stageStandings);
     return { ...gameState, schedule: { ...schedule } };
   }
 
@@ -390,7 +577,7 @@ export function simMatchday(gameState) {
     // Stage done → build bracket from stageStandings, keep snapshot intact
     schedule.phase    = "major";
     schedule.majorIdx = schedule.stageIdx;
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings, gameState.userTeamId);
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE(schedule.stageStandings);
   }
 
   schedule.currentMatchday++;
@@ -474,7 +661,7 @@ export function simUserMatchday(gameState) {
   if (stage.matches.every(m => m.played)) {
     schedule.phase    = "major";
     schedule.majorIdx = schedule.stageIdx;
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings, gameState.userTeamId);
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE(schedule.stageStandings);
   }
 
   schedule.currentMatchday++;
@@ -1007,4 +1194,132 @@ function buildTeamObj(teamId, gameState) {
   const meta    = CDL_TEAMS.find(t => t.id === teamId) ?? { id: teamId, name: teamId };
   const players = (gameState.players || []).filter(p => p.teamId === teamId);
   return { id: meta.id, name: meta.name, players };
+}
+
+// Non-seeded form update for interactive match results (mirrors updateForm logic).
+function _updateFormSimple(players, won) {
+  for (const p of players) {
+    const base       = won ? (Math.floor(Math.random() * 7) + 2) : -(Math.floor(Math.random() * 7) + 2);
+    const resistance = (p.tiltResistance || 2) - 1;
+    const adjusted   = won ? base : Math.max(base + resistance * 2, -12);
+    p.form = Math.max(30, Math.min(100, (p.form || 70) + adjusted));
+  }
+}
+
+// ── Commit interactive user match result ──────────────────────────────────────
+// Called after the MatchCenterOverlay finishes. Applies the user's match result
+// to the game state exactly as simMatch would, then finishes the rest of the
+// matchday / advances the bracket as appropriate.
+//
+// result — full simMatch-shaped object produced by MatchCenterOverlay
+export function commitUserMatchResult(state, result) {
+  const schedule = state.schedule;
+  if (!schedule) return state;
+
+  // ── Stage phase ─────────────────────────────────────────────────────────────
+  if (schedule.phase === "stage") {
+    const { userTeamId } = state;
+    const stage = schedule.stages[schedule.stageIdx];
+
+    // 1. Find and mark the user's match as played
+    const allUnplayed = stage.matches
+      .map((m, i) => (!m.played ? i : -1))
+      .filter(i => i !== -1);
+
+    const userMatchIdx = allUnplayed.find(
+      i => stage.matches[i].a === userTeamId || stage.matches[i].b === userTeamId
+    ) ?? -1;
+
+    if (userMatchIdx >= 0) {
+      const m = stage.matches[userMatchIdx];
+      m.played = true;
+      m.result = result;
+    }
+
+    // 2. Update standings for the user's match
+    schedule.standings[result.winnerId].wins++;
+    schedule.standings[result.winnerId].points += 10;
+    schedule.standings[result.loserId].losses++;
+    schedule.stageStandings[result.winnerId].wins++;
+    schedule.stageStandings[result.winnerId].points += 10;
+    schedule.stageStandings[result.loserId].losses++;
+
+    // 3. Push user match to matchLog
+    schedule.matchLog.push({ ...result, stage: stage.name });
+
+    // 4. Update form on both teams' starters
+    const teamAWon = result.winnerId === result.teamAId;
+    _updateFormSimple(state.players.filter(p => p.teamId === result.teamAId).slice(0, 4), teamAWon);
+    _updateFormSimple(state.players.filter(p => p.teamId === result.teamBId).slice(0, 4), !teamAWon);
+
+    // 5. Sim the remaining non-user matches in the same matchday batch
+    const stillUnplayed = stage.matches
+      .map((m, i) => (!m.played ? i : -1))
+      .filter(i => i !== -1);
+
+    const usedTeams   = new Set([result.teamAId, result.teamBId]);
+    const todayIndices = [];
+
+    for (const idx of stillUnplayed) {
+      const { a, b } = stage.matches[idx];
+      if (!usedTeams.has(a) && !usedTeams.has(b)) {
+        todayIndices.push(idx);
+        usedTeams.add(a);
+        usedTeams.add(b);
+      }
+      if (todayIndices.length === 5) break; // user was 1st of 6
+    }
+
+    for (const idx of todayIndices) {
+      const match = stage.matches[idx];
+      if (match.played) continue;
+      const seed  = schedule.season * 100_000 + schedule.stageIdx * 10_000 + idx;
+      const teamA = buildTeamObj(match.a, state);
+      const teamB = buildTeamObj(match.b, state);
+      const res   = simMatch(teamA, teamB, seed);
+
+      match.played = true;
+      match.result = res;
+
+      schedule.standings[res.winnerId].wins++;
+      schedule.standings[res.winnerId].points += 10;
+      schedule.standings[res.loserId].losses++;
+      schedule.stageStandings[res.winnerId].wins++;
+      schedule.stageStandings[res.winnerId].points += 10;
+      schedule.stageStandings[res.loserId].losses++;
+      schedule.matchLog.push({ ...res, stage: stage.name });
+    }
+
+    // 6. Advance to major if stage is done
+    if (stage.matches.every(m => m.played)) {
+      schedule.phase    = "major";
+      schedule.majorIdx = schedule.stageIdx;
+      schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE(schedule.stageStandings);
+    }
+
+    schedule.currentMatchday++;
+    return { ...state, schedule: { ...schedule } };
+  }
+
+  // ── Major phase ─────────────────────────────────────────────────────────────
+  if (schedule.phase === "major") {
+    const bracket = schedule.majors[schedule.majorIdx]?.bracket;
+    const isDE    = bracket?.type === "DE";
+
+    const { allComplete } = isDE
+      ? _simOneMajorMatchDE(schedule, state, result)
+      : _simOneMajorMatch(schedule, state, result);
+
+    // Update form on both teams' starters
+    const teamAWon = result.winnerId === result.teamAId;
+    _updateFormSimple(state.players.filter(p => p.teamId === result.teamAId).slice(0, 4), teamAWon);
+    _updateFormSimple(state.players.filter(p => p.teamId === result.teamBId).slice(0, 4), !teamAWon);
+
+    let nextState = state;
+    if (allComplete) nextState = _advanceMajorPhase(schedule, state);
+
+    return { ...nextState, schedule: { ...schedule } };
+  }
+
+  return state;
 }

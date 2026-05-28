@@ -35,6 +35,20 @@ Key principles:
 - Championship tournament
 - Offseason: contract review → progression → AI roster window → new season
 
+### Major Format (Double Elimination)
+- 12 teams (all teams enter), seeded by stage standings
+- Seeds 1–4: WB Round 1 bye → enter at WB Round 2
+- Seeds 5–12: play WB Round 1 (4 matches)
+- 11 rounds total: WB R1, LB R1, WB R2, LB R2, LB R3, WB SF, LB R4, WB Final, LB R5, LB Final, Grand Final
+- LB rounds use generic names (LB Round 1–5, LB Final) — no "Quarterfinals"/"Semifinals" naming in LB
+- Teams alive = teams with fewer than 2 losses
+- Engine: `buildMajorBracketDE()` in `seasonEngine.js`; `_simOneMajorMatchDE()` wires each round
+
+### Champs Format (Single Elimination — unchanged)
+- Top-8 teams by cumulative season standings
+- 3 rounds: Quarterfinals → Semifinals → Grand Final
+- Engine: `buildMajorBracket()` in `seasonEngine.js` (unchanged)
+
 State fields:
 - `stageIdx` → current stage
 - `majorIdx` → current major
@@ -198,10 +212,14 @@ Retirees are removed from rosters; AI fills gaps in the offseason window.
 
 ### Major Entry
 - `MajorEntryOverlay` — full-screen takeover, animated sequence, non-dismissable
+- DE (Majors): shows all 12 seeds; seeds 1–4 display "WB Round 1 Bye" banner; seeds 5–12 show opening WB Round 1 matchup
+- SE (Champs): shows top-8 seeds with QF matchups (unchanged)
 
 ### Major Tournament Mode
 - `MajorTournamentOverlay` — full-screen event mode (no tab navigation)
 - Bracket, seedings, sim controls, champion screen
+- DE bracket: split into WB / LB / GF color-coded sections
+- SE bracket: original 3-column single-elimination layout (Champs only)
 
 ### Next Match Overlay
 - `NextMatchOverlay` — triggered from top-right control
@@ -217,6 +235,14 @@ Retirees are removed from rosters; AI fills gaps in the offseason window.
 - Left sidebar (FM-style) with screen routing
 - Top bar: season badge, team badge, Next Match control
 - Screens: Dashboard, Standings, Schedule, K/D Leaders, Roster, Free Agency, Challengers, Dev Report, Match Log
+
+---
+
+## Team OVR
+
+- `calcTeamOvr(teamId, players)` in `src/engine/teamOvr.js`
+- Rounded average of the 4 active starters' `overall` (bench/sub players excluded via `!p.isSub`)
+- Displayed in: Dashboard banner, Team Hub Overlay, NextMatchOverlay, MajorMatchOverlay, Standings table (optional column)
 
 ---
 
@@ -294,35 +320,9 @@ Core philosophy: **focus → action → result → world update**
 - No contract salary negotiation (re-signing is free / year-only decision)
 - OVR history and team history only populate after the first offseason (new games start with empty history)
 - `progressionLog` is replaced each offseason (not cumulative) — profile only shows "Last Offseason Δ" from it; full OVR history is now in `playerOvrHistory` instead
+- `isSub` field on players not yet fully wired for roster sub management — `calcTeamOvr` correctly excludes subs but the sub system itself is minimal
 
 ---
-
-# 🔹 6. Next Priorities
-
-## HIGH PRIORITY
-
-1. Core match loop
-   - result reveal flow after user match
-   - other results shown after user match resolves
-
-2. ~~UI Polish — FM24-style dashboard overhaul~~ ✅ Done
-   - ~~navy/slate palette~~, ~~card grid dashboard~~, ~~sidebar improvements~~
-
----
-
-## MID PRIORITY
-
-3. ~~Prospect pool regeneration (yearly fresh wave)~~ ✅ Done
-4. History / records screen
-5. Contract salary cost on re-signing
-
----
-
-## LOW PRIORITY
-
-6. Narrative system (news, storylines)
-7. Opponent roster viewer
-8. Contract salary negotiation
 
 ---
 

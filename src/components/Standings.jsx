@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { calcTeamOvr } from "../engine/teamOvr.js";
 
 export default function Standings() {
   const { state } = useGame();
@@ -14,7 +15,7 @@ export default function Standings() {
   const [showCumulative, setShowCumulative] = useState(false);
   if (!state) return null;
 
-  const { schedule, userTeamId } = state;
+  const { schedule, userTeamId, players } = state;
   const phase = schedule.phase;
 
   // During stage/major: default to per-stage standings; toggle to season total.
@@ -84,10 +85,13 @@ export default function Standings() {
             <th>W</th>
             <th>L</th>
             <th>Pts</th>
+            <th>OVR</th>
           </tr>
         </thead>
         <tbody>
-          {sorted.map(({ team, record }, i) => (
+          {sorted.map(({ team, record }, i) => {
+            const ovr = calcTeamOvr(team.id, players);
+            return (
             <tr key={team.id} className={team.id === userTeamId ? "user-row" : ""}>
               <td style={{ borderLeft: `3px solid ${team.color}`, borderRadius: "6px 0 0 6px", paddingLeft: 8 }}>
                 {i + 1}
@@ -106,8 +110,10 @@ export default function Standings() {
               <td>{record.wins}</td>
               <td>{record.losses}</td>
               <td className="pts">{record.points}</td>
+              <td className="pts">{ovr}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
 
