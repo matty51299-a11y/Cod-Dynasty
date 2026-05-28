@@ -3,7 +3,7 @@
 // Additional simulation fields are generated deterministically from seed.
 
 import { challengersPlayers } from "./challengersPlayers.js";
-import { applyChallengerRatingOverride } from "./challengerRatingOverrides.js";
+import { applyChallengerRatingOverride, CHALLENGER_RATING_OVERRIDES, normalizePlayerName } from "./challengerRatingOverrides.js";
 
 function seededRng(seed) {
   let s = seed;
@@ -115,5 +115,54 @@ function buildProspect(seedRow, idx, rng, seed) {
 
 export function generateProspects(seed = 42) {
   const rng = seededRng(seed);
-  return challengersPlayers.map((p, idx) => buildProspect(p, idx, rng, seed));
+  const generated = challengersPlayers.map((p, idx) => buildProspect(p, idx, rng, seed));
+  const existing = new Set(generated.map(p => normalizePlayerName(p.name)));
+  const missingRows = Object.values(CHALLENGER_RATING_OVERRIDES).filter(r => !existing.has(normalizePlayerName(r.displayName)));
+
+  const inferred = missingRows.map((row, i) => {
+    const h = [...normalizePlayerName(row.displayName)].reduce((s, c) => (s * 31 + c.charCodeAt(0)) & 0xffff, 17);
+    const age = 18 + (h % 5);
+    const primary = h % 3 === 0 ? "Main AR" : h % 3 === 1 ? "Entry SMG" : "Flex";
+    const secondary = primary === "Main AR" ? "Flex" : primary === "Entry SMG" ? "Slayer SMG" : "Main AR";
+    const overall = clamp(row.overall, 41, 99);
+    const potential = clamp(row.potential, 41, 99);
+    const mkAttr = (bias = 0) => clamp(overall + bias + ((h % 7) - 3), 41, 99);
+    return applyChallengerRatingOverride({
+      id: `prospect_manual_${normalizePlayerName(row.displayName)}_${seed}_${i}`,
+      name: row.displayName,
+      age,
+      role: null,
+      region: "NA",
+      teamId: null,
+      primary,
+      secondary,
+      archetype: "polished",
+      developmentCurve: potential - overall >= 10 ? "late" : "standard",
+      salary: Math.round((overall / 99) * 50 + 15) * 1000,
+      overall,
+      potential,
+      gunny: mkAttr(primary === "Entry SMG" ? 4 : 0),
+      awareness: mkAttr(primary === "Main AR" ? 3 : 0),
+      objective: mkAttr(primary === "Flex" ? 2 : 0),
+      searchIQ: mkAttr(1),
+      clutch: mkAttr(0),
+      teamwork: mkAttr(1),
+      composure: mkAttr(1),
+      adaptability: mkAttr(0),
+      ego: 1 + (h % 5),
+      workEthic: 1 + ((h >> 1) % 5),
+      tiltResistance: 1 + ((h >> 2) % 5),
+      leadership: 1 + ((h >> 3) % 5),
+      metaDependence: 1 + ((h >> 4) % 5),
+      scoutedOverall: overall,
+      scoutedPotential: potential,
+      scouted: false,
+      form: 65,
+      experience: 0,
+      isProspect: true,
+      contractYears: 0,
+    });
+  });
+
+  return [...generated, ...inferred];
 }

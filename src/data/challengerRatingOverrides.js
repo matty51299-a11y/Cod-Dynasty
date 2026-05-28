@@ -8,7 +8,7 @@ function clampRating(v) {
   return Math.max(41, Math.min(99, Math.round(v)));
 }
 
-const RAW_OVERRIDES = [
+export const MANUAL_CHALLENGER_OVERRIDES = [
   {"displayName": "Alfa", "overall": 86, "potential": 93, "sourceNote": "Manual Challenger ratings review", "ratingSource": "manualChallengerOverride", "statsSnapshot": {"kills": 1605, "kd": 1.24}},
   {"displayName": "Khhx", "overall": 85, "potential": 92, "sourceNote": "Manual Challenger ratings review", "ratingSource": "manualChallengerOverride", "statsSnapshot": {"kills": 3019, "kd": 1.18}},
   {"displayName": "qk4b", "overall": 85, "potential": 91, "sourceNote": "Manual Challenger ratings review", "ratingSource": "manualChallengerOverride", "statsSnapshot": {"kills": 2485, "kd": 1.17}},
@@ -126,8 +126,17 @@ const RAW_OVERRIDES = [
   {"displayName": "Noysii", "overall": 67, "potential": 79, "sourceNote": "Manual Challenger ratings review", "ratingSource": "manualChallengerOverride"},
 ];
 
+const NAME_ALIASES = {
+  dk: "dkxrryy",
+  mythixx: "mythix",
+};
+
+function resolveAlias(normalized) {
+  return NAME_ALIASES[normalized] ?? normalized;
+}
+
 export const CHALLENGER_RATING_OVERRIDES = Object.fromEntries(
-  RAW_OVERRIDES.map((row) => [normalizePlayerName(row.displayName), {
+  MANUAL_CHALLENGER_OVERRIDES.map((row) => [normalizePlayerName(row.displayName), {
     ...row,
     overall: clampRating(row.overall),
     potential: clampRating(row.potential),
@@ -136,7 +145,7 @@ export const CHALLENGER_RATING_OVERRIDES = Object.fromEntries(
 
 export function applyChallengerRatingOverride(player) {
   if (!player || !player.name) return player;
-  const override = CHALLENGER_RATING_OVERRIDES[normalizePlayerName(player.name)];
+  const override = CHALLENGER_RATING_OVERRIDES[resolveAlias(normalizePlayerName(player.name))];
   if (!override) return player;
   return {
     ...player,
