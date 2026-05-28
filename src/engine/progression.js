@@ -267,13 +267,15 @@ export function developPlayer(player, rng, teamPerf = 0) {
     updated[stat] = Math.max(40, Math.min(99, (updated[stat] || 70) + perStat));
   }
 
-  // Recalculate salary using the same curves as players.js / prospects.js so
-  // salaries stay consistent with the free agency UI after progression.
-  if (player.isProspect) {
-    updated.salary = Math.round((updated.overall / 99) * 50 + 15) * 1000;
-  } else {
-    const t = Math.max(0, (updated.overall - 70) / 29);
-    updated.salary = Math.round((Math.pow(t, 2.5) * 575 + 25)) * 1000;
+  // Only recalculate salary for unsigned players (free agents and prospects).
+  // Signed players keep their negotiated salary for the life of their contract.
+  if (!updated.teamId) {
+    if (player.isProspect) {
+      updated.salary = Math.round((updated.overall / 99) * 50 + 15) * 1000;
+    } else {
+      const t = Math.max(0, (updated.overall - 70) / 29);
+      updated.salary = Math.round((Math.pow(t, 2.5) * 575 + 25)) * 1000;
+    }
   }
 
   return { player: updated, eventType: eventType || null };

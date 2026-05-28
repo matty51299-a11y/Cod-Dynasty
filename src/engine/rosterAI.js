@@ -95,7 +95,7 @@ export function getResignDemand(player, dealLength, playerSeasonStats, season) {
 
 function getRosterSigningCost(players, teamId) {
   return getStarters(players, teamId)
-    .reduce((sum, p) => sum + getSigningCost(p), 0);
+    .reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -628,7 +628,7 @@ function fillMinimumRoster(teamId, players, prospects, rosterMovesLog, season, w
     const starters = getStarters(cur.players, teamId);
     if (starters.length >= 4) break;
 
-    const committed   = starters.reduce((s, p) => s + getSigningCost(p), 0);
+    const committed   = starters.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
     const budgetLeft  = getTeamCap(teamId) - committed;
 
     const pick = [
@@ -759,7 +759,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       // Only consider candidates the team can actually afford after this
       // release. This is a hard cap: over-budget players are excluded before
       // scoring so the AI can never sign past its limit regardless of score.
-      const committed     = teamNow.reduce((s, p) => s + getSigningCost(p), 0);
+      const committed     = teamNow.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
       const budgetLeft    = getTeamCap(team.id) - committed;
 
       const candidates = [
