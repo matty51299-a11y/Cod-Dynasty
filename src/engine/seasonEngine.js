@@ -16,6 +16,22 @@ import { simMatch } from "./matchSim.js";
 import { CDL_TEAMS } from "../data/teams.js";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
+const CHALLENGER_TEAM_POOL = [
+  { name: "Omit Brooklyn", tag: "OBK", color: "#c084fc" },
+  { name: "Omit Noir", tag: "ONR", color: "#a78bfa" },
+  { name: "Project Notorious", tag: "PNT", color: "#8b5cf6" },
+  { name: "Project 7", tag: "P7", color: "#7c3aed" },
+  { name: "Death by Cabal", tag: "DBC", color: "#9333ea" },
+  { name: "Huntsmen", tag: "HNT", color: "#f43f5e" },
+  { name: "Stallions", tag: "STL", color: "#fb7185" },
+  { name: "Telluride Bush", tag: "TB", color: "#22c55e" },
+  { name: "Next Threat Black", tag: "NTB", color: "#0ea5e9" },
+  { name: "Stallions x Bush", tag: "SXB", color: "#14b8a6" },
+  { name: "Omnia GGs", tag: "OMG", color: "#06b6d4" },
+  { name: "Five Fears", tag: "5FR", color: "#f59e0b" },
+  { name: "Faze Falcons", tag: "FF", color: "#ef4444" },
+  { name: "For Fun Esports", tag: "FFE", color: "#38bdf8" },
+];
 import { runProgression } from "./progression.js";
 import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand } from "./rosterAI.js";
 
@@ -168,12 +184,15 @@ function buildMajorBracketDE16(majorSeeds) {
 function simulateChallengerQualifier(gameState, schedule) {
   const unsignedProspects = (gameState.prospects || []).filter(p => !p.teamId);
   const ranked = [...unsignedProspects].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+  const identRng = seededRng(schedule.season * 1000 + (schedule.majorIdx ?? 0) * 17 + 7);
+  const identities = shuffle(CHALLENGER_TEAM_POOL, identRng).slice(0, CHALLENGER_QUALIFIER_TEAMS);
   const teams = [];
   for (let i = 0; i < CHALLENGER_QUALIFIER_TEAMS; i++) {
     const roster = ranked.slice(i * 4, i * 4 + 4);
     if (roster.length < 4) break;
     const teamId = `challenger_major_${schedule.majorIdx + 1}_${i + 1}`;
-    teams.push({ id: teamId, name: `Challengers Q${i + 1}`, tag: `CQ${i + 1}`, color: "#9b5cff", players: roster });
+    const identity = identities[i] ?? { name: `Challengers ${i + 1}`, tag: `CQ${i + 1}`, color: "#9b5cff" };
+    teams.push({ id: teamId, ...identity, players: roster });
   }
   return teams;
 }

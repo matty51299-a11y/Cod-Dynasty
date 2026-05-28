@@ -86,11 +86,11 @@ function teamsAlive(bracket, userTeamId) {
 }
 
 // ── Champion celebration screen ───────────────────────────────────────────────
-function ChampionScreen({ major, dispatch }) {
+function ChampionScreen({ major, dispatch, schedule }) {
   const bracket  = major.bracket;
   const champId  = bracket?.champion;
-  const champTeam = CDL_TEAMS.find(t => t.id === champId);
-  const isDE     = bracket?.type === "DE";
+  const champTeam = getTeamMeta(champId, schedule);
+  const isDE     = bracket?.type === "DE" || bracket?.type === "DE16";
   // Grand Final is last round
   const gfRound  = isDE ? bracket?.rounds?.find(r => r.type === "GF") : bracket?.rounds?.[2];
   const gfResult = gfRound?.matches?.[0]?.result;
@@ -110,12 +110,12 @@ function ChampionScreen({ major, dispatch }) {
         <div className="mto-champ-subtitle">{major.name === "Champs" ? "Season Champions" : isDE ? "Major Champion" : "Season Champions"}</div>
         {gfResult && (
           <div className="mto-champ-result">
-            <span className="mto-champ-res-side mto-champ-res-winner" style={{ color: teamColor(gfResult.winnerId) }}>
-              {teamTag(gfResult.winnerId)}
+            <span className="mto-champ-res-side mto-champ-res-winner" style={{ color: teamColor(gfResult.winnerId, schedule) }}>
+              {teamTag(gfResult.winnerId, schedule)}
             </span>
             <span className="mto-champ-res-score">{gfResult.score}</span>
-            <span className="mto-champ-res-side" style={{ color: teamColor(gfResult.loserId) }}>
-              {teamTag(gfResult.loserId)}
+            <span className="mto-champ-res-side" style={{ color: teamColor(gfResult.loserId, schedule) }}>
+              {teamTag(gfResult.loserId, schedule)}
             </span>
           </div>
         )}
@@ -149,16 +149,16 @@ function MvHero({ major, roundName, alive }) {
 }
 
 // ── Elimination result banner ─────────────────────────────────────────────────
-function EliminatedBanner({ elimination, userTeamId }) {
+function EliminatedBanner({ elimination, userTeamId, schedule }) {
   const { result, roundName } = elimination;
   return (
     <div className="mto-elim-banner">
       <div className="mto-elim-outcome">ELIMINATED</div>
       <div className="mto-elim-round">Fell in the {roundName}</div>
       <div className="mto-elim-matchup">
-        <span style={{ color: teamColor(result.winnerId) }}>{teamTag(result.winnerId)}</span>
+        <span style={{ color: teamColor(result.winnerId, schedule) }}>{teamTag(result.winnerId, schedule)}</span>
         <span className="mto-elim-score">{result.score}</span>
-        <span style={{ color: teamColor(result.loserId) }}>{teamTag(result.loserId)}</span>
+        <span style={{ color: teamColor(result.loserId, schedule) }}>{teamTag(result.loserId, schedule)}</span>
       </div>
       {result.standoutName && result.standoutKD > 0 && (
         <div className="mto-elim-mvp">
@@ -171,7 +171,7 @@ function EliminatedBanner({ elimination, userTeamId }) {
 }
 
 // ── Next match spotlight with sim controls ────────────────────────────────────
-function NextMatchCard({ bracket, curRound, userTeamId, dispatch, onPlayMatch, major }) {
+function NextMatchCard({ bracket, curRound, userTeamId, dispatch, onPlayMatch, major, schedule }) {
   if (curRound < 0) return null;
   const round = bracket.rounds[curRound];
   const next  = round?.matches.find(m => !m.played);
@@ -187,13 +187,13 @@ function NextMatchCard({ bracket, curRound, userTeamId, dispatch, onPlayMatch, m
       <div className="mto-nm-matchup">
         <div className="mto-nm-team">
           {seedA && <span className="mto-nm-seed">#{seedA}</span>}
-          <span className="mto-nm-name" style={{ color: teamColor(next.a) }}>{teamName(next.a)}</span>
+          <span className="mto-nm-name" style={{ color: teamColor(next.a, schedule) }}>{teamName(next.a, schedule)}</span>
           {next.a === userTeamId && <span className="mto-nm-you">YOUR TEAM</span>}
         </div>
         <span className="mto-nm-vs">vs</span>
         <div className="mto-nm-team mto-nm-team-b">
           {next.b === userTeamId && <span className="mto-nm-you">YOUR TEAM</span>}
-          <span className="mto-nm-name" style={{ color: teamColor(next.b) }}>{teamName(next.b)}</span>
+          <span className="mto-nm-name" style={{ color: teamColor(next.b, schedule) }}>{teamName(next.b, schedule)}</span>
           {seedB && <span className="mto-nm-seed">#{seedB}</span>}
         </div>
       </div>
@@ -219,7 +219,7 @@ function NextMatchCard({ bracket, curRound, userTeamId, dispatch, onPlayMatch, m
 }
 
 // ── Single bracket match card ─────────────────────────────────────────────────
-function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, cardKey }) {
+function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, cardKey, schedule }) {
   const { openTeamHub } = useTeamHub();
   const isPlayed     = match.played;
   const result       = match.result;
@@ -240,11 +240,11 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
       <div className="mto-bracket-card">
         <div className="mto-bc-team">
           {seedA && <span className="mto-bc-seed">{seedA}</span>}
-          <span className="mto-bc-name team-link" style={{ color: teamColor(match.a) }} onClick={() => openTeamHub(match.a)}>{teamTag(match.a)}</span>
+          <span className="mto-bc-name team-link" style={{ color: teamColor(match.a, schedule) }} onClick={() => openTeamHub(match.a)}>{teamTag(match.a, schedule)}</span>
         </div>
         <div className="mto-bc-team">
           {seedB && <span className="mto-bc-seed">{seedB}</span>}
-          <span className="mto-bc-name team-link" style={{ color: teamColor(match.b) }} onClick={() => openTeamHub(match.b)}>{teamTag(match.b)}</span>
+          <span className="mto-bc-name team-link" style={{ color: teamColor(match.b, schedule) }} onClick={() => openTeamHub(match.b)}>{teamTag(match.b, schedule)}</span>
         </div>
       </div>
     );
@@ -265,14 +265,14 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
       <div className="mto-bc-score-center">
         <div className="mto-bc-sc-side">
           {winnerSeed && <span className="mto-bc-seed">{winnerSeed}</span>}
-          <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(winnerId) }} onClick={() => openTeamHub(winnerId)}>
-            {teamTag(winnerId)}
+          <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(winnerId, schedule) }} onClick={() => openTeamHub(winnerId)}>
+            {teamTag(winnerId, schedule)}
           </span>
         </div>
         <span className="mto-bc-sc-score">{result.score}</span>
         <div className="mto-bc-sc-side mto-bc-sc-loser">
-          <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(loserId) }} onClick={() => openTeamHub(loserId)}>
-            {teamTag(loserId)}
+          <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(loserId, schedule) }} onClick={() => openTeamHub(loserId)}>
+            {teamTag(loserId, schedule)}
           </span>
           {loserSeed && <span className="mto-bc-seed">{loserSeed}</span>}
         </div>
@@ -307,7 +307,7 @@ function TBDCard() {
 }
 
 // ── One round column ──────────────────────────────────────────────────────────
-function RoundSection({ round, roundIdx, bracket, isCurrentRound, userTeamId, expandedKey, setExpandedKey, tbd }) {
+function RoundSection({ round, roundIdx, bracket, isCurrentRound, userTeamId, expandedKey, setExpandedKey, tbd, schedule }) {
   const hasMatches = round.matches.length > 0;
   const isDone     = hasMatches && round.matches.every(m => m.played);
   return (
@@ -328,6 +328,7 @@ function RoundSection({ round, roundIdx, bracket, isCurrentRound, userTeamId, ex
               expandedKey={expandedKey}
               setExpandedKey={setExpandedKey}
               cardKey={`${roundIdx}-${mi}`}
+              schedule={schedule}
             />
           ))
         ) : (
@@ -343,7 +344,7 @@ function RoundSection({ round, roundIdx, bracket, isCurrentRound, userTeamId, ex
 // 12-team Major bracket and the 8-team Champs bracket render correctly.
 const _LEGACY_TBD = { 0:4, 2:4, 5:2, 7:1, 1:2, 3:2, 4:2, 6:2, 8:1, 9:1, 10:1 };
 
-function DEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpandedKey }) {
+function DEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpandedKey, schedule }) {
   const rounds = bracket.rounds;
   const mkSection = (type, label, cls) => {
     const section = rounds.map((r, i) => ({ ...r, idx: i })).filter(r => r.type === type);
@@ -363,6 +364,7 @@ function DEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpanded
               expandedKey={expandedKey}
               setExpandedKey={setExpandedKey}
               tbd={r._tbd ?? _LEGACY_TBD[r.idx] ?? 1}
+              schedule={schedule}
             />
           ))}
         </div>
@@ -380,7 +382,7 @@ function DEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpanded
 }
 
 // ── SE bracket layout (Champs — 3-round single elimination) ──────────────────
-function SEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpandedKey }) {
+function SEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpandedKey, schedule }) {
   const tbd = [4, 2, 1]; // QF=4, SF=2, GF=1
   return (
     <div className="mto-bracket-rounds">
@@ -395,6 +397,7 @@ function SEBracketView({ bracket, curRound, userTeamId, expandedKey, setExpanded
           expandedKey={expandedKey}
           setExpandedKey={setExpandedKey}
           tbd={tbd[ri] ?? 1}
+          schedule={schedule}
         />
       ))}
     </div>
@@ -427,14 +430,14 @@ export default function MajorTournamentOverlay() {
   if (showChampion) {
     return (
       <div className="mto-backdrop mto-backdrop-champ">
-        <ChampionScreen major={enteredMajor} dispatch={dispatch} />
+        <ChampionScreen major={enteredMajor} dispatch={dispatch} schedule={schedule} />
       </div>
     );
   }
 
   const major     = schedule.majors[activeMajorIdx];
   const bracket   = major.bracket;
-  const isDE      = bracket?.type === "DE";
+  const isDE      = bracket?.type === "DE" || bracket?.type === "DE16";
   const curRound  = currentRoundIdx(bracket);
   const roundName = curRound >= 0 ? bracket.rounds[curRound].name : null;
   const elimination = getUserElimination(bracket, userTeamId);
@@ -450,7 +453,7 @@ export default function MajorTournamentOverlay() {
             <MvHero major={major} roundName={roundName} alive={alive} />
 
             {elimination && (
-              <EliminatedBanner elimination={elimination} userTeamId={userTeamId} />
+              <EliminatedBanner elimination={elimination} userTeamId={userTeamId} schedule={schedule} />
             )}
 
             {curRound >= 0 && !elimination && (
@@ -460,6 +463,7 @@ export default function MajorTournamentOverlay() {
                 userTeamId={userTeamId}
                 dispatch={dispatch}
                 major={major}
+                schedule={schedule}
                 onPlayMatch={() => openMatchCenter("major")}
               />
             )}
@@ -478,8 +482,8 @@ export default function MajorTournamentOverlay() {
             <div className="mto-bracket-section">
               <div className="mto-bracket-label">BRACKET</div>
               {isDE
-                ? <DEBracketView bracket={bracket} curRound={curRound} userTeamId={userTeamId} expandedKey={expandedKey} setExpandedKey={setExpandedKey} />
-                : <SEBracketView bracket={bracket} curRound={curRound} userTeamId={userTeamId} expandedKey={expandedKey} setExpandedKey={setExpandedKey} />
+                ? <DEBracketView bracket={bracket} curRound={curRound} userTeamId={userTeamId} expandedKey={expandedKey} setExpandedKey={setExpandedKey} schedule={schedule} />
+                : <SEBracketView bracket={bracket} curRound={curRound} userTeamId={userTeamId} expandedKey={expandedKey} setExpandedKey={setExpandedKey} schedule={schedule} />
               }
             </div>
 
@@ -496,13 +500,13 @@ export default function MajorTournamentOverlay() {
                     return (
                       <div key={id} className={`mto-seed-row ${isUser ? "mto-seed-you" : ""}`}>
                         <span className="mto-seed-num">{i + 1}</span>
-                        <span className="mto-seed-dot" style={{ background: teamColor(id) }} />
+                        <span className="mto-seed-dot" style={{ background: teamColor(id, schedule) }} />
                         <span
                           className="mto-seed-name team-link"
-                          style={isUser ? { color: teamColor(id) } : {}}
+                          style={isUser ? { color: teamColor(id, schedule) } : {}}
                           onClick={() => openTeamHub(id)}
                         >
-                          {teamTag(id)}
+                          {teamTag(id, schedule)}
                         </span>
                         <span className="mto-seed-rec">{rec.wins}W–{rec.losses}L</span>
                         {isUser && <span className="you-badge">YOU</span>}
