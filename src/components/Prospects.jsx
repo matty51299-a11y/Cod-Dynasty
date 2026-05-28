@@ -41,7 +41,7 @@ export default function Prospects() {
 
   if (!state) return null;
 
-  const { prospects, userTeamId, players, challengersLog, challengerTeams, schedule } = state;
+  const { prospects, userTeamId, players, challengersLog, challengerTeams, schedule, challengerTransactions } = state;
   const myRoster = players.filter(p => p.teamId === userTeamId);
   const starterCount = myRoster.filter(p => !p.isSub).length;
   const subCount = myRoster.filter(p => p.isSub).length;
@@ -169,6 +169,18 @@ export default function Prospects() {
             </ol>
           </details>;
         })}
+      </div>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Latest Moves</h3>
+        {!(challengerTransactions || []).length ? <p className="muted">No recent challenger/CDL moves yet.</p> : (
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {(challengerTransactions || []).slice(-10).reverse().map((tx, i) => (
+              <li key={`${tx.playerId}_${tx.season}_${i}`} style={{ marginBottom: 4 }}>
+                S{tx.season} · {tx.type} · {tx.note || `${tx.playerName} moved`}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="cm-tabs">
         {TAB_KEYS.map(k => <button key={k} className={`filter-btn ${tab===k?"active":""}`} onClick={()=>setTab(k)}>{k==="all"?"All Players":k==="veterans"?"CDL Veterans":k==="prospects"?"Prospects":k==="proam"?"Pro-Am Eligible":"Shortlist"}</button>)}

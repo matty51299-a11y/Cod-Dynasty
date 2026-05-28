@@ -593,11 +593,58 @@ function signCandidate(candidate, teamId, players, prospects) {
   };
 }
 
+function pushTx(transactions, gameState, entry) {
+  return [...transactions, {
+    season: gameState.season,
+    stageIdx: gameState.schedule?.stageIdx ?? null,
+    majorIdx: gameState.schedule?.majorIdx ?? null,
+    ...entry,
+  }];
+}
+
+function refillAllChallengerRosters(challengerTeams, players, prospects) {
+  const teams = (challengerTeams || []).map(t => ({ ...t, playerIds: [...(t.playerIds || [])] }));
+  const assigned = new Set(teams.flatMap(t => t.playerIds));
+  const allPool = [...players.filter(p => !p.teamId), ...prospects.filter(p => !p.teamId)]
+    .sort((a, b) => ((b.overall ?? 0) + (b.potential ?? 0) * 0.35) - ((a.overall ?? 0) + (a.potential ?? 0) * 0.35));
+  for (const team of teams) {
+    team.playerIds = team.playerIds.filter((pid, idx, arr) => pid && arr.indexOf(pid) === idx);
+    while (team.playerIds.length < 4) {
+      const sameRegion = allPool.find(p => !assigned.has(p.id) && (p.challengerTeamId == null) && (p.region === team.region));
+      const fallback = allPool.find(p => !assigned.has(p.id) && (p.challengerTeamId == null));
+      const pick = sameRegion || fallback;
+      if (!pick) break;
+      pick.challengerTeamId = team.id;
+      team.playerIds.push(pick.id);
+      assigned.add(pick.id);
+    }
+  }
+  return teams;
+}
+
 function releasePlayer(player, players, prospects) {
+  const shouldRetire = (player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70);
+  const shouldGoChall = (player.overall ?? 70) >= 75 || (player.overall ?? 70) >= 80 || (player.age ?? 25) < 29;
   if (player.isProspect) {
+    if (shouldRetire) return { players: players.filter(p => p.id !== player.id), prospects };
     return {
       players: players.filter(p => p.id !== player.id),
       prospects: [...prospects, { ...player, teamId: null, isSub: false }],
+    };
+  }
+  if (shouldRetire) {
+    return {
+      players: players.filter(p => p.id !== player.id),
+      prospects,
+      retired: { ...player, teamId: null, isSub: false },
+    };
+  }
+  if (shouldGoChall) {
+    const toProspect = { ...player, teamId: null, isSub: false, challengerTeamId: null, contractYears: 0 };
+    return {
+      players: players.filter(p => p.id !== player.id),
+      prospects: [...prospects, toProspect],
+      movedToChallengers: toProspect,
     };
   }
 
@@ -661,6 +708,8 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
   let players = [...(gameState.players || [])];
   let prospects = [...(gameState.prospects || [])];
   const rosterMovesLog = [...(gameState.rosterMovesLog || [])];
+  let challengerTeams = [...(gameState.challengerTeams || [])];
+  let challengerTransactions = [...(gameState.challengerTransactions || [])];
 
   for (const team of CDL_TEAMS) {
     if (team.id === gameState.userTeamId) continue;
@@ -752,6 +801,26 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       const afterRelease = releasePlayer(cut, players, prospects);
       players = afterRelease.players;
       prospects = afterRelease.prospects;
+      if (afterRelease.movedToChallengers) {
+        challengerTransactions = pushTx(challengerTransactions, gameState, {
+          type: "CDL_RELEASE_TO_CHALLENGERS",
+          playerId: cut.id,
+          playerName: cut.name,
+          fromTeamId: team.id,
+          toTeamId: null,
+          note: `${cut.name} moved to Challengers pool`,
+        });
+      }
+      if (afterRelease.retired) {
+        challengerTransactions = pushTx(challengerTransactions, gameState, {
+          type: "RETIREMENT",
+          playerId: cut.id,
+          playerName: cut.name,
+          fromTeamId: team.id,
+          toTeamId: null,
+          note: `${cut.name} retired after release`,
+        });
+      }
 
       const teamNow = getStarters(players, team.id);
 
@@ -782,6 +851,17 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       const afterSign = signCandidate(pick, team.id, players, prospects);
       players = afterSign.players;
       prospects = afterSign.prospects;
+      if (pick.challengerTeamId) {
+        challengerTeams = challengerTeams.map(t => t.id === pick.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(pid => pid !== pick.id) } : t);
+      }
+      challengerTransactions = pushTx(challengerTransactions, gameState, {
+        type: "CDL_SIGNING",
+        playerId: pick.id,
+        playerName: pick.name,
+        fromTeamId: pick.challengerTeamId ?? null,
+        toTeamId: team.id,
+        note: `${team.tag} signed ${pick.name}`,
+      });
       additions.push({ out: cut.name, in: pick.name, fromChallengers: !!pick.isProspect });
       starters = getStarters(players, team.id);
     }
@@ -810,6 +890,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
     players   = result.players;
     prospects = result.prospects;
   }
+  challengerTeams = refillAllChallengerRosters(challengerTeams, players, prospects);
 
   return {
     ...gameState,
@@ -817,6 +898,8 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
     prospects,
     teamContexts,
     rosterMovesLog,
+    challengerTeams,
+    challengerTransactions,
   };
 }
 

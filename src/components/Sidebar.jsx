@@ -10,7 +10,6 @@ const NAV_ITEMS = [
   { id: "schedule",  icon: "◫",  label: "Schedule" },
   { id: "kdleaders", icon: "↑",  label: "K/D Leaders" },
   { id: "roster",    icon: "♟",  label: "Roster" },
-  { id: "fa",        icon: "✦",  label: "Free Agency" },
   { id: "prospects", icon: "◉",  label: "Challengers" },
   { id: "devreport", icon: "⬡",  label: "Dev Report" },
   { id: "log",       icon: "▤",  label: "Match Log" },
