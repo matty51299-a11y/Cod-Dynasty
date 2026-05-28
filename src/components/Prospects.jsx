@@ -26,6 +26,17 @@ const ARCH_LABELS = {
   glue: "Glue Player", obj_spec: "Objective Specialist",
 };
 const TAB_KEYS = ["all", "veterans", "prospects", "proam", "shortlist"];
+function challengerStockLabel(p) {
+  const ovr = p.overall ?? p.scoutedOverall ?? 70;
+  const pot = p.potential ?? p.scoutedPotential ?? ovr;
+  if ((p.ego ?? 50) >= 80 && (p.composure ?? 70) <= 60) return "High Risk";
+  if (ovr >= 80 && pot >= 88) return "Blue Chip";
+  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "CDL Ready";
+  if (p.age >= 28 && !p.teamId) return "Veteran";
+  if ((p.form ?? 0) >= 2) return "Rising";
+  if ((p.form ?? 0) <= -2) return "Falling";
+  return "Stable";
+}
 
 export default function Prospects() {
   const { state, dispatch } = useGame();
@@ -224,6 +235,7 @@ export default function Prospects() {
               <th>Salary</th>
               <th>Sign As</th>
               <th>Action</th>
+              <th>Stock</th>
             </tr>
           </thead>
           <tbody>
@@ -277,6 +289,7 @@ export default function Prospects() {
                       </span>
                     )}
                   </td>
+                  <td>{challengerStockLabel(p)}</td>
                 </tr>
               );
             })}

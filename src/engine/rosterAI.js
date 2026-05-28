@@ -578,6 +578,43 @@ function candidateScore(candidate, teamPlayers, context, evaluation, neededRole,
   return score;
 }
 
+function getChallengerStockLabel(candidate) {
+  const ovr = candidate.overall ?? 70;
+  const pot = candidate.potential ?? ovr;
+  const age = candidate.age ?? 22;
+  const form = candidate.form ?? 0;
+  const showcase = candidate.challengerShowcase?.slice(-1)[0];
+  if ((candidate.ego ?? 50) >= 80 && (candidate.composure ?? 70) <= 60) return "High Risk";
+  if (showcase && (showcase.kd ?? 0) >= 1.12) return "Pro-Am Standout";
+  if (ovr >= 80 && pot >= 88) return "Blue Chip";
+  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "CDL Ready";
+  if (age >= 28 && !candidate.teamId) return "Veteran";
+  if (form >= 2 || (candidate.lastQualifierPlacement ?? 99) <= 4) return "Rising";
+  if (form <= -2) return "Falling";
+  return "Stable";
+}
+
+function scoreChallengerPickupCandidate(candidate, teamPlayers, evaluation, neededRole, gameState) {
+  const ovr = candidate.overall ?? 70;
+  const pot = candidate.potential ?? ovr;
+  const age = candidate.age ?? 22;
+  const fit = roleFitScore(candidate, neededRole);
+  const slot = teamPlayers.filter(p => p.primary === neededRole).sort((a, b) => (a.overall ?? 0) - (b.overall ?? 0))[0];
+  const slotKd = getCurrentKD(slot || {}, gameState.playerSeasonStats, gameState.season);
+  const showcase = candidate.challengerShowcase?.slice(-1)[0];
+  const stock = getChallengerStockLabel(candidate);
+  let score = ovr * 0.65 + (pot - ovr) * 1.25 + fit;
+  score += age <= 23 ? 7 : age <= 26 ? 3 : -2;
+  score += (candidate.form ?? 0) * 2.4;
+  score += slotKd < 0.92 ? 6 : 0;
+  if (slot) score += Math.max(0, ovr - (slot.overall ?? 70)) * 1.2;
+  if (showcase) score += (showcase.kd ?? 1) >= 1.05 ? 6 : -2;
+  if (showcase) score += (showcase.placement ?? 16) <= 8 ? 3 : 0;
+  score += stock === "Blue Chip" ? 8 : stock === "CDL Ready" ? 5 : stock === "Pro-Am Standout" ? 6 : stock === "Falling" ? -4 : 0;
+  score += evaluation.standingRank >= 9 ? 6 : evaluation.standingRank <= 3 ? -6 : 0;
+  return score;
+}
+
 function signCandidate(candidate, teamId, players, prospects) {
   if (candidate.isProspect) {
     const signed = { ...candidate, teamId, scouted: true, isSub: false };
@@ -605,7 +642,7 @@ function pushTx(transactions, gameState, entry) {
 function refillAllChallengerRosters(challengerTeams, players, prospects) {
   const teams = (challengerTeams || []).map(t => ({ ...t, playerIds: [...(t.playerIds || [])] }));
   const assigned = new Set(teams.flatMap(t => t.playerIds));
-  const allPool = [...players.filter(p => !p.teamId), ...prospects.filter(p => !p.teamId)]
+  const allPool = [...players.filter(p => !p.teamId && p.status !== "inactive" && p.status !== "retired"), ...prospects.filter(p => !p.teamId && p.status !== "inactive" && p.status !== "retired")]
     .sort((a, b) => ((b.overall ?? 0) + (b.potential ?? 0) * 0.35) - ((a.overall ?? 0) + (a.potential ?? 0) * 0.35));
   for (const team of teams) {
     team.playerIds = team.playerIds.filter((pid, idx, arr) => pid && arr.indexOf(pid) === idx);
@@ -624,12 +661,28 @@ function refillAllChallengerRosters(challengerTeams, players, prospects) {
 
 function releasePlayer(player, players, prospects) {
   const shouldRetire = (player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70);
-  const shouldGoChall = (player.overall ?? 70) >= 75 || (player.overall ?? 70) >= 80 || (player.age ?? 25) < 29;
+  const shouldGoChall = (player.overall ?? 70) >= 76 || ((player.overall ?? 70) >= 73 && (player.age ?? 25) < 29);
+  const shouldGoInactive = !shouldRetire && !shouldGoChall;
   if (player.isProspect) {
     if (shouldRetire) return { players: players.filter(p => p.id !== player.id), prospects };
     return {
       players: players.filter(p => p.id !== player.id),
-      prospects: [...prospects, { ...player, teamId: null, isSub: false }],
+      prospects: [...prospects, { ...player, teamId: null, isSub: false, status: "challengers" }],
+    };
+  }
+  if (shouldRetire) {
+    return {
+      players: players.filter(p => p.id !== player.id),
+      prospects,
+      retired: { ...player, teamId: null, isSub: false, status: "retired" },
+    };
+  }
+  if (shouldGoChall) {
+    const toProspect = { ...player, teamId: null, isSub: false, challengerTeamId: null, contractYears: 0, status: "challengers" };
+    return {
+      players: players.filter(p => p.id !== player.id),
+      prospects: [...prospects, toProspect],
+      movedToChallengers: toProspect,
     };
   }
   if (shouldRetire) {
@@ -648,10 +701,14 @@ function releasePlayer(player, players, prospects) {
     };
   }
 
-  return {
-    players: players.map(p => p.id === player.id ? { ...p, teamId: null, isSub: false } : p),
-    prospects,
-  };
+  if (shouldGoInactive) {
+    return {
+      players: players.map(p => p.id === player.id ? { ...p, teamId: null, isSub: false, challengerTeamId: null, status: "inactive" } : p),
+      prospects,
+      inactive: { ...player, teamId: null, status: "inactive" },
+    };
+  }
+  return { players, prospects };
 }
 
 // ── Minimum roster guarantee ──────────────────────────────────────────────────
@@ -821,6 +878,16 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
           note: `${cut.name} retired after release`,
         });
       }
+      if (afterRelease.inactive) {
+        challengerTransactions = pushTx(challengerTransactions, gameState, {
+          type: "INACTIVE",
+          playerId: cut.id,
+          playerName: cut.name,
+          fromTeamId: team.id,
+          toTeamId: null,
+          note: `${cut.name} went inactive after release`,
+        });
+      }
 
       const teamNow = getStarters(players, team.id);
 
@@ -834,14 +901,19 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
       const candidates = [
         ...players.filter(p => p.teamId == null),
         ...prospects,
-      ].filter(c => getSigningCost(c) <= budgetLeft);
+      ].filter(c => c.status !== "inactive" && c.status !== "retired")
+        .filter(c => getSigningCost(c) <= budgetLeft);
 
       if (!candidates.length) continue;
 
       const neededRole = cut.primary;
       const ranked = candidates
         .filter(c => c.id !== cut.id)
-        .map(c => ({ c, score: candidateScore(c, teamNow, context, evaluation, neededRole, rng, windowType) }))
+        .map(c => {
+          const base = candidateScore(c, teamNow, context, evaluation, neededRole, rng, windowType);
+          const chall = (c.isProspect || c.challengerTeamId) ? scoreChallengerPickupCandidate(c, teamNow, evaluation, neededRole, gameState) : 0;
+          return { c, score: base + chall * 0.55 };
+        })
         .sort((a, b) => b.score - a.score);
 
       const pickPool = ranked.slice(0, Math.min(6, ranked.length));
@@ -860,7 +932,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
         playerName: pick.name,
         fromTeamId: pick.challengerTeamId ?? null,
         toTeamId: team.id,
-        note: `${team.tag} signed ${pick.name}`,
+        note: `${team.tag} signed ${pick.name}${pick.challengerTeamId ? ` from ${challengerTeams.find(t => t.id === pick.challengerTeamId)?.name || "Challengers"}` : ""} as a ${neededRole} upgrade`,
       });
       additions.push({ out: cut.name, in: pick.name, fromChallengers: !!pick.isProspect });
       starters = getStarters(players, team.id);
