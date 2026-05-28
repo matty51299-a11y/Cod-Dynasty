@@ -112,36 +112,48 @@ export const MAJOR_PLACEMENT_POINTS = {
 
 function computeDE16Placements(bracket) {
   if (!bracket?.rounds?.length) return {};
-  const losses = {};
-  const eliminated = [];
-  for (const round of bracket.rounds) {
-    for (const m of round.matches ?? []) {
-      if (!m.played || !m.result?.loserId) continue;
-      const lid = m.result.loserId;
-      losses[lid] = (losses[lid] ?? 0) + 1;
-      if (losses[lid] === 2) eliminated.push(lid);
-    }
-  }
-
   const placements = {};
-  const buckets = [
-    { count: 4, places: [13, 14, 15, 16] },
-    { count: 4, places: [9, 10, 11, 12] },
-    { count: 2, places: [7, 8] },
-    { count: 2, places: [5, 6] },
-    { count: 1, places: [4] },
-    { count: 1, places: [3] },
-    { count: 1, places: [2] },
-  ];
+  const claimed = new Set();
+  const place = (teamId, p) => {
+    if (!teamId || claimed.has(teamId)) return;
+    placements[teamId] = p;
+    claimed.add(teamId);
+  };
 
-  let idx = 0;
-  for (const bucket of buckets) {
-    for (let i = 0; i < bucket.count && idx < eliminated.length; i++, idx++) {
-      placements[eliminated[idx]] = bucket.places[Math.min(i, bucket.places.length - 1)];
-    }
+  // Anchor top 4 explicitly from bracket structure. The bug we're fixing:
+  // when the LB Final winner wins the Grand Final, the WB Champion only ever
+  // accrues a single loss, so they never entered the generic "2-losses-elim"
+  // list and 2nd place was being skipped.
+  const gfRound = bracket.rounds.find(r => r.type === "GF") ?? bracket.rounds[bracket.rounds.length - 1];
+  const gfMatch = gfRound?.matches?.[0];
+  if (gfMatch?.played && gfMatch.result) {
+    place(gfMatch.result.winnerId, 1);
+    place(gfMatch.result.loserId, 2);
+  } else if (bracket.champion) {
+    place(bracket.champion, 1);
   }
 
-  if (bracket.champion) placements[bracket.champion] = 1;
+  const lbFinalRound = bracket.rounds.find(r => r.name === "LB Final");
+  const lbFinalMatch = lbFinalRound?.matches?.[0];
+  if (lbFinalMatch?.played && lbFinalMatch.result) place(lbFinalMatch.result.loserId, 3);
+
+  const lbR5Round = bracket.rounds.find(r => r.name === "LB Round 5");
+  const lbR5Match = lbR5Round?.matches?.[0];
+  if (lbR5Match?.played && lbR5Match.result) place(lbR5Match.result.loserId, 4);
+
+  // 5–6: LB Round 4 losers; 7–8: LB Round 3 losers; 9–12: LB Round 2 losers; 13–16: LB Round 1 losers
+  const bucketize = (roundName, places) => {
+    const round = bracket.rounds.find(r => r.name === roundName);
+    const losers = (round?.matches ?? [])
+      .filter(m => m.played && m.result?.loserId)
+      .map(m => m.result.loserId);
+    losers.forEach((id, i) => place(id, places[Math.min(i, places.length - 1)]));
+  };
+  bucketize("LB Round 4", [5, 6]);
+  bucketize("LB Round 3", [7, 8]);
+  bucketize("LB Round 2", [9, 10, 11, 12]);
+  bucketize("LB Round 1", [13, 14, 15, 16]);
+
   return placements;
 }
 
@@ -452,6 +464,8 @@ function _simOneChallengerQualifierMatch(current, gameState, schedule) {
   );
   match.played = true;
   match.result = result;
+  // Store the full result (mapResults + playerStats) so the qualifier overlay
+  // can render the same per-map / per-player breakdown as Match Center / MajorBracket.
   current.matchLog = [...(current.matchLog || []), {
     roundIdx,
     roundName: round.name,
@@ -465,6 +479,7 @@ function _simOneChallengerQualifierMatch(current, gameState, schedule) {
     loserId: result.loserId,
     loserName: result.loserName,
     score: result.score,
+    result,
   }];
   const complete = _advanceQualifierBracket(bracket, roundIdx);
   return { allComplete: complete, roundIdx };
