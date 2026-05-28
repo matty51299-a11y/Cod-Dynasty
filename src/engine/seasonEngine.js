@@ -15,7 +15,7 @@
 import { simMatch } from "./matchSim.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import { runProgression } from "./progression.js";
-import { runAIMajorRosterWindow, runAIOffseasonRosterWindow } from "./rosterAI.js";
+import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand } from "./rosterAI.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
 function seededRng(seed) {
@@ -792,7 +792,10 @@ export function advanceOffseason(gameState) {
   const withAIRenewals = (gameState.players || []).map(p => {
     if (!p.teamId || p.teamId === gameState.userTeamId) return p;
     const years = p.contractYears ?? 2;
-    if (years === 1) return { ...p, contractYears: 2 };  // AI auto-renew
+    if (years === 1) {
+      const demand = getResignDemand(p, 1, gameState.playerSeasonStats, outgoingSeason);
+      return { ...p, contractYears: 2, salary: demand };  // AI auto-renew with market salary
+    }
     return p;
   });
 

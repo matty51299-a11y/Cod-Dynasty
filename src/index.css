@@ -5602,6 +5602,74 @@ body { margin: 0; }
   flex-shrink: 0;
 }
 
+.cp-budget-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.cp-budget-item { display: flex; align-items: center; gap: 4px; }
+.cp-budget-label { color: var(--text-dim); }
+.cp-budget-val { font-weight: 700; color: var(--text-head); }
+.cp-budget-sep { color: var(--text-dim); }
+
+.cp-current-salary {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.cp-demand-options {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.cp-deal-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  cursor: pointer;
+  min-width: 54px;
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.cp-deal-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(96, 165, 250, 0.08);
+}
+.cp-deal-btn:disabled,
+.cp-deal-btn--over {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+.cp-deal-length {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.cp-deal-price {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-head);
+}
+.cp-deal-over {
+  font-size: 10px;
+  color: var(--red);
+  margin-top: 1px;
+}
+
 /* ── Notifications Feed panel ────────────────────────────────────────────────── */
 
 /* Dim overlay behind the panel — click to close */
