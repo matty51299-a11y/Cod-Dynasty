@@ -28,7 +28,7 @@ import { calcChemistry } from "./chemistry.js";
 const MAP_ROTATION = [
   { mode: "Hardpoint",        short: "HP"  },
   { mode: "Search & Destroy", short: "S&D" },
-  { mode: "Control",          short: "CTL" },
+  { mode: "Overload",         short: "OVR" },
   { mode: "Hardpoint",        short: "HP"  },
   { mode: "Search & Destroy", short: "S&D" },
 ];
@@ -63,7 +63,7 @@ function teamStrength(players, chemistry, mode) {
   const modeWeights = {
     "Hardpoint":        { gunny: 0.40, awareness: 0.30, objective: 0.30 },
     "Search & Destroy": { searchIQ: 0.40, clutch: 0.30, composure: 0.30 },
-    "Control":          { gunny: 0.30, objective: 0.40, teamwork: 0.30 },
+    "Overload":         { gunny: 0.30, objective: 0.40, teamwork: 0.30 },
   };
   const w = modeWeights[mode] ?? modeWeights["Hardpoint"];
 
@@ -93,7 +93,7 @@ function mapWinProb(strA, strB) {
 function genMapScore(mode, rng) {
   if (mode === "Hardpoint")        return [250, ri(90, 249, rng)];
   if (mode === "Search & Destroy") return [6,   ri(0,   5, rng)];
-  if (mode === "Control")          return [3,   ri(0,   2, rng)];
+  if (mode === "Overload")         return [3,   ri(0,   2, rng)];
   return [1, 0];
 }
 
@@ -120,7 +120,7 @@ const ROLE_KILL_MOD = {
 const MODE_KILL_BASE = {
   "Hardpoint":         20,
   "Search & Destroy":   5,
-  "Control":           14,
+  "Overload":          14,
 };
 
 // ── PER-SERIES PERFORMANCE TIERS ─────────────────────────────────────────────
@@ -198,7 +198,7 @@ function targetKDForMap(player, won, mode, rng, seriesMod) {
   const formMod    = ((player.form || 70) - 70) / 900;
 
   const noiseWidth = mode === "Search & Destroy" ? 0.20
-                   : mode === "Control"           ? 0.14
+                   : mode === "Overload"          ? 0.14
                    :                                0.12;
   const noise = (rng() - 0.5) * 2 * noiseWidth;
 

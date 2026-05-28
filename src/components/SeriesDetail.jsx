@@ -18,7 +18,7 @@ function kdColor(kd) {
 function modeColor(short) {
   if (short === "HP")  return "var(--accent)";
   if (short === "S&D") return "var(--red)";
-  if (short === "CTL") return "var(--green)";
+  if (short === "OVR" || short === "CTL") return "var(--green)";
   return "var(--text-dim)";
 }
 
