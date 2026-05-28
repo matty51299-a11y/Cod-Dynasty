@@ -6,7 +6,7 @@ import { createContext, useContext, useReducer } from "react";
 import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult } from "../engine/seasonEngine.js";
-import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
+import { getSigningCost, getTeamCap, getResignDemand } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
 
 const SAVE_KEY  = "cdl_manager_save";
@@ -331,11 +331,28 @@ function reducer(state, action) {
 
     // ── RE-SIGN PLAYER ────────────────────────────────────────────────────────
     case "RESIGN_PLAYER": {
-      const { playerId, years } = action;
+      const { playerId, years, salary } = action;
+      const player = state.players.find(p => p.id === playerId);
+      if (!player || player.teamId !== state.userTeamId) return state;
+
+      // Hard budget check for starters (subs exempt, matching SIGN_PLAYER logic)
+      if (salary != null && !player.isSub) {
+        const otherStarters = state.players.filter(
+          p => p.teamId === state.userTeamId && !p.isSub && p.id !== playerId
+        );
+        const committed = otherStarters.reduce((s, p) => s + getSigningCost(p), 0);
+        const cap = getTeamCap(state.userTeamId);
+        if (committed + salary > cap) {
+          return addNotif(state, `Over budget — re-signing ${player.name} would exceed your cap.`);
+        }
+      }
+
       return {
         ...state,
         players: state.players.map(p =>
-          p.id === playerId ? { ...p, contractYears: years } : p
+          p.id === playerId
+            ? { ...p, contractYears: years, ...(salary != null ? { salary } : {}) }
+            : p
         ),
       };
     }

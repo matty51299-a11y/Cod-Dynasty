@@ -44,6 +44,55 @@ export function getSigningCost(player) {
   return Math.round((Math.pow(t, 2.5) * 575 + 25)) * 1000;
 }
 
+// Re-sign salary demand for deal lengths 1, 2, or 3 seasons.
+// dealLength 1 = +1 yr (cheapest), 2 = baseline market, 3 = premium/discount.
+// Deterministic — no randomness. Uses getSigningCost as the base.
+export function getResignDemand(player, dealLength, playerSeasonStats, season) {
+  let base = getSigningCost(player);
+
+  // K/D modifier: current season performance shifts demand up or down
+  const entry = (playerSeasonStats?.[player.id] ?? []).find(e => e.season === season);
+  if (entry && entry.deaths > 0) {
+    const kd = entry.kills / entry.deaths;
+    if      (kd >= 1.5) base *= 1.10;
+    else if (kd >= 1.3) base *= 1.05;
+    else if (kd < 0.7)  base *= 0.90;
+    else if (kd < 0.9)  base *= 0.95;
+  }
+
+  // Age modifier
+  const age = player.age ?? 23;
+  if      (age <= 22) base *= 1.05;
+  else if (age >= 29) base *= 0.90;
+  else if (age >= 27) base *= 0.95;
+
+  // High-potential young player premium
+  const pot = player.potential ?? 75;
+  if (age <= 25) {
+    if      (pot >= 92) base *= 1.08;
+    else if (pot >= 85) base *= 1.03;
+  }
+
+  // Ego premium
+  const ego = player.ego ?? 50;
+  if      (ego >= 90) base *= 1.10;
+  else if (ego >= 75) base *= 1.05;
+
+  // Work ethic + leadership stability discount
+  const stability = ((player.workEthic ?? 50) + (player.leadership ?? 50)) / 2;
+  if (stability >= 75) base *= 0.98;
+
+  // Contract length modifier relative to 2-yr baseline
+  const isDecline = (age >= 28) && ((player.overall ?? 75) < 80);
+  if (dealLength === 1) {
+    base *= 0.90;                          // shorter → cheaper
+  } else if (dealLength === 3) {
+    base *= isDecline ? 0.95 : 1.12;      // declining → slight discount; others → premium
+  }
+
+  return Math.round(base / 5000) * 5000;
+}
+
 function getRosterSigningCost(players, teamId) {
   return getStarters(players, teamId)
     .reduce((sum, p) => sum + getSigningCost(p), 0);

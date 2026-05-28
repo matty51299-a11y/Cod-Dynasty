@@ -6,6 +6,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
 import { calcTeamOvr } from "../engine/teamOvr.js";
+import { getTeamCap, getSigningCost, getResignDemand } from "../engine/rosterAI.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 
@@ -468,7 +469,13 @@ export default function Dashboard({ setScreen }) {
 
           {/* Contract review */}
           {isContracts && (
-            <ContractReviewPanel players={myPlayers} dispatch={dispatch} season={season} />
+            <ContractReviewPanel
+              players={myPlayers}
+              dispatch={dispatch}
+              season={season}
+              userTeamId={userTeamId}
+              playerSeasonStats={state.playerSeasonStats}
+            />
           )}
 
           {/* Recent Results */}
@@ -653,11 +660,23 @@ export default function Dashboard({ setScreen }) {
 }
 
 // ── Contract Review Panel ─────────────────────────────────────────────────────
-function ContractReviewPanel({ players, dispatch, season }) {
-  const starters  = players.filter(p => !p.isSub);
-  const subs      = players.filter(p => p.isSub);
-  const expiring  = starters.filter(p => (p.contractYears ?? 2) === 1);
-  const locked    = starters.filter(p => (p.contractYears ?? 2) > 1);
+function ContractReviewPanel({ players, dispatch, season, userTeamId, playerSeasonStats }) {
+  const starters = players.filter(p => !p.isSub);
+  const subs     = players.filter(p => p.isSub);
+  const expiring = starters.filter(p => (p.contractYears ?? 2) === 1);
+  const locked   = starters.filter(p => (p.contractYears ?? 2) > 1);
+
+  const cap        = getTeamCap(userTeamId);
+  const lockedCost = locked.reduce((s, p) => s + getSigningCost(p), 0);
+  const space      = cap - lockedCost;
+
+  function fmt(n) { return `$${Math.round(n / 1000)}k`; }
+
+  const DEALS = [
+    { label: "1 yr",  dealLength: 1, contractYears: 2 },
+    { label: "2 yrs", dealLength: 2, contractYears: 3 },
+    { label: "3 yrs", dealLength: 3, contractYears: 4 },
+  ];
 
   return (
     <div className="contract-panel">
@@ -671,6 +690,26 @@ function ContractReviewPanel({ players, dispatch, season }) {
         </div>
       </div>
 
+      {/* Budget summary */}
+      <div className="cp-budget-bar">
+        <span className="cp-budget-item">
+          <span className="cp-budget-label">Cap</span>
+          <span className="cp-budget-val">{fmt(cap)}</span>
+        </span>
+        <span className="cp-budget-sep">·</span>
+        <span className="cp-budget-item">
+          <span className="cp-budget-label">Locked</span>
+          <span className="cp-budget-val">{fmt(lockedCost)}</span>
+        </span>
+        <span className="cp-budget-sep">·</span>
+        <span className="cp-budget-item">
+          <span className="cp-budget-label">Available</span>
+          <span className="cp-budget-val" style={{ color: space > 0 ? "var(--green)" : "var(--red)" }}>
+            {fmt(Math.max(0, space))}
+          </span>
+        </span>
+      </div>
+
       {expiring.length === 0 && locked.length === 0 && (
         <p className="muted" style={{ padding: "8px 0" }}>
           No players on your roster. Sign players from Free Agency.
@@ -680,27 +719,51 @@ function ContractReviewPanel({ players, dispatch, season }) {
       {expiring.length > 0 && (
         <div className="cp-section">
           <div className="cp-section-label">Expiring Contracts</div>
-          {expiring.map(p => (
-            <div key={p.id} className="cp-row cp-row--expiring">
-              <div className="cp-player-info">
-                <span className="cp-name">{p.name}</span>
-                <span className="cp-role">{p.primary}</span>
-                <span className="cp-ovr"
-                  style={{ color: p.overall >= 90 ? "#b45309" : p.overall >= 80 ? "#15803d" : "#d97706" }}>
-                  {p.overall} OVR
-                </span>
+          {expiring.map(p => {
+            const curSalary = p.salary ?? getSigningCost(p);
+            const demands = DEALS.map(d => ({
+              ...d,
+              demand: getResignDemand(p, d.dealLength, playerSeasonStats, season),
+            }));
+            return (
+              <div key={p.id} className="cp-row cp-row--expiring">
+                <div className="cp-player-info">
+                  <span className="cp-name">{p.name}</span>
+                  <span className="cp-role">{p.primary}</span>
+                  <span className="cp-ovr"
+                    style={{ color: p.overall >= 90 ? "#b45309" : p.overall >= 80 ? "#15803d" : "#d97706" }}>
+                    {p.overall} OVR
+                  </span>
+                  <span className="cp-current-salary">Current: {fmt(curSalary)}</span>
+                </div>
+                <div className="cp-demand-options">
+                  {demands.map(d => {
+                    const canAfford = d.demand <= space;
+                    return (
+                      <button
+                        key={d.label}
+                        className={`cp-deal-btn${canAfford ? "" : " cp-deal-btn--over"}`}
+                        disabled={!canAfford}
+                        title={canAfford
+                          ? `Re-sign for ${d.label} at ${fmt(d.demand)}`
+                          : `Over budget by ${fmt(d.demand - space)}`}
+                        onClick={() => dispatch({
+                          type: "RESIGN_PLAYER",
+                          playerId: p.id,
+                          years: d.contractYears,
+                          salary: d.demand,
+                        })}
+                      >
+                        <span className="cp-deal-length">{d.label}</span>
+                        <span className="cp-deal-price">{fmt(d.demand)}</span>
+                        {!canAfford && <span className="cp-deal-over">✕</span>}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="cp-actions">
-                <span className="cp-badge cp-badge--expiring">Contract Ending</span>
-                <button className="btn-secondary-sm" title="Extend 1 more year"
-                  onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 2 })}>+1 yr</button>
-                <button className="btn-secondary-sm" title="Extend 2 more years"
-                  onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 3 })}>+2 yr</button>
-                <button className="btn-secondary-sm" title="Extend 3 more years"
-                  onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 4 })}>+3 yr</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -732,22 +795,42 @@ function ContractReviewPanel({ players, dispatch, season }) {
         <div className="cp-section">
           <div className="cp-section-label">Sub</div>
           {subs.map(p => {
-            const years = p.contractYears ?? 2;
+            const years       = p.contractYears ?? 2;
             const expiresSoon = years === 1;
+            const subDeals    = DEALS.slice(0, 2); // subs: 1 yr and 2 yrs only
             return (
               <div key={p.id} className={`cp-row ${expiresSoon ? "cp-row--expiring" : ""}`}>
                 <div className="cp-player-info">
                   <span className="cp-name">{p.name}</span>
                   <span className="cp-role">SUB</span>
                   <span className="cp-ovr">{p.overall} OVR</span>
+                  {expiresSoon && (
+                    <span className="cp-current-salary">
+                      Current: {fmt(p.salary ?? getSigningCost(p))}
+                    </span>
+                  )}
                 </div>
                 {expiresSoon ? (
-                  <div className="cp-actions">
-                    <span className="cp-badge cp-badge--expiring">Contract Ending</span>
-                    <button className="btn-secondary-sm"
-                      onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 2 })}>+1 yr</button>
-                    <button className="btn-secondary-sm"
-                      onClick={() => dispatch({ type: "RESIGN_PLAYER", playerId: p.id, years: 3 })}>+2 yr</button>
+                  <div className="cp-demand-options">
+                    {subDeals.map(d => {
+                      const demand = getResignDemand(p, d.dealLength, playerSeasonStats, season);
+                      return (
+                        <button
+                          key={d.label}
+                          className="cp-deal-btn"
+                          title={`Re-sign sub for ${d.label} at ${fmt(demand)}`}
+                          onClick={() => dispatch({
+                            type: "RESIGN_PLAYER",
+                            playerId: p.id,
+                            years: d.contractYears,
+                            salary: demand,
+                          })}
+                        >
+                          <span className="cp-deal-length">{d.label}</span>
+                          <span className="cp-deal-price">{fmt(demand)}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : (
                   <span className="cp-years-remaining">
