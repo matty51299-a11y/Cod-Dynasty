@@ -10,6 +10,7 @@ import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInact
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
+import { isValidGameState, isValidTeamId } from "./gameValidation.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 100;
@@ -249,7 +250,8 @@ function cleanupDuplicateActiveAssignments(state) {
 }
 
 // ── Initial state factory ─────────────────────────────────────────────────────
-function newGameState(userTeamId) {
+function createInitialGameState(userTeamId) {
+  if (!isValidTeamId(userTeamId)) return null;
   const players  = buildInitialRoster().map(applyChallengerRatingOverride);
   const rawProspects = generateProspects(Date.now() % 999983).map(applyChallengerRatingOverride);
   const seen = new Set();
@@ -282,21 +284,27 @@ function newGameState(userTeamId) {
 function reducer(state, action) {
   switch (action.type) {
 
+    case "RESET_TO_TEAM_SELECT":
+      return null;
+
     case "NEW_GAME":
-      return newGameState(action.teamId);
+      return createInitialGameState(action.teamId);
 
     case "LOAD_GAME": {
+      if (!action.state || !isValidGameState(action.state)) return null;
+
       // Backfill `feed` for saves that predate this feature
       const loaded = { ...action.state, feed: action.state?.feed ?? [] };
+      loaded.schedule = {
+        ...loaded.schedule,
+        challengerQualifierResults: loaded.schedule?.challengerQualifierResults ?? [],
+        currentChallengerQualifier: loaded.schedule?.currentChallengerQualifier ?? null,
+        currentMajorEventTeams: loaded.schedule?.currentMajorEventTeams ?? null,
+      };
       ensureChallengerTeams(loaded);
       const cleaned = cleanupDuplicateActiveAssignments(loaded);
-      cleaned.schedule = {
-        ...cleaned.schedule,
-        challengerQualifierResults: cleaned.schedule?.challengerQualifierResults ?? [],
-        currentChallengerQualifier: cleaned.schedule?.currentChallengerQualifier ?? null,
-      };
       cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
-      return cleaned;
+      return isValidGameState(cleaned) ? cleaned : null;
     }
 
     // ── Stage sims — detect streaks + standings changes ────────────────────
@@ -679,8 +687,15 @@ export function saveGame(state) {
 export function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!isValidGameState(parsed)) {
+      localStorage.removeItem(SAVE_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
+    localStorage.removeItem(SAVE_KEY);
     return null;
   }
 }

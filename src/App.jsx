@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useGame, saveGame, loadGame, deleteSave } from "./store/gameStore.jsx";
+import { isValidGameState } from "./store/gameValidation.js";
 import "./engine/poolReport.js"; // registers window.poolReport() console utility
 import { TeamHubProvider }        from "./store/teamHubContext.jsx";
 import { MatchCenterProvider }    from "./store/matchCenterContext.jsx";
@@ -41,11 +42,12 @@ export default function App() {
     if (saved) {
       dispatch({ type: "LOAD_GAME", state: saved });
     }
-  }, []);
+  }, [dispatch]);
 
-  // Auto-save whenever state changes
+  // Auto-save only complete, playable game states. This prevents a reset to
+  // team select from persisting over a deliberately cleared save.
   useEffect(() => {
-    if (state) saveGame(state);
+    if (isValidGameState(state)) saveGame(state);
   }, [state]);
 
   // Notifications: auto-dismiss after 3.5s
@@ -54,10 +56,10 @@ export default function App() {
       const t = setTimeout(() => dispatch({ type: "CLEAR_NOTIF" }), 3500);
       return () => clearTimeout(t);
     }
-  }, [state?.notifications]);
+  }, [state?.notifications, dispatch]);
 
   // No save loaded yet → show team select
-  if (!state) {
+  if (!isValidGameState(state)) {
     return (
       <div className="app">
         <TeamSelect />
@@ -70,7 +72,10 @@ export default function App() {
 
   function handleNewGame() {
     deleteSave();
-    dispatch({ type: "LOAD_GAME", state: null });
+    dispatch({ type: "RESET_TO_TEAM_SELECT" });
+    setScreen("home");
+    setShowMatchOverlay(false);
+    setShowFeed(false);
     setConfirmNew(false);
   }
 
