@@ -7,6 +7,8 @@ import { useMemo, useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 import PoolHealth from "./PoolHealth.jsx";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function ratingColor(v) {
   if (v >= 90) return "#166534";
@@ -39,7 +41,7 @@ export default function Prospects() {
 
   if (!state) return null;
 
-  const { prospects, userTeamId, players, challengersLog, challengerTeams } = state;
+  const { prospects, userTeamId, players, challengersLog, challengerTeams, schedule, challengerTransactions } = state;
   const myRoster = players.filter(p => p.teamId === userTeamId);
   const starterCount = myRoster.filter(p => !p.isSub).length;
   const subCount = myRoster.filter(p => p.isSub).length;
@@ -80,6 +82,9 @@ export default function Prospects() {
       const vb = b.scouted ? b[sortKey.replace("scouted", "").toLowerCase() || "overall"] ?? b[sortKey] : b[sortKey];
       return vb - va;
     });
+  const qualifierResults = schedule?.challengerQualifierResults || [];
+  const latestQualifier = qualifierResults.length ? qualifierResults[qualifierResults.length - 1] : null;
+  const teamMap = Object.fromEntries((challengerTeams || []).map(t => [t.id, t]));
 
   function handleSign(prospectId) {
     const slot = signAs[prospectId] || "starter";
@@ -128,6 +133,55 @@ export default function Prospects() {
           </table>
         </div>
       )}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Challenger Qualifier</h3>
+        <h4 style={{ marginBottom: 8 }}>Latest Qualifier Results</h4>
+        {!latestQualifier ? (
+          <p className="muted">No Challenger qualifier has been played yet.</p>
+        ) : (
+          <table className="roster-table">
+            <thead><tr><th>Place</th><th>Team</th><th>Region</th><th>OVR</th><th>Score</th><th>Circuit Pts</th><th>Form Δ</th><th>Status</th></tr></thead>
+            <tbody>{latestQualifier.teams.slice().sort((a,b)=>a.placement-b.placement).map(row => {
+              const team = teamMap[row.teamId] || { id: row.teamId, name: row.teamId, tag: row.teamId, region: "-" };
+              const formDelta = (row.formAfter ?? 0) - (row.formBefore ?? 0);
+              const tDisplay = resolveTeamDisplay(team.id, schedule);
+              return <tr key={`${latestQualifier.season}_${latestQualifier.majorIdx}_${row.teamId}`} style={row.qualified ? { background: "rgba(52,211,153,0.12)" } : undefined}>
+                <td><strong>{row.placement}</strong></td>
+                <td><TeamLogo team={tDisplay} size={16} /> {team.tag} · {team.name}</td>
+                <td>{team.region || "-"}</td>
+                <td>{row.teamOvr ?? "-"}</td>
+                <td>{row.score ?? "-"}</td>
+                <td>{row.circuitPointsAwarded ?? 0}</td>
+                <td style={{ color: formDelta >= 0 ? "#34d399" : "#f87171" }}>{formDelta >= 0 ? "+" : ""}{formDelta}</td>
+                <td>{row.qualified ? "Qualified for Major" : "Missed qualification"}</td>
+              </tr>;
+            })}</tbody>
+          </table>
+        )}
+        <h4 style={{ margin: "14px 0 8px" }}>Qualifier History</h4>
+        {!qualifierResults.length ? <p className="muted">No qualifier history yet.</p> : qualifierResults.slice().reverse().map((q, idx) => {
+          const top4 = q.teams.slice().sort((a,b)=>a.placement-b.placement).slice(0,4);
+          const winner = top4[0];
+          return <details key={`${q.season}_${q.majorIdx}_${idx}`} style={{ marginBottom: 8 }}>
+            <summary>Season {q.season} · Major {Number(q.majorIdx) + 1} Qualifier — Winner: {teamMap[winner?.teamId]?.name || winner?.teamId}</summary>
+            <ol style={{ marginTop: 6 }}>
+              {top4.map(r => <li key={r.teamId}>{teamMap[r.teamId]?.name || r.teamId} — Qualified</li>)}
+            </ol>
+          </details>;
+        })}
+      </div>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Latest Moves</h3>
+        {!(challengerTransactions || []).length ? <p className="muted">No recent challenger/CDL moves yet.</p> : (
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {(challengerTransactions || []).slice(-10).reverse().map((tx, i) => (
+              <li key={`${tx.playerId}_${tx.season}_${i}`} style={{ marginBottom: 4 }}>
+                S{tx.season} · {tx.type} · {tx.note || `${tx.playerName} moved`}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <div className="cm-tabs">
         {TAB_KEYS.map(k => <button key={k} className={`filter-btn ${tab===k?"active":""}`} onClick={()=>setTab(k)}>{k==="all"?"All Players":k==="veterans"?"CDL Veterans":k==="prospects"?"Prospects":k==="proam"?"Pro-Am Eligible":"Shortlist"}</button>)}
       </div>

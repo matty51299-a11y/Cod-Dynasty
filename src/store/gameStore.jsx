@@ -184,6 +184,7 @@ function newGameState(userTeamId) {
     playerSeasonStats: {},    // { [playerId]: [{ season, kills, deaths, matches }, ...] }
     playerOvrHistory:  {},    // { [playerId]: [{ season, overall }, ...] }
     challengersLog:    [],    // per-season challengers pool snapshots (for Pool Health panel)
+    challengerTransactions: [],
   };
   ensureChallengerTeams(state);
   return state;
@@ -201,6 +202,7 @@ function reducer(state, action) {
       const loaded = { ...action.state, feed: action.state?.feed ?? [] };
       ensureChallengerTeams(loaded);
       loaded.schedule = { ...loaded.schedule, challengerQualifierResults: loaded.schedule?.challengerQualifierResults ?? [] };
+      loaded.challengerTransactions = loaded.challengerTransactions ?? [];
       return loaded;
 
     // ── Stage sims — detect streaks + standings changes ────────────────────
@@ -429,6 +431,11 @@ function reducer(state, action) {
             players:  [...state.players, signed],
             prospects: state.prospects.filter(p => p.id !== playerId),
             challengerTeams: (state.challengerTeams || []).map(t => t.id === signed.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
+            challengerTransactions: [...(state.challengerTransactions || []), {
+              season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
+              type: "CDL_SIGNING", playerId: signed.id, playerName: signed.name, fromTeamId: signed.challengerTeamId ?? null, toTeamId: userTeam,
+              note: `${tag} signed ${signed.name} from Challengers`,
+            }],
           }, `${signed.name} signed!`),
           [mkFeed("signing", `${tag} sign ${signed.name}`, state.season, phase)]
         );
@@ -453,6 +460,11 @@ function reducer(state, action) {
             };
           }),
           challengerTeams: (state.challengerTeams || []).map(t => t.id === target.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) } : t),
+          challengerTransactions: [...(state.challengerTransactions || []), {
+            season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
+            type: "CDL_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.challengerTeamId ?? null, toTeamId: userTeam,
+            note: `${tag} signed ${target.name}`,
+          }],
         }, `${target.name} signed!`),
         [mkFeed("signing", `${tag} sign ${target.name}`, state.season, phase)]
       );
@@ -468,12 +480,18 @@ function reducer(state, action) {
       const feedItem = mkFeed("release", `${tag} release ${player.name}`, state.season, phase);
 
       if (player.isProspect) {
-        const released = { ...player, teamId: null, isSub: false };
+        const releaseToRetire = (player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70);
+        const released = { ...player, teamId: null, isSub: false, challengerTeamId: null };
         return pushFeed(
           addNotif({
             ...state,
             players:  state.players.filter(p => p.id !== action.playerId),
-            prospects: [...state.prospects, released],
+            prospects: releaseToRetire ? state.prospects : [...state.prospects, released],
+            challengerTransactions: [...(state.challengerTransactions || []), {
+              season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
+              type: releaseToRetire ? "RETIREMENT" : "CDL_RELEASE_TO_CHALLENGERS", playerId: released.id, playerName: released.name, fromTeamId: player.teamId, toTeamId: null,
+              note: releaseToRetire ? `${released.name} retired after release` : `${released.name} moved to Challengers pool`,
+            }],
           }, `${player.name} released.`),
           [feedItem]
         );
@@ -482,9 +500,18 @@ function reducer(state, action) {
       return pushFeed(
         addNotif({
           ...state,
-          players: state.players.map(p =>
-            p.id === action.playerId ? { ...p, teamId: null, isSub: false } : p
-          ),
+          players: state.players.filter(p => p.id !== action.playerId),
+          prospects: (((player.overall ?? 70) >= 75 || (player.age ?? 25) < 29) && !((player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70)))
+            ? [...state.prospects, { ...player, teamId: null, isSub: false, challengerTeamId: null }]
+            : state.prospects,
+          challengerTransactions: [...(state.challengerTransactions || []), {
+            season: state.season, stageIdx: state.schedule?.stageIdx ?? null, majorIdx: state.schedule?.majorIdx ?? null,
+            type: (((player.overall ?? 70) >= 75 || (player.age ?? 25) < 29) && !((player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70))) ? "CDL_RELEASE_TO_CHALLENGERS" : "RETIREMENT",
+            playerId: player.id, playerName: player.name, fromTeamId: player.teamId, toTeamId: null,
+            note: (((player.overall ?? 70) >= 75 || (player.age ?? 25) < 29) && !((player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70)))
+              ? `${player.name} moved to Challengers pool`
+              : `${player.name} retired after release`,
+          }],
         }, `${player.name} released.`),
         [feedItem]
       );
