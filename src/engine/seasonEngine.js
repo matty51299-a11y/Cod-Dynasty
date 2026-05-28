@@ -91,26 +91,35 @@ export function buildSeason(season) {
 // ── Build major bracket ───────────────────────────────────────────────────────
 // Accepts any standings object with { [teamId]: { points, ... } }.
 // Regular Majors pass stageStandings; Champs passes cumulative standings.
-function buildMajorBracket(standings) {
+// userTeamId: if provided, user's QF match is moved to first so "Play Match" always triggers.
+function buildMajorBracket(standings, userTeamId) {
   const sorted = Object.entries(standings)
     .sort((a, b) => b[1].points - a[1].points)
     .slice(0, 8)
     .map(([id]) => id);
 
+  const matches = [
+    { a: sorted[0], b: sorted[7], seedA: 1, seedB: 8, played: false, result: null },
+    { a: sorted[1], b: sorted[6], seedA: 2, seedB: 7, played: false, result: null },
+    { a: sorted[2], b: sorted[5], seedA: 3, seedB: 6, played: false, result: null },
+    { a: sorted[3], b: sorted[4], seedA: 4, seedB: 5, played: false, result: null },
+  ];
+
+  // Move user's match to the front so their "Play Match" is always the next to sim
+  if (userTeamId) {
+    const userIdx = matches.findIndex(m => m.a === userTeamId || m.b === userTeamId);
+    if (userIdx > 0) {
+      const [userMatch] = matches.splice(userIdx, 1);
+      matches.unshift(userMatch);
+    }
+  }
+
   return {
     seeds: sorted,
     rounds: [
-      {
-        name: "Quarterfinals",
-        matches: [
-          { a: sorted[0], b: sorted[7], seedA: 1, seedB: 8, played: false, result: null },
-          { a: sorted[1], b: sorted[6], seedA: 2, seedB: 7, played: false, result: null },
-          { a: sorted[2], b: sorted[5], seedA: 3, seedB: 6, played: false, result: null },
-          { a: sorted[3], b: sorted[4], seedA: 4, seedB: 5, played: false, result: null },
-        ],
-      },
-      { name: "Semifinals",  matches: [] },
-      { name: "Grand Final", matches: [] },
+      { name: "Quarterfinals", matches },
+      { name: "Semifinals",    matches: [] },
+      { name: "Grand Final",   matches: [] },
     ],
     completed: false,
     champion:  null,
@@ -214,7 +223,7 @@ export function beginChamps(gameState) {
   // Champs bracket seeded by cumulative season standings.points
   schedule.phase    = "major";
   schedule.majorIdx = 4;
-  schedule.majors[4].bracket = buildMajorBracket(schedule.standings);
+  schedule.majors[4].bracket = buildMajorBracket(schedule.standings, gameState.userTeamId);
   return { ...gameState, schedule: { ...schedule } };
 }
 
@@ -301,7 +310,7 @@ export function simNextMatch(gameState) {
     // Stage done → build Major bracket from stageStandings (keep snapshot intact)
     schedule.phase    = "major";
     schedule.majorIdx = schedule.stageIdx;  // Stage N → Major N (indices align)
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings);
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings, gameState.userTeamId);
     return { ...gameState, schedule: { ...schedule } };
   }
 
@@ -381,7 +390,7 @@ export function simMatchday(gameState) {
     // Stage done → build bracket from stageStandings, keep snapshot intact
     schedule.phase    = "major";
     schedule.majorIdx = schedule.stageIdx;
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings);
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings, gameState.userTeamId);
   }
 
   schedule.currentMatchday++;
@@ -465,7 +474,7 @@ export function simUserMatchday(gameState) {
   if (stage.matches.every(m => m.played)) {
     schedule.phase    = "major";
     schedule.majorIdx = schedule.stageIdx;
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings);
+    schedule.majors[schedule.majorIdx].bracket = buildMajorBracket(schedule.stageStandings, gameState.userTeamId);
   }
 
   schedule.currentMatchday++;
