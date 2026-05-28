@@ -1149,6 +1149,25 @@ body { margin: 0; }
 .cm-budget-bar { height: 6px; background: var(--bg3); border-radius: 999px; overflow: hidden; }
 .cm-budget-bar > div { height: 100%; border-radius: 999px; transition: width .25s ease; }
 .cm-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+
+.team-logo {
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+}
+.team-logo-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid;
+  border-radius: 50%;
+  background: var(--bg3);
+  font-size: 9px;
+  font-weight: 700;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.db-banner-logo { margin-right: 10px; }
 .filter-group {
   display: flex;
   align-items: center;

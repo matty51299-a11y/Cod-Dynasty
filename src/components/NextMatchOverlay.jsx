@@ -12,6 +12,8 @@ import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { calcTeamOvr } from "../engine/teamOvr.js";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -139,7 +141,7 @@ function getStakesLine(userTeamId, stageStandings, matchLog) {
 }
 
 // ── Pre-match view ────────────────────────────────────────────────────────────
-function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchdayCtx, onPlay, players }) {
+function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchdayCtx, onPlay, players, schedule }) {
   const { openTeamHub } = useTeamHub();
   const oppId  = nextMatch.a === userTeamId ? nextMatch.b : nextMatch.a;
   const stakes = getStakesLine(userTeamId, stageStandings, matchLog);
@@ -161,6 +163,7 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
       <div className="nmo-matchup">
         <div className="nmo-team nmo-team-user">
           <div className="nmo-team-name" style={{ color: teamColor(userTeamId) }}>
+            <TeamLogo team={resolveTeamDisplay(userTeamId, schedule)} size={22} />
             {teamName(userTeamId)}
           </div>
           <div
@@ -181,6 +184,7 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
 
         <div className="nmo-team">
           <div className="nmo-team-name" style={{ color: teamColor(oppId) }}>
+            <TeamLogo team={resolveTeamDisplay(oppId, schedule)} size={22} />
             {teamName(oppId)}
           </div>
           <div
@@ -320,6 +324,7 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
             matchdayCtx={matchdayCtx}
             onPlay={handlePlay}
             players={players}
+            schedule={schedule}
           />
         ) : (
           <div className="nmo-no-match">

@@ -409,3 +409,4 @@ Player shape (key fields):
 - Added static `challengerRatingOverrides` data + normalized-name matching and prospect-time override application for manually reviewed Challenger OVR/POT values.
 - Manual Challenger override import now also creates missing rated players as unsigned prospects (deterministic defaults), applies overrides to existing players/prospects, and dedupes normalized-name collisions.
 - Challengers screen refreshed as a market-style "Challengers Circuit" view with hero chips, tabs, cleaner filters, readable archetype labels, shortlist stars, and collapsed debug Pool Health.
+- Added shared team-display + TeamLogo fallback component and wired logo-safe rendering into core surfaces (dashboard banner, standings, schedule, next match overlay, match center pre/final, match log), including temporary event-team metadata support.

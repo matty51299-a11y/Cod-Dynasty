@@ -7,6 +7,8 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function nameOf(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function colorOf(id){ return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; }
@@ -60,6 +62,7 @@ export default function MatchLog() {
                         style={{ color: colorOf(r.winnerId) }}
                         onClick={e => { e.stopPropagation(); openTeamHub(r.winnerId); }}
                       >
+                        <TeamLogo team={resolveTeamDisplay(r.winnerId, state.schedule)} size={16} />
                         {nameOf(r.winnerId)}
                       </span>
                       <span className="rc-score">{r.score}</span>
@@ -68,6 +71,7 @@ export default function MatchLog() {
                         style={{ color: colorOf(r.loserId) }}
                         onClick={e => { e.stopPropagation(); openTeamHub(r.loserId); }}
                       >
+                        <TeamLogo team={resolveTeamDisplay(r.loserId, state.schedule)} size={16} />
                         {nameOf(r.loserId)}
                       </span>
                     </div>

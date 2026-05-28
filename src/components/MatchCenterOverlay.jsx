@@ -16,6 +16,8 @@ import { useGame }         from "../store/gameStore.jsx";
 import { useMatchCenter }  from "../store/matchCenterContext.jsx";
 import { CDL_TEAMS }       from "../data/teams.js";
 import { simMap, makeMatchRng, generateSeriesMods } from "../engine/matchSim.js";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamColor(id, schedule) { return getTeamMeta(id, schedule)?.color ?? "#888"; }
@@ -490,14 +492,14 @@ export default function MatchCenterOverlay() {
           <div className="mco-pg-matchup">
             <div className="mco-pg-team">
               <div className="mco-pg-tag" style={{ color: teamColor(teamA.id, state.schedule) }}>{teamTag(teamA.id, state.schedule)}</div>
-              <div className="mco-pg-name">{teamName(teamA.id, state.schedule)}</div>
+              <div className="mco-pg-name"><TeamLogo team={resolveTeamDisplay(teamA.id, state.schedule)} size={20} /> {teamName(teamA.id, state.schedule)}</div>
               <div className="mco-pg-ovr">{teamA.id === userTeamId ? userOvr : oppOvr} OVR</div>
               {teamA.id === userTeamId && <span className="mco-pg-you">YOU</span>}
             </div>
             <div className="mco-pg-vs">vs</div>
             <div className="mco-pg-team">
               <div className="mco-pg-tag" style={{ color: teamColor(teamB.id, state.schedule) }}>{teamTag(teamB.id, state.schedule)}</div>
-              <div className="mco-pg-name">{teamName(teamB.id, state.schedule)}</div>
+              <div className="mco-pg-name"><TeamLogo team={resolveTeamDisplay(teamB.id, state.schedule)} size={20} /> {teamName(teamB.id, state.schedule)}</div>
               <div className="mco-pg-ovr">{teamB.id === userTeamId ? userOvr : oppOvr} OVR</div>
               {teamB.id === userTeamId && <span className="mco-pg-you">YOU</span>}
             </div>
@@ -527,9 +529,9 @@ export default function MatchCenterOverlay() {
             <div className="mco-final-outcome">{userWon ? "VICTORY" : "DEFEAT"}</div>
             <div className="mco-final-score">{finalResult.score}</div>
             <div className="mco-final-teams">
-              <span style={{ color: teamColor(finalResult.winnerId, state.schedule) }}>{teamTag(finalResult.winnerId, state.schedule)}</span>
+              <span style={{ color: teamColor(finalResult.winnerId, state.schedule) }}><TeamLogo team={resolveTeamDisplay(finalResult.winnerId, state.schedule)} size={16} /> {teamTag(finalResult.winnerId, state.schedule)}</span>
               <span className="mco-final-dash"> — </span>
-              <span style={{ color: teamColor(finalResult.loserId, state.schedule), opacity: 0.6 }}>{teamTag(finalResult.loserId, state.schedule)}</span>
+              <span style={{ color: teamColor(finalResult.loserId, state.schedule), opacity: 0.6 }}><TeamLogo team={resolveTeamDisplay(finalResult.loserId, state.schedule)} size={16} /> {teamTag(finalResult.loserId, state.schedule)}</span>
             </div>
           </div>
 
