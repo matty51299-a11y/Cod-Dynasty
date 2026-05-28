@@ -35,13 +35,14 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
 
   const pillText = (() => {
     if (phase === "stage")      return `${stageName}${remaining != null ? ` · ${remaining} left` : ""}`;
+    if (phase === "challengerQualifier") return `${majorName} Qualifier`;
     if (phase === "major")      return `${majorName} — LIVE`;
     if (phase === "preChamps")  return "Pre-Championship";
     if (phase === "offseason")  return "Offseason";
     return phase;
   })();
 
-  const pillClass = phase === "major"    ? "sb-pill sb-pill-live"
+  const pillClass = phase === "major" || phase === "challengerQualifier" ? "sb-pill sb-pill-live"
                   : phase === "offseason" ? "sb-pill sb-pill-dim"
                   : "sb-pill";
 

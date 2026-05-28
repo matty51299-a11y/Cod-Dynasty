@@ -22,7 +22,7 @@ export default function Standings() {
 
   // During stage/major: default to per-stage standings; toggle to season total.
   // During preChamps/offseason: always use cumulative.
-  const isStagePhase = phase === "stage" || phase === "major";
+  const isStagePhase = phase === "stage" || phase === "challengerQualifier" || phase === "major";
   const useStage = isStagePhase && !showCumulative;
 
   const displayStandings = useStage
@@ -40,6 +40,7 @@ export default function Standings() {
   const majorIdx  = schedule.majorIdx  ?? 0;
   const phaseLabel =
     phase === "stage"       ? schedule.stages?.[stageIdx]?.name
+    : phase === "challengerQualifier" ? `${schedule.majors?.[majorIdx]?.name ?? "Major"} Qualifier`
     : phase === "major"     ? schedule.majors?.[majorIdx]?.name
     : phase === "preChamps" ? "Pre-Championship Window"
     : "Offseason";

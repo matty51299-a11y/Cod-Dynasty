@@ -194,6 +194,9 @@ export function buildSeason(season) {
     phase:           "stage",  // "stage" | "major" | "preChamps" | "offseason"
     currentMatchday: 0,
     matchLog:        [],
+    challengerQualifierResults: [],
+    currentChallengerQualifier: null,
+    currentMajorEventTeams: null,
   };
 }
 
@@ -272,31 +275,245 @@ function buildMajorBracketDE16(majorSeeds) {
   };
 }
 
+const CHALLENGER_QUALIFIER_POINTS = {
+  1: 25,
+  2: 20,
+  3: 15,
+  4: 10,
+  5: 5,
+  6: 5,
+  7: 5,
+  8: 5,
+};
+
+function challengerPointsForPlacement(placement) {
+  return CHALLENGER_QUALIFIER_POINTS[placement] ?? 0;
+}
+
+function getChallengerRoster(team, gameState, cdlNames = buildCdlRosterNameSet(gameState.players || [])) {
+  return (team?.playerIds || [])
+    .map(pid => gameState.prospects.find(p => p.id === pid) || gameState.players.find(p => p.id === pid))
+    .filter(p => p && !isInactivePlayer(p) && !cdlNames.has(normalizePlayerName(p.name)));
+}
+
+function calcChallengerTeamOvr(team, gameState, cdlNames) {
+  const roster = getChallengerRoster(team, gameState, cdlNames);
+  const ovr = Math.round(roster.reduce((s, p) => s + (p.overall ?? 65), 0) / Math.max(1, roster.length));
+  return { roster, ovr };
+}
+
+function placementLabel(placement) {
+  return placement === 1 ? "Qualifier Winner"
+    : placement === 2 ? "Qualifier Runner-up"
+    : placement === 3 ? "Qualifier 3rd"
+    : placement === 4 ? "Qualifier 4th"
+    : `Qualifier ${placement}th`;
+}
+
+function buildChallengerQualifierField(gameState, schedule) {
+  ensureChallengerTeams(gameState);
+  const rng = seededRng(schedule.season * 8191 + ((schedule.majorIdx ?? schedule.stageIdx ?? 0) + 1) * 131 + 23);
+  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
+  const rows = (gameState.challengerTeams || []).map((team) => {
+    const { roster, ovr } = calcChallengerTeamOvr(team, gameState, cdlNames);
+    const prevPlacement = team.lastQualifierPlacement ?? 9;
+    const prevBonus = Math.max(0, 9 - prevPlacement) * 1.25;
+    const seedScore = (team.circuitPoints ?? 0)
+      + (ovr - 65) * 1.35
+      + (team.form ?? 0) * 2.2
+      + prevBonus
+      + (rng() * 4 - 2);
+    return {
+      seed: 0,
+      teamId: team.id,
+      teamName: team.name,
+      tag: team.tag,
+      color: team.color,
+      logo: team.logo,
+      region: team.region ?? CHALLENGER_REGIONS[team.id] ?? "NA",
+      teamOvr: ovr,
+      rosterIds: roster.map(p => p.id),
+      circuitPointsBefore: team.circuitPoints ?? 0,
+      formBefore: team.form ?? 0,
+      previousQualifierPlacement: team.lastQualifierPlacement ?? null,
+      seedScore: Number(seedScore.toFixed(2)),
+    };
+  }).sort((a, b) => b.seedScore - a.seedScore);
+
+  return rows.map((row, idx) => ({ ...row, seed: idx + 1 }));
+}
+
+function getExistingQualifierForMajor(schedule, majorIdx = schedule?.majorIdx) {
+  return (schedule?.challengerQualifierResults || []).find(r =>
+    r?.season === schedule?.season &&
+    r?.majorIdx === majorIdx &&
+    r?.source === "visibleQualifier"
+  );
+}
+
+function createChallengerQualifierEvent(gameState, schedule) {
+  const majorIdx = schedule.stageIdx ?? schedule.majorIdx ?? 0;
+  const existing = schedule.currentChallengerQualifier;
+  if (existing?.season === schedule.season && existing?.majorIdx === majorIdx) return existing;
+  return {
+    season: schedule.season,
+    majorIdx,
+    name: `Major ${majorIdx + 1} Qualifier`,
+    completed: false,
+    field: buildChallengerQualifierField(gameState, { ...schedule, majorIdx }),
+    results: [],
+  };
+}
+
+function enterChallengerQualifierPhase(gameState, schedule) {
+  const majorIdx = schedule.stageIdx ?? 0;
+  schedule.phase = "challengerQualifier";
+  schedule.majorIdx = majorIdx;
+  schedule.currentChallengerQualifier = createChallengerQualifierEvent(gameState, schedule);
+  return { ...gameState, schedule: { ...schedule } };
+}
+
+export function simChallengerQualifier(gameState) {
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+
+  const majorIdx = schedule.majorIdx ?? schedule.stageIdx ?? 0;
+  const current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
+  if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
+
+  const rng = seededRng(schedule.season * 9991 + (majorIdx + 1) * 379 + 41);
+  const field = (current.field?.length ? current.field : buildChallengerQualifierField(gameState, schedule));
+  const results = field.map((row) => {
+    const seedBonus = (17 - row.seed) * 0.28;
+    const rosterCompleteness = Math.min(4, row.rosterIds?.length ?? 0);
+    const disruptionPenalty = rosterCompleteness < 4 ? (4 - rosterCompleteness) * 3 : 0;
+    const formScore = (row.formBefore ?? 0) * 1.15;
+    const variance = (rng() + rng() + rng() - 1.5) * 8;
+    const upsetSwing = rng() < 0.16 ? (rng() * 10 - 2) : 0;
+    const performanceScore = (row.teamOvr ?? 65) + formScore + seedBonus - disruptionPenalty + variance + upsetSwing;
+    return { ...row, performanceScore: Number(performanceScore.toFixed(2)) };
+  }).sort((a, b) => b.performanceScore - a.performanceScore || a.seed - b.seed)
+    .map((row, idx) => {
+      const placement = idx + 1;
+      const circuitPointsAwarded = challengerPointsForPlacement(placement);
+      const qualified = placement <= CHALLENGER_QUALIFIER_TEAMS;
+      const formAfter = Math.max(-10, Math.min(10, (row.formBefore ?? 0) + (qualified ? 2 : placement <= 8 ? 0 : -1)));
+      return {
+        ...row,
+        placement,
+        qualified,
+        placementLabel: placementLabel(placement),
+        circuitPointsAwarded,
+        circuitPointsAfter: (row.circuitPointsBefore ?? 0) + circuitPointsAwarded,
+        formAfter,
+      };
+    });
+
+  const completed = { ...current, field, results, completed: true };
+  const historyEntry = {
+    season: schedule.season,
+    majorIdx,
+    source: "visibleQualifier",
+    completed: true,
+    teams: results.map(r => ({
+      season: schedule.season,
+      majorIdx,
+      seed: r.seed,
+      placement: r.placement,
+      teamId: r.teamId,
+      teamName: r.teamName,
+      teamOvr: r.teamOvr,
+      region: r.region,
+      circuitPointsBefore: r.circuitPointsBefore,
+      circuitPointsAwarded: r.circuitPointsAwarded,
+      circuitPointsAfter: r.circuitPointsAfter,
+      formBefore: r.formBefore,
+      formAfter: r.formAfter,
+      qualified: r.qualified,
+      score: r.performanceScore,
+    })),
+  };
+
+  const alreadyStored = getExistingQualifierForMajor(schedule, majorIdx);
+  schedule.challengerQualifierResults = alreadyStored
+    ? (schedule.challengerQualifierResults || []).map(r => (r === alreadyStored ? historyEntry : r))
+    : [...(schedule.challengerQualifierResults || []), historyEntry];
+  schedule.currentChallengerQualifier = completed;
+
+  gameState.challengerTeams = (gameState.challengerTeams || []).map(t => {
+    const row = results.find(x => x.teamId === t.id);
+    return row ? {
+      ...t,
+      circuitPoints: row.circuitPointsAfter,
+      form: row.formAfter,
+      lastQualifierPlacement: row.placement,
+      qualifiedMajorIdxs: row.qualified ? [...new Set([...(t.qualifiedMajorIdxs || []), majorIdx])] : (t.qualifiedMajorIdxs || []),
+    } : t;
+  });
+
+  return { ...gameState, schedule: { ...schedule } };
+}
+
+function qualifierRowsToEventTeams(rows, gameState, schedule, eventKey = "major") {
+  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
+  return rows.slice(0, CHALLENGER_QUALIFIER_TEAMS).map((row, i) => {
+    const base = (gameState.challengerTeams || []).find(t => t.id === row.teamId) || row;
+    const roster = getChallengerRoster({ ...base, playerIds: row.rosterIds || base.playerIds || [] }, gameState, cdlNames);
+    return {
+      id: `${eventKey}_qual_${schedule.season}_${(schedule.majorIdx ?? 0) + 1}_${i + 1}`,
+      ...base,
+      name: row.teamName ?? base.name,
+      region: row.region ?? base.region,
+      ovr: row.teamOvr,
+      qualifierPlacement: row.placement,
+      qualifierSeed: row.seed,
+      qualifierLabel: row.placementLabel ?? placementLabel(row.placement),
+      players: roster,
+      playerIds: roster.map(p => p.id),
+    };
+  });
+}
+
+export function continueFromChallengerQualifier(gameState) {
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  const majorIdx = schedule.majorIdx ?? schedule.stageIdx ?? 0;
+  const qualifier = schedule.currentChallengerQualifier;
+  if (!qualifier?.completed || !qualifier?.results?.length) return gameState;
+
+  const cdlSeeds = Object.entries(schedule.stageStandings)
+    .sort((a,b)=>b[1].points-a[1].points)
+    .map(([id])=>id);
+  const qualifiedRows = qualifier.results.filter(r => r.qualified).sort((a, b) => a.placement - b.placement);
+  const eventTeams = qualifierRowsToEventTeams(qualifiedRows, gameState, { ...schedule, majorIdx });
+  const majorSeeds = [...cdlSeeds, ...eventTeams.map(t=>t.id)];
+  schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
+  schedule.majors[majorIdx].bracket = schedule.majors[majorIdx].bracket ?? buildMajorBracketDE16(majorSeeds);
+  schedule.phase = "major";
+  schedule.majorIdx = majorIdx;
+  return { ...gameState, schedule: { ...schedule } };
+}
+
 function simulateChallengerQualifier(gameState, schedule, eventKey = "major") {
+  // Legacy/Champs-only hidden qualifier path. Regular Majors now use the visible
+  // challengerQualifier phase and continueFromChallengerQualifier() so seeds 13–16
+  // come from the player's completed event.
   ensureChallengerTeams(gameState);
   const rng = seededRng(schedule.season * 9991 + ((schedule.majorIdx ?? 0) + 1) * 71 + (eventKey === "champs" ? 17 : 0));
-  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
-  const results = (gameState.challengerTeams || []).map((t) => {
-    const roster = t.playerIds
-      .map(pid => gameState.prospects.find(p => p.id === pid) || gameState.players.find(p => p.id === pid))
-      .filter(p => p && !isInactivePlayer(p) && !cdlNames.has(normalizePlayerName(p.name)));
-    const ovr = Math.round(roster.reduce((s, p) => s + (p.overall ?? 65), 0) / Math.max(1, roster.length));
-    const score = ovr + (t.form ?? 0) * 0.6 + (t.circuitPoints ?? 0) * 0.03 + (rng() * 6 - 3);
-    return { teamId: t.id, roster, ovr, score, formBefore: t.form ?? 0 };
-  }).sort((a, b) => b.score - a.score).map((r, i) => ({ ...r, placement: i + 1 }));
+  const field = buildChallengerQualifierField(gameState, schedule);
+  const results = field.map((row) => ({
+    ...row,
+    performanceScore: Number(((row.teamOvr ?? 65) + (row.formBefore ?? 0) * 0.9 + (17 - row.seed) * 0.25 + (rng() * 10 - 5)).toFixed(2)),
+  })).sort((a, b) => b.performanceScore - a.performanceScore || a.seed - b.seed)
+    .map((r, i) => ({ ...r, placement: i + 1, qualified: i < CHALLENGER_QUALIFIER_TEAMS, circuitPointsAwarded: challengerPointsForPlacement(i + 1), formAfter: Math.max(-10, Math.min(10, (r.formBefore ?? 0) + (i < 4 ? 2 : i < 8 ? 0 : -1))) }));
 
-  const ptsFor = (pl) => (pl === 1 ? 25 : pl === 2 ? 20 : pl === 3 ? 15 : pl === 4 ? 10 : pl <= 8 ? 5 : 0);
-  const qualified = results.slice(0, CHALLENGER_QUALIFIER_TEAMS);
-  const resObj = { season: schedule.season, majorIdx: schedule.majorIdx, teams: results.map(r => ({ teamId: r.teamId, placement: r.placement, teamOvr: r.ovr, score: Number(r.score.toFixed(2)), qualified: r.placement <= 4, circuitPointsAwarded: ptsFor(r.placement), formBefore: r.formBefore, formAfter: r.formBefore + (r.placement <= 4 ? 2 : -1) })) };
+  const resObj = { season: schedule.season, majorIdx: schedule.majorIdx, source: eventKey === "champs" ? "hiddenChampsQualifier" : "legacyHiddenQualifier", teams: results.map(r => ({ teamId: r.teamId, teamName: r.teamName, seed: r.seed, placement: r.placement, teamOvr: r.teamOvr, region: r.region, score: r.performanceScore, qualified: r.qualified, circuitPointsBefore: r.circuitPointsBefore, circuitPointsAwarded: r.circuitPointsAwarded, circuitPointsAfter: r.circuitPointsBefore + r.circuitPointsAwarded, formBefore: r.formBefore, formAfter: r.formAfter })) };
   schedule.challengerQualifierResults = [...(schedule.challengerQualifierResults || []), resObj];
   gameState.challengerTeams = (gameState.challengerTeams || []).map(t => {
     const row = resObj.teams.find(x => x.teamId === t.id);
-    return row ? { ...t, circuitPoints: (t.circuitPoints ?? 0) + row.circuitPointsAwarded, form: Math.max(-10, Math.min(10, row.formAfter)), lastQualifierPlacement: row.placement, qualifiedMajorIdxs: row.qualified ? [...(t.qualifiedMajorIdxs || []), schedule.majorIdx] : (t.qualifiedMajorIdxs || []) } : t;
+    return row ? { ...t, circuitPoints: row.circuitPointsAfter, form: row.formAfter, lastQualifierPlacement: row.placement, qualifiedMajorIdxs: row.qualified ? [...(t.qualifiedMajorIdxs || []), schedule.majorIdx] : (t.qualifiedMajorIdxs || []) } : t;
   });
-  return qualified.map((r, i) => {
-    const base = gameState.challengerTeams.find(t => t.id === r.teamId);
-    return { id: `${eventKey}_qual_${schedule.season}_${(schedule.majorIdx ?? 0) + 1}_${i + 1}`, ...base, qualifierPlacement: r.placement, players: r.roster };
-  });
+  return qualifierRowsToEventTeams(results.filter(r => r.qualified), gameState, schedule, eventKey);
 }
 
 export function ensureChallengerTeams(gameState) {
@@ -1020,15 +1237,8 @@ export function simNextMatch(gameState) {
   const unplayed = stage.matches.findIndex(m => !m.played);
 
   if (unplayed === -1) {
-    // Stage done → build Major bracket from stageStandings (keep snapshot intact)
-    schedule.phase    = "major";
-    schedule.majorIdx = schedule.stageIdx;  // Stage N → Major N (indices align)
-    const cdlSeeds = Object.entries(schedule.stageStandings).sort((a,b)=>b[1].points-a[1].points).map(([id])=>id);
-    const eventTeams = simulateChallengerQualifier(gameState, schedule);
-    const majorSeeds = [...cdlSeeds, ...eventTeams.map(t=>t.id)];
-    schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE16(majorSeeds);
-    return { ...gameState, schedule: { ...schedule } };
+    // Stage done → visible Challenger Qualifier before Major bracket entry.
+    return enterChallengerQualifierPhase(gameState, schedule);
   }
 
   const match = stage.matches[unplayed];
@@ -1104,14 +1314,8 @@ export function simMatchday(gameState) {
   }
 
   if (stage.matches.every(m => m.played)) {
-    // Stage done → build bracket from stageStandings, keep snapshot intact
-    schedule.phase    = "major";
-    schedule.majorIdx = schedule.stageIdx;
-    const cdlSeeds = Object.entries(schedule.stageStandings).sort((a,b)=>b[1].points-a[1].points).map(([id])=>id);
-    const eventTeams = simulateChallengerQualifier(gameState, schedule);
-    const majorSeeds = [...cdlSeeds, ...eventTeams.map(t=>t.id)];
-    schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE16(majorSeeds);
+    // Stage done → visible Challenger Qualifier before Major bracket entry.
+    enterChallengerQualifierPhase(gameState, schedule);
   }
 
   schedule.currentMatchday++;
@@ -1193,13 +1397,7 @@ export function simUserMatchday(gameState) {
 
   // If stage is now complete, advance to major phase
   if (stage.matches.every(m => m.played)) {
-    schedule.phase    = "major";
-    schedule.majorIdx = schedule.stageIdx;
-    const cdlSeeds = Object.entries(schedule.stageStandings).sort((a,b)=>b[1].points-a[1].points).map(([id])=>id);
-    const eventTeams = simulateChallengerQualifier(gameState, schedule);
-    const majorSeeds = [...cdlSeeds, ...eventTeams.map(t=>t.id)];
-    schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
-    schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE16(majorSeeds);
+    enterChallengerQualifierPhase(gameState, schedule);
   }
 
   schedule.currentMatchday++;
@@ -1835,13 +2033,7 @@ export function commitUserMatchResult(state, result) {
 
     // 6. Advance to major if stage is done
     if (stage.matches.every(m => m.played)) {
-      schedule.phase    = "major";
-      schedule.majorIdx = schedule.stageIdx;
-      const cdlSeeds = Object.entries(schedule.stageStandings).sort((a,b)=>b[1].points-a[1].points).map(([id])=>id);
-      const eventTeams = simulateChallengerQualifier(state, schedule);
-      const majorSeeds = [...cdlSeeds, ...eventTeams.map(t=>t.id)];
-      schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
-      schedule.majors[schedule.majorIdx].bracket = buildMajorBracketDE16(majorSeeds);
+      enterChallengerQualifierPhase(state, schedule);
     }
 
     schedule.currentMatchday++;

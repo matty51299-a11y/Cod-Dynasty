@@ -157,7 +157,7 @@ export default function Prospects() {
             <tbody>{latestQualifier.teams.slice().sort((a,b)=>a.placement-b.placement).map(row => {
               const team = teamMap[row.teamId] || { id: row.teamId, name: row.teamId, tag: row.teamId, region: "-" };
               const formDelta = (row.formAfter ?? 0) - (row.formBefore ?? 0);
-              const tDisplay = resolveTeamDisplay(team.id, schedule);
+              const tDisplay = { ...resolveTeamDisplay(team.id, schedule), ...team };
               return <tr key={`${latestQualifier.season}_${latestQualifier.majorIdx}_${row.teamId}`} style={row.qualified ? { background: "rgba(52,211,153,0.12)" } : undefined}>
                 <td><strong>{row.placement}</strong></td>
                 <td><TeamLogo team={tDisplay} size={16} /> {team.tag} · {team.name}</td>

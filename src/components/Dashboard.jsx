@@ -85,6 +85,7 @@ export default function Dashboard({ setScreen }) {
   const mySeason = cumStandings[userTeamId]   ?? { wins: 0, losses: 0, points: 0 };
 
   const isStage     = phase === "stage";
+  const isChallengerQualifier = phase === "challengerQualifier";
   const isMajor     = phase === "major";
   const isPreChamps = phase === "preChamps";
   const isOffseason = phase === "offseason";
@@ -200,7 +201,7 @@ export default function Dashboard({ setScreen }) {
                   </div>
                 </>
               )}
-              {(isMajor || isPreChamps) && (
+              {(isChallengerQualifier || isMajor || isPreChamps) && (
                 <>
                   <div className="db-stat-chip">
                     <span className="db-stat-chip-label">Season Record</span>
@@ -259,6 +260,14 @@ export default function Dashboard({ setScreen }) {
                 >
                   Sim Rest of {stageName}
                   <span className="btn-cta-badge" style={{ background: "rgba(0,0,0,0.08)" }}>{remaining} left</span>
+                </button>
+              </>
+            )}
+            {isChallengerQualifier && (
+              <>
+                <span className="db-cb-cta-hint">Pro-Am spots on the line</span>
+                <button className="btn-cta" onClick={() => dispatch({ type: schedule.currentChallengerQualifier?.completed ? "CONTINUE_FROM_CHALLENGER_QUALIFIER" : "SIM_CHALLENGER_QUALIFIER" })}>
+                  {schedule.currentChallengerQualifier?.completed ? "Continue to Major →" : "Run Challenger Qualifier"}
                 </button>
               </>
             )}

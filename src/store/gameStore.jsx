@@ -7,7 +7,7 @@ import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
 
@@ -290,7 +290,11 @@ function reducer(state, action) {
       const loaded = { ...action.state, feed: action.state?.feed ?? [] };
       ensureChallengerTeams(loaded);
       const cleaned = cleanupDuplicateActiveAssignments(loaded);
-      cleaned.schedule = { ...cleaned.schedule, challengerQualifierResults: cleaned.schedule?.challengerQualifierResults ?? [] };
+      cleaned.schedule = {
+        ...cleaned.schedule,
+        challengerQualifierResults: cleaned.schedule?.challengerQualifierResults ?? [],
+        currentChallengerQualifier: cleaned.schedule?.currentChallengerQualifier ?? null,
+      };
       cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
       return cleaned;
     }
@@ -387,6 +391,12 @@ function reducer(state, action) {
 
     case "DISMISS_MAJOR":
       return { ...state, enteredMajorIdx: null };
+
+    case "SIM_CHALLENGER_QUALIFIER":
+      return simChallengerQualifier({ ...state });
+
+    case "CONTINUE_FROM_CHALLENGER_QUALIFIER":
+      return continueFromChallengerQualifier({ ...state });
 
     case "BEGIN_CHAMPS":
       return beginChamps({ ...state });
