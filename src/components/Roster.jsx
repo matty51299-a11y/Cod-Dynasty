@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 const RATING_KEYS = [
   { key: "gunny",        label: "Gunny" },
@@ -141,6 +143,7 @@ export default function Roster() {
         <PlayerModal
           player={modalPlayer}
           teamId={selectedTeam}
+          schedule={state.schedule}
           isUserTeam={selectedTeam === userTeamId}
           matchLog={state?.schedule?.matchLog}
           playerSeasonStats={state?.playerSeasonStats}
@@ -154,8 +157,8 @@ export default function Roster() {
 }
 
 // ── Player Modal ──────────────────────────────────────────────────────────────
-function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, progressionLog, playerOvrHistory, onClose }) {
-  const team = CDL_TEAMS.find(t => t.id === teamId);
+function PlayerModal({ player, teamId, schedule, isUserTeam, matchLog, playerSeasonStats, progressionLog, playerOvrHistory, onClose }) {
+  const team = resolveTeamDisplay(teamId, schedule);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   // Current-season K/D from live matchLog
@@ -221,7 +224,8 @@ function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, 
             {/* Team · Region · Role · [SUB] */}
             <div className="pm-meta">
               {!isUnsigned && (
-                <span className="pm-team" style={{ color: team?.color }}>
+                <span className="pm-team" style={{ color: team?.color, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <TeamLogo team={team} size={18} />
                   {team?.name ?? teamId}
                 </span>
               )}
@@ -396,12 +400,13 @@ function PlayerModal({ player, teamId, isUserTeam, matchLog, playerSeasonStats, 
               <div className="pm-section-title">Career Teams</div>
               <div className="pm-team-history">
                 {teamHistoryEntries.map(e => {
-                  const t = CDL_TEAMS.find(x => x.id === e.teamId);
+                  const t = resolveTeamDisplay(e.teamId, schedule);
                   return (
                     <div key={e.season} className="pm-team-row">
                       <span className="pm-strip-lbl">S{e.season}</span>
-                      <span style={{ color: t?.color ?? "var(--text)" }}>
-                        {t?.name ?? e.teamId ?? "Unknown"}
+                      <span style={{ color: t?.color ?? "var(--text)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <TeamLogo team={t} size={16} />
+                        {t?.name ?? "Unknown Team"}
                       </span>
                     </div>
                   );

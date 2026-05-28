@@ -3,11 +3,9 @@
 // playerSeasonStats is the offseason archive; matchLog is the live source.
 
 import { useGame } from "../store/gameStore.jsx";
-import { CDL_TEAMS } from "../data/teams.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
-
-function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
-function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 export default function KDLeaders() {
   const { state } = useGame();
@@ -92,10 +90,11 @@ export default function KDLeaders() {
                   <td className="kd-td">
                     <span
                       className="kd-team-tag team-link"
-                      style={{ color: teamColor(row.teamId) }}
+                      style={{ color: resolveTeamDisplay(row.teamId, schedule).color }}
                       onClick={() => openTeamHub(row.teamId)}
                     >
-                      {teamTag(row.teamId)}
+                      <TeamLogo team={resolveTeamDisplay(row.teamId, schedule)} size={16} />{" "}
+                      {resolveTeamDisplay(row.teamId, schedule).tag}
                     </span>
                   </td>
                   <td className="kd-td kd-td-num kd-td-kd">

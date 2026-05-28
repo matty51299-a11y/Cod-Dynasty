@@ -15,24 +15,32 @@
 import { simMatch } from "./matchSim.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import omitBrooklynLogo from "../assets/logos/challengers/omit-brooklyn.png";
+import omitNoirLogo from "../assets/logos/challengers/Omit_Noir_logo.png";
 import projectNotoriousLogo from "../assets/logos/challengers/Project_Notorious_lightmode.png";
+import deathByCabalLogo from "../assets/logos/challengers/DeathByCabal_logo.png";
+import huntsmenLogo from "../assets/logos/challengers/Huntsmen.png";
+import stallionsLogo from "../assets/logos/challengers/Stallionslogo.png";
+import tellurideBushLogo from "../assets/logos/challengers/Telluride_Bush_Gaming_lightmode.png";
+import fiveFearsLogo from "../assets/logos/challengers/FiveFears_logo.png";
+import fazeFalconsLogo from "../assets/logos/challengers/FazeFalconslogo.png";
+import forFunEsportsLogo from "../assets/logos/challengers/ForFunEsports.png";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
 const CHALLENGER_TEAM_POOL = [
   { name: "Omit Brooklyn", tag: "OBK", color: "#c084fc", logo: omitBrooklynLogo },
-  { name: "Omit Noir", tag: "ONR", color: "#a78bfa" },
+  { name: "Omit Noir", tag: "ONR", color: "#a78bfa", logo: omitNoirLogo },
   { name: "Project Notorious", tag: "PNT", color: "#8b5cf6", logo: projectNotoriousLogo },
   { name: "Project 7", tag: "P7", color: "#7c3aed" },
-  { name: "Death by Cabal", tag: "DBC", color: "#9333ea" },
-  { name: "Huntsmen", tag: "HNT", color: "#f43f5e" },
-  { name: "Stallions", tag: "STL", color: "#fb7185" },
-  { name: "Telluride Bush", tag: "TB", color: "#22c55e" },
+  { name: "Death by Cabal", tag: "DBC", color: "#9333ea", logo: deathByCabalLogo },
+  { name: "Huntsmen", tag: "HNT", color: "#f43f5e", logo: huntsmenLogo },
+  { name: "Stallions", tag: "STL", color: "#fb7185", logo: stallionsLogo },
+  { name: "Telluride Bush", tag: "TB", color: "#22c55e", logo: tellurideBushLogo },
   { name: "Next Threat Black", tag: "NTB", color: "#0ea5e9" },
   { name: "Stallions x Bush", tag: "SXB", color: "#14b8a6" },
   { name: "Omnia GGs", tag: "OMG", color: "#06b6d4" },
-  { name: "Five Fears", tag: "5FR", color: "#f59e0b" },
-  { name: "Faze Falcons", tag: "FF", color: "#ef4444" },
-  { name: "For Fun Esports", tag: "FFE", color: "#38bdf8" },
+  { name: "Five Fears", tag: "5FR", color: "#f59e0b", logo: fiveFearsLogo },
+  { name: "Faze Falcons", tag: "FF", color: "#ef4444", logo: fazeFalconsLogo },
+  { name: "For Fun Esports", tag: "FFE", color: "#38bdf8", logo: forFunEsportsLogo },
 ];
 import { runProgression } from "./progression.js";
 import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand } from "./rosterAI.js";
