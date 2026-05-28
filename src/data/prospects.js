@@ -3,6 +3,7 @@
 // Additional simulation fields are generated deterministically from seed.
 
 import { challengersPlayers } from "./challengersPlayers.js";
+import { applyChallengerRatingOverride } from "./challengerRatingOverrides.js";
 
 function seededRng(seed) {
   let s = seed;
@@ -76,7 +77,7 @@ function buildProspect(seedRow, idx, rng, seed) {
   const curvePick = rng();
   const developmentCurve = curvePick < 0.25 ? "early" : curvePick < 0.75 ? "standard" : "late";
 
-  return {
+  return applyChallengerRatingOverride({
     id: `prospect_${idx}_${seed}`,
     name: seedRow.name ?? null,
     age,
@@ -109,7 +110,7 @@ function buildProspect(seedRow, idx, rng, seed) {
     form: 65,
     experience: 0,
     isProspect: true,
-  };
+  });
 }
 
 export function generateProspects(seed = 42) {

@@ -406,3 +406,4 @@ Player shape (key fields):
 - Major Tournament overlay layout widened and compressed vertically for better bracket visibility; bracket columns now support horizontal overflow instead of cramped/cut-off cards.
 - Challenger qualifier teams now draw from a fixed named identity pool (name/tag/color) instead of generic temporary labels.
 - Match Center now resolves temporary Major event teams via `schedule.currentMajorEventTeams` for names/tags/colors + roster loading + OVR display, and uses Overload/OVR labels instead of Control/CTL.
+- Added static `challengerRatingOverrides` data + normalized-name matching and prospect-time override application for manually reviewed Challenger OVR/POT values.
