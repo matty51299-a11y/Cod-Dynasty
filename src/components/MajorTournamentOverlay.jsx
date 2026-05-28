@@ -437,6 +437,20 @@ export default function MajorTournamentOverlay() {
   if (!showLive && !showChampion) return null;
 
   if (showChampion) {
+    if (!enteredMajor?.bracket) {
+      // Defensive — shouldn't happen, but avoid crashing if ChampionScreen
+      // tries to read a missing bracket. Let the user back out cleanly.
+      return (
+        <div className="mto-backdrop mto-backdrop-champ">
+          <div className="mto-champion-screen" style={{ padding: 32 }}>
+            <h2 style={{ color: "var(--text-head)" }}>Event complete</h2>
+            <button className="mto-return-btn" onClick={() => dispatch({ type: "DISMISS_MAJOR" })}>
+              Return to Season →
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mto-backdrop mto-backdrop-champ">
         <ChampionScreen major={enteredMajor} dispatch={dispatch} schedule={schedule} />
@@ -444,11 +458,38 @@ export default function MajorTournamentOverlay() {
     );
   }
 
-  const major     = schedule.majors[activeMajorIdx];
-  const bracket   = major.bracket;
-  const isDE      = bracket?.type === "DE" || bracket?.type === "DE16";
+  const major     = schedule.majors?.[activeMajorIdx];
+  const bracket   = major?.bracket;
+
+  // If we got here in the LIVE-major code path but the bracket is missing
+  // (interrupted transition, corrupted save, partial reducer state) render a
+  // recoverable error panel inside the overlay rather than letting the next
+  // .rounds access throw and blank the screen.
+  if (!bracket || !Array.isArray(bracket.rounds) || !bracket.rounds.length) {
+    return (
+      <div className="mto-backdrop">
+        <div className="mto-scroll-area">
+          <div className="mto-content" style={{ padding: 32 }}>
+            <h2 style={{ color: "var(--text-head)", marginTop: 0 }}>
+              {major?.name ?? "Tournament"} bracket unavailable
+            </h2>
+            <p style={{ color: "var(--text-dim)" }}>
+              The bracket for this event hasn't been generated yet, or its data
+              is incomplete. This usually means a phase transition didn't
+              finish cleanly.
+            </p>
+            <button className="btn-secondary" onClick={() => dispatch({ type: "DISMISS_MAJOR" })}>
+              Return to Season
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isDE      = bracket.type === "DE" || bracket.type === "DE16";
   const curRound  = currentRoundIdx(bracket);
-  const roundName = curRound >= 0 ? bracket.rounds[curRound].name : null;
+  const roundName = curRound >= 0 ? bracket.rounds[curRound]?.name : null;
   const elimination = getUserElimination(bracket, userTeamId);
   const alive     = teamsAlive(bracket, userTeamId);
 

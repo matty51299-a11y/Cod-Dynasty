@@ -1232,7 +1232,14 @@ function _advanceMajorPhase(schedule, gameState) {
 
   const teamIds = CDL_TEAMS.map(t => t.id);
 
-  if (majorIdx <= 3) schedule.currentMajorEventTeams = null;
+  // Event-team metadata is scoped to a single event. Clear it for every
+  // major (regular AND Champs) so a stale entry can never leak into the
+  // next phase's rendering or seeding.
+  schedule.currentMajorEventTeams = null;
+  // Same for the visible qualifier event — once we leave a Major, the
+  // qualifier that fed it is done. Keep the historical record in
+  // `challengerQualifierResults`.
+  schedule.currentChallengerQualifier = null;
 
   if (majorIdx <= 2) {
     // Major 1/2/3 → next Stage
@@ -1265,14 +1272,44 @@ export function beginChamps(gameState) {
   const schedule = gameState.schedule;
   if (schedule.phase !== "preChamps") return gameState;
 
-  // Champs bracket seeded by cumulative season standings.points
+  // Champs bracket seeded by cumulative season standings.points.
+  // IMPORTANT: build the bracket BEFORE flipping phase/majorIdx so the UI
+  // never sees a `phase === "major"` window with a missing or partial
+  // bracket — that path used to crash MajorTournamentOverlay/MatchCenter.
+  const cdlSeeds = Object.entries(schedule.standings ?? {})
+    .sort((a, b) => b[1].points - a[1].points)
+    .slice(0, 12)
+    .map(([id]) => id);
+
+  // Defensive: every CDL team must have a standings entry so we end up with
+  // exactly 12 CDL seeds. If the save is missing any (legacy/corrupted),
+  // fill in zero-record placeholders so seeding doesn't fall short.
+  if (cdlSeeds.length < 12) {
+    for (const team of CDL_TEAMS) {
+      if (!cdlSeeds.includes(team.id) && cdlSeeds.length < 12) cdlSeeds.push(team.id);
+    }
+  }
+
+  const eventTeams = simulateChallengerQualifier(gameState, schedule, "champs") ?? [];
+  schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
+  const challengerSeedIds = eventTeams.map(t => t.id);
+  const champsSeeds = [...cdlSeeds, ...challengerSeedIds];
+
+  // If the qualifier produced fewer than 4 entrants (shouldn't happen, but
+  // we've now seen one save where it did), pad with CDL teams so the bracket
+  // builder still gets 16 slots and `buildMajorBracketDE16` doesn't index
+  // into undefined. Padding with CDL teams is harmless because those seeds
+  // simply get a second appearance — far better than a blank screen.
+  while (champsSeeds.length < 16) {
+    const padId = cdlSeeds[champsSeeds.length - cdlSeeds.length] ?? cdlSeeds[0];
+    if (!padId) break;
+    champsSeeds.push(padId);
+  }
+
+  schedule.majors[4].bracket = buildMajorBracketDE16(champsSeeds);
+  schedule.majors[4].completed = false;
   schedule.phase    = "major";
   schedule.majorIdx = 4;
-  const cdlSeeds = Object.entries(schedule.standings).sort((a,b)=>b[1].points-a[1].points).slice(0, 12).map(([id])=>id);
-  const eventTeams = simulateChallengerQualifier(gameState, schedule, "champs");
-  const champsSeeds = [...cdlSeeds, ...eventTeams.map(t => t.id)];
-  schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
-  schedule.majors[4].bracket = buildMajorBracketDE16(champsSeeds);
   return { ...gameState, schedule: { ...schedule } };
 }
 

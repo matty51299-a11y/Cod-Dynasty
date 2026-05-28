@@ -8,6 +8,7 @@ import { isValidGameState } from "./store/gameValidation.js";
 import "./engine/poolReport.js"; // registers window.poolReport() console utility
 import { TeamHubProvider }        from "./store/teamHubContext.jsx";
 import { MatchCenterProvider }    from "./store/matchCenterContext.jsx";
+import ErrorBoundary              from "./components/ErrorBoundary.jsx";
 import MatchCenterOverlay         from "./components/MatchCenterOverlay.jsx";
 import TeamSelect        from "./components/TeamSelect.jsx";
 import Sidebar           from "./components/Sidebar.jsx";
@@ -61,9 +62,11 @@ export default function App() {
   // No save loaded yet → show team select
   if (!isValidGameState(state)) {
     return (
-      <div className="app">
-        <TeamSelect />
-      </div>
+      <ErrorBoundary>
+        <div className="app">
+          <TeamSelect />
+        </div>
+      </ErrorBoundary>
     );
   }
 
@@ -80,6 +83,7 @@ export default function App() {
   }
 
   return (
+    <ErrorBoundary>
     <MatchCenterProvider>
     <TeamHubProvider>
     <div className="app">
@@ -149,5 +153,6 @@ export default function App() {
     </div>
     </TeamHubProvider>
     </MatchCenterProvider>
+    </ErrorBoundary>
   );
 }
