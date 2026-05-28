@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
+import { isInactivePlayer } from "../utils/playerIdentity.js";
 
 const RATING_KEYS = ["gunny","awareness","objective","searchIQ","clutch","teamwork","composure","adaptability"];
 
@@ -36,7 +37,7 @@ export default function FreeAgency() {
 
   // Free agents = no team from the pro roster
   const freeAgents = players
-    .filter(p => !p.teamId && !p.isProspect)
+    .filter(p => !p.teamId && !p.isProspect && !isInactivePlayer(p))
     .sort((a, b) => b[sortKey] - a[sortKey]);
 
   const roles = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];

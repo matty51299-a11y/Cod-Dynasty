@@ -1,8 +1,7 @@
 // src/data/challengerRatingOverrides.js
 
-export function normalizePlayerName(name = "") {
-  return String(name).toLowerCase().replace(/[^a-z0-9]/g, "");
-}
+export { normalizePlayerName } from "../utils/playerIdentity.js";
+import { normalizePlayerName } from "../utils/playerIdentity.js";
 
 function clampRating(v) {
   return Math.max(41, Math.min(99, Math.round(v)));
@@ -126,15 +125,6 @@ export const MANUAL_CHALLENGER_OVERRIDES = [
   {"displayName": "Noysii", "overall": 67, "potential": 79, "sourceNote": "Manual Challenger ratings review", "ratingSource": "manualChallengerOverride"},
 ];
 
-const NAME_ALIASES = {
-  dk: "dkxrryy",
-  mythixx: "mythix",
-};
-
-function resolveAlias(normalized) {
-  return NAME_ALIASES[normalized] ?? normalized;
-}
-
 export const CHALLENGER_RATING_OVERRIDES = Object.fromEntries(
   MANUAL_CHALLENGER_OVERRIDES.map((row) => [normalizePlayerName(row.displayName), {
     ...row,
@@ -145,7 +135,7 @@ export const CHALLENGER_RATING_OVERRIDES = Object.fromEntries(
 
 export function applyChallengerRatingOverride(player) {
   if (!player || !player.name) return player;
-  const override = CHALLENGER_RATING_OVERRIDES[resolveAlias(normalizePlayerName(player.name))];
+  const override = CHALLENGER_RATING_OVERRIDES[normalizePlayerName(player.name)];
   if (!override) return player;
   return {
     ...player,

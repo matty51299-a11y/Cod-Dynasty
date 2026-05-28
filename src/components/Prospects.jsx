@@ -9,6 +9,7 @@ import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 import PoolHealth from "./PoolHealth.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 
 function ratingColor(v) {
   if (v >= 90) return "#166534";
@@ -65,8 +66,9 @@ export default function Prospects() {
   const budgetPct   = Math.min(100, Math.round((committed / teamCap) * 100));
   const budgetColor = budgetPct >= 90 ? "#dc2626" : budgetPct >= 70 ? "#9a3412" : "#15803d";
 
-  // Available prospects (not already on a team)
-  const available = (prospects || []).filter(p => !p.teamId);
+  // Available prospects (not already on a team and not duplicated with CDL rosters)
+  const cdlNames = buildCdlRosterNameSet(players);
+  const available = (prospects || []).filter(p => !p.teamId && !isInactivePlayer(p) && !cdlNames.has(normalizePlayerName(p.name)));
 
   const stats = useMemo(() => {
     const vets = available.filter(p => !p.isProspect).length;
