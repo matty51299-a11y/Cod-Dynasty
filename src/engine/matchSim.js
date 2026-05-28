@@ -123,17 +123,88 @@ const MODE_KILL_BASE = {
   "Control":           14,
 };
 
-function targetKDForMap(player, won, rng) {
+// ── PER-SERIES PERFORMANCE TIERS ─────────────────────────────────────────────
+// Rolled once per player per series; applied as a flat K/D offset on every map.
+// Tier  | Offset range  | Base prob
+// -------|---------------|----------
+// Takeover | +0.22..+0.44 | 6%
+// Hot      | +0.08..+0.16 | 17%
+// Normal   | −0.04..+0.04 | ~57%
+// Quiet    | −0.17..−0.08 | 14%
+// Disaster | −0.40..−0.25 | 6%
+
+function rollSeriesMod(player, rng) {
+  const ovr      = player.overall          ?? 75;
+  const gunny    = player.gunny            ?? 60;
+  const clutch   = player.clutch           ?? 60;
+  const composure= player.composure        ?? 60;
+  const tiltRes  = player.tiltResistance   ?? 3;
+  const ego      = player.ego              ?? 3;
+  const workEthic= player.workEthic        ?? 3;
+  const metaDep  = player.metaDependence   ?? 3;
+
+  let pTakeover = 0.06;
+  let pHot      = 0.17;
+  let pQuiet    = 0.14;
+  let pDisaster = 0.06;
+
+  if (ovr       >= 85) pTakeover += 0.020;
+  if (gunny     >= 75) pTakeover += 0.010;
+  if (clutch    >= 75) pTakeover += 0.015;
+  if (composure >= 75) pHot      += 0.015;
+  if (workEthic >= 4)  pHot      += 0.030;
+  if (ego       >= 4)  pDisaster += 0.020;
+  if (tiltRes   <= 2)  pDisaster += 0.020;
+  if (composure <  50) pDisaster += 0.010;
+  if (metaDep   >= 4)  pQuiet    += 0.020;
+
+  const pNormal = Math.max(0.30, 1 - (pTakeover + pHot + pQuiet + pDisaster));
+  const total   = pTakeover + pHot + pNormal + pQuiet + pDisaster;
+  const n       = 1 / total;
+
+  const cumTakeover = pTakeover * n;
+  const cumHot      = cumTakeover + pHot * n;
+  const cumNormal   = cumHot      + pNormal * n;
+  const cumQuiet    = cumNormal   + pQuiet * n;
+
+  const roll = rng();
+  const mag  = rng();
+
+  let lo, hi;
+  if      (roll < cumTakeover) { lo =  0.22; hi =  0.44; }
+  else if (roll < cumHot)      { lo =  0.08; hi =  0.16; }
+  else if (roll < cumNormal)   { lo = -0.04; hi =  0.04; }
+  else if (roll < cumQuiet)    { lo = -0.17; hi = -0.08; }
+  else                         { lo = -0.40; hi = -0.25; }
+
+  return lo + mag * (hi - lo);
+}
+
+/**
+ * generateSeriesMods — roll a per-series performance modifier for each player.
+ * Must be called once before the first map; the result is passed into every
+ * simMap call via matchCtx.seriesMods.
+ */
+export function generateSeriesMods(players, rng) {
+  const mods = {};
+  for (const p of players) mods[p.id] = rollSeriesMod(p, rng);
+  return mods;
+}
+
+function targetKDForMap(player, won, mode, rng, seriesMod) {
   const qualityMod = (player.overall - 82) / 90;
   const winMod     = won ? 0.06 : -0.06;
   const roleMod    = ROLE_KD_MOD[player.primary] ?? 0;
   const formMod    = ((player.form || 70) - 70) / 900;
 
-  const noiseWidth = player.primary === "Entry SMG" ? 0.13 : 0.10;
-  const noise      = (rng() + rng() - 1.0) * noiseWidth;
+  const noiseWidth = mode === "Search & Destroy" ? 0.20
+                   : mode === "Control"           ? 0.14
+                   :                                0.12;
+  const noise = (rng() - 0.5) * 2 * noiseWidth;
 
-  const kd = 1.0 + qualityMod + winMod + roleMod + formMod + noise;
-  return Math.max(0.50, Math.min(1.85, kd));
+  const sm = seriesMod ?? 0;
+  const kd = 1.0 + qualityMod + winMod + roleMod + formMod + noise + sm;
+  return Math.max(0.40, Math.min(2.20, kd));
 }
 
 function killsForMap(player, won, mode, rng) {
@@ -267,6 +338,7 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
   const lastMapKDByPlayer = ctx.lastMapKDByPlayer  ?? {};
   const extraBoostsA      = ctx.extraBoostsA       ?? {};
   const extraBoostsB      = ctx.extraBoostsB       ?? {};
+  const seriesMods        = ctx.seriesMods         ?? {};
 
   const { modifiedPlayers: modA, procs: procsA } = applyTraitModifiers(
     teamAObj.players.slice(0, 4),
@@ -293,7 +365,8 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
   ];
 
   for (const { orig, mod, won, tId } of allSlots) {
-    const kd     = targetKDForMap(mod, won, rng);
+    const sm     = seriesMods[orig.id] ?? 0;
+    const kd     = targetKDForMap(mod, won, mapDef.mode, rng, sm);
     const kills  = killsForMap(mod, won, mapDef.mode, rng);
     const deaths = kills > 0 ? Math.max(1, Math.round(kills / kd)) : 1;
     playerMapStats[orig.id] = {
@@ -353,6 +426,11 @@ export function simMatch(teamA, teamB, seed) {
   const chemB = calcChemistry(teamB.players);
   void chemA; void chemB; // chemistry used inside simMap per call
 
+  const seriesMods = generateSeriesMods(
+    [...teamA.players.slice(0, 4), ...teamB.players.slice(0, 4)],
+    rng
+  );
+
   let winsA = 0, winsB = 0;
 
   const accStats = {};
@@ -371,7 +449,7 @@ export function simMatch(teamA, teamB, seed) {
 
     const { mapResult, playerMapStats, newTiltedIdsA, newTiltedIdsB } = simMap(
       teamA, teamB, m,
-      { tiltedIdsA, tiltedIdsB, lastMapKDByPlayer },
+      { tiltedIdsA, tiltedIdsB, lastMapKDByPlayer, seriesMods },
       rng
     );
 

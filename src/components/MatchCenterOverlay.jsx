@@ -15,7 +15,7 @@ import { useReducer, useEffect, useState } from "react";
 import { useGame }         from "../store/gameStore.jsx";
 import { useMatchCenter }  from "../store/matchCenterContext.jsx";
 import { CDL_TEAMS }       from "../data/teams.js";
-import { simMap, makeMatchRng } from "../engine/matchSim.js";
+import { simMap, makeMatchRng, generateSeriesMods } from "../engine/matchSim.js";
 import { calcTeamOvr }     from "../engine/teamOvr.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
@@ -29,6 +29,7 @@ const MODE_SHORT = { "Hardpoint": "HP", "Search & Destroy": "S&D", "Control": "C
 const INIT = {
   phase:              "pregame",   // pregame | simming | map_result | intermission | complete
   rng:                null,
+  seriesMods:         null,        // generated once before map 1, persisted across all maps
   currentMapIdx:      0,
   seriesScore:        [0, 0],      // [winsA, winsB]
   mapResults:         [],
@@ -94,6 +95,14 @@ function reducer(state, action) {
 
     case "SIM_MAP": {
       const { teamA, teamB } = action;
+
+      // Generate series performance modifiers once on map 1, reuse for all subsequent maps
+      let seriesMods = state.seriesMods;
+      if (seriesMods === null) {
+        const allPlayers = [...teamA.players.slice(0, 4), ...teamB.players.slice(0, 4)];
+        seriesMods = generateSeriesMods(allPlayers, state.rng);
+      }
+
       const { mapResult, playerMapStats, procs, newTiltedIdsA, newTiltedIdsB, momentum } =
         simMap(teamA, teamB, state.currentMapIdx, {
           tiltedIdsA:        state.tiltedIdsA,
@@ -101,6 +110,7 @@ function reducer(state, action) {
           lastMapKDByPlayer: state.lastMapKDByPlayer,
           extraBoostsA:      state.pendingBoostA,
           extraBoostsB:      {},
+          seriesMods,
         }, state.rng);
 
       const aWon     = mapResult.winnerId === teamA.id;
@@ -121,6 +131,7 @@ function reducer(state, action) {
       return {
         ...state,
         phase:             done ? "complete" : "map_result",
+        seriesMods,
         seriesScore:       [newWinsA, newWinsB],
         mapResults:        allMapResults,
         accStats:          newAccStats,
