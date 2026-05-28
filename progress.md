@@ -221,6 +221,13 @@ Retirees are removed from rosters; AI fills gaps in the offseason window.
 - DE bracket: split into WB / LB / GF color-coded sections
 - SE bracket: original 3-column single-elimination layout (Champs only)
 
+### Match Center Overlay
+- `MatchCenterOverlay` — map-by-map interactive match player; launched via `openMatchCenter("stage" | "major")`
+- Flow: pregame → simming (600ms auto-sim) → map_result → intermission (tactic choice) → repeat → complete
+- Tactical adjustments: Regain (clear tilt, one-use), Vibes (+teamwork), Slayout (+gunny, −awareness)
+- On complete: dispatches `COMMIT_USER_MATCH_RESULT` which applies result to bracket and sims remaining same-round matches
+- **z-index: 1002** — must stay above `mto-backdrop` (998); was previously incorrectly set to 120 (bug: overlay hidden behind tournament screen)
+
 ### Next Match Overlay
 - `NextMatchOverlay` — triggered from top-right control
 - Shows opponent, match context, play/sim options
