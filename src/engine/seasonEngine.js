@@ -14,12 +14,14 @@
 
 import { simMatch } from "./matchSim.js";
 import { CDL_TEAMS } from "../data/teams.js";
+import omitBrooklynLogo from "../assets/logos/challengers/omit-brooklyn.png";
+import projectNotoriousLogo from "../assets/logos/challengers/Project_Notorious_lightmode.png";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
 const CHALLENGER_TEAM_POOL = [
-  { name: "Omit Brooklyn", tag: "OBK", color: "#c084fc", logo: "/src/assets/logos/challengers/omit_brooklyn.png" },
-  { name: "Omit Noir", tag: "ONR", color: "#a78bfa", logo: "/src/assets/logos/challengers/omit_noir.png" },
-  { name: "Project Notorious", tag: "PNT", color: "#8b5cf6" },
+  { name: "Omit Brooklyn", tag: "OBK", color: "#c084fc", logo: omitBrooklynLogo },
+  { name: "Omit Noir", tag: "ONR", color: "#a78bfa" },
+  { name: "Project Notorious", tag: "PNT", color: "#8b5cf6", logo: projectNotoriousLogo },
   { name: "Project 7", tag: "P7", color: "#7c3aed" },
   { name: "Death by Cabal", tag: "DBC", color: "#9333ea" },
   { name: "Huntsmen", tag: "HNT", color: "#f43f5e" },
