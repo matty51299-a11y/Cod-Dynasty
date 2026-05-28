@@ -3,7 +3,7 @@
 // Shows scouted values (with noise) until a prospect is signed.
 // Signing a prospect reveals their true ratings and hidden traits.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 import PoolHealth from "./PoolHealth.jsx";
@@ -18,13 +18,24 @@ function ratingColor(v) {
 
 const ROLES = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];
 const ARCHETYPES = ["All","raw_upside","polished","smg_heavy","ar_flex","search_spec","risky_ego","glue","obj_spec"];
+const ARCH_LABELS = {
+  raw_upside: "Raw Upside", polished: "Polished Prospect", smg_heavy: "SMG-heavy",
+  ar_flex: "AR/Flex", search_spec: "Search Specialist", risky_ego: "Volatile Talent",
+  glue: "Glue Player", obj_spec: "Objective Specialist",
+};
+const TAB_KEYS = ["all", "veterans", "prospects", "proam", "shortlist"];
 
 export default function Prospects() {
   const { state, dispatch } = useGame();
   const [roleFilter, setRoleFilter] = useState("All");
   const [archFilter, setArchFilter] = useState("All");
   const [sortKey, setSortKey] = useState("scoutedOverall");
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("all");
   const [signAs, setSignAs] = useState({});
+  const [shortlist, setShortlist] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("challenger_shortlist") || "[]")); } catch { return new Set(); }
+  });
 
   if (!state) return null;
 
@@ -44,9 +55,26 @@ export default function Prospects() {
   // Available prospects (not already on a team)
   const available = (prospects || []).filter(p => !p.teamId);
 
+  const stats = useMemo(() => {
+    const vets = available.filter(p => !p.isProspect).length;
+    const prospectsCount = available.filter(p => p.isProspect).length;
+    const proAmEligible = available.filter(p => (p.overall ?? p.scoutedOverall ?? 0) >= 75).length;
+    const top = [...available].sort((a,b)=>(b.scoutedOverall??b.overall)-(a.scoutedOverall??a.overall))[0] ?? null;
+    const topPot = [...available].sort((a,b)=>(b.scoutedPotential??b.potential)-(a.scoutedPotential??a.potential))[0] ?? null;
+    return { vets, prospectsCount, proAmEligible, top, topPot };
+  }, [available]);
+
   const filtered = available
+    .filter(p => {
+      if (tab === "veterans") return !p.isProspect;
+      if (tab === "prospects") return !!p.isProspect;
+      if (tab === "proam") return (p.overall ?? p.scoutedOverall ?? 0) >= 75;
+      if (tab === "shortlist") return shortlist.has(p.id);
+      return true;
+    })
     .filter(p => roleFilter === "All" || p.primary === roleFilter)
     .filter(p => archFilter === "All" || p.archetype === archFilter)
+    .filter(p => !search || (p.name || "").toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       const va = a.scouted ? a[sortKey.replace("scouted", "").toLowerCase() || "overall"] ?? a[sortKey] : a[sortKey];
       const vb = b.scouted ? b[sortKey.replace("scouted", "").toLowerCase() || "overall"] ?? b[sortKey] : b[sortKey];
@@ -57,50 +85,58 @@ export default function Prospects() {
     const slot = signAs[prospectId] || "starter";
     dispatch({ type: "SIGN_PLAYER", playerId: prospectId, slotType: slot });
   }
+  function toggleShortlist(id) {
+    const next = new Set(shortlist);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setShortlist(next);
+    localStorage.setItem("challenger_shortlist", JSON.stringify([...next]));
+  }
 
   return (
     <div className="prospects-page">
-      <h2>Challengers Pool</h2>
-      <PoolHealth prospects={prospects} challengersLog={challengersLog} />
-      <p className="muted">
-        {available.length} prospects available · Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub
-      </p>
-      <div style={{ marginBottom: "14px" }}>
-        <span className="muted">
-          Cap: <strong>${(teamCap / 1000).toFixed(0)}k</strong>
-          {" · "}Committed: <strong>${(committed / 1000).toFixed(0)}k</strong>
-          {" · "}Remaining:{" "}
-          <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong>
-        </span>
-        <div style={{ height: "5px", background: "#2a2a2a", borderRadius: "3px", marginTop: "5px", width: "300px" }}>
-          <div style={{ height: "100%", width: `${budgetPct}%`, background: budgetColor, borderRadius: "3px", transition: "width 0.3s" }} />
+      <h2>Challengers Circuit</h2>
+      <div className="cm-hero">
+        <div className="cm-chip-row">
+          <span className="cm-chip">Available: <strong>{available.length}</strong></span>
+          <span className="cm-chip">CDL Veterans: <strong>{stats.vets}</strong></span>
+          <span className="cm-chip">Prospects: <strong>{stats.prospectsCount}</strong></span>
+          <span className="cm-chip">Pro-Am Eligible: <strong>{stats.proAmEligible}</strong></span>
+          <span className="cm-chip">Roster: <strong>{starterCount}/4</strong> + <strong>{subCount}/1</strong></span>
         </div>
+        <div className="cm-chip-row">
+          <span className="cm-chip">Cap: <strong>${(teamCap / 1000).toFixed(0)}k</strong></span>
+          <span className="cm-chip">Committed: <strong>${(committed / 1000).toFixed(0)}k</strong></span>
+          <span className="cm-chip">Remaining: <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong></span>
+          {stats.top && <span className="cm-chip">Top Available: <strong>{stats.top.name}</strong></span>}
+          {stats.topPot && <span className="cm-chip">Highest Potential: <strong>{stats.topPot.name}</strong></span>}
+        </div>
+        <div className="cm-budget-bar"><div style={{ width: `${budgetPct}%`, background: budgetColor }} /></div>
       </div>
       <p className="muted scout-note">
         ⚠ Ratings shown are <em>scouted estimates</em> – true values revealed on signing.
       </p>
+      <div className="cm-tabs">
+        {TAB_KEYS.map(k => <button key={k} className={`filter-btn ${tab===k?"active":""}`} onClick={()=>setTab(k)}>{k==="all"?"All Players":k==="veterans"?"CDL Veterans":k==="prospects"?"Prospects":k==="proam"?"Pro-Am Eligible":"Shortlist"}</button>)}
+      </div>
 
       <div className="filters">
         <div className="filter-group">
-          <label>Role:</label>
-          {ROLES.map(r => (
-            <button key={r} className={`filter-btn ${roleFilter === r ? "active" : ""}`}
-              onClick={() => setRoleFilter(r)}>{r}</button>
-          ))}
+          <label>Role</label>
+          <select className="slot-select" value={roleFilter} onChange={e=>setRoleFilter(e.target.value)}>{ROLES.map(r=><option key={r} value={r}>{r}</option>)}</select>
         </div>
         <div className="filter-group">
-          <label>Archetype:</label>
-          {ARCHETYPES.map(a => (
-            <button key={a} className={`filter-btn ${archFilter === a ? "active" : ""}`}
-              onClick={() => setArchFilter(a)}>{a}</button>
-          ))}
+          <label>Archetype</label>
+          <select className="slot-select" value={archFilter} onChange={e=>setArchFilter(e.target.value)}>{ARCHETYPES.map(a=><option key={a} value={a}>{ARCH_LABELS[a] ?? a}</option>)}</select>
         </div>
         <div className="filter-group">
-          <label>Sort:</label>
-          {["scoutedOverall","scoutedPotential","age"].map(k => (
-            <button key={k} className={`filter-btn ${sortKey === k ? "active" : ""}`}
-              onClick={() => setSortKey(k)}>{k}</button>
-          ))}
+          <label>Sort</label>
+          <select className="slot-select" value={sortKey} onChange={e=>setSortKey(e.target.value)}>
+            <option value="scoutedOverall">OVR</option><option value="scoutedPotential">POT</option><option value="age">Age</option>
+          </select>
+        </div>
+        <div className="filter-group">
+          <label>Search</label>
+          <input className="slot-select" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Player name" />
         </div>
       </div>
 
@@ -140,7 +176,7 @@ export default function Prospects() {
                   <td>{p.age}</td>
                   <td>{p.region}</td>
                   <td><span className="role-pill">{p.primary}</span></td>
-                  <td><span className="arch-pill">{p.archetype}</span></td>
+                  <td><span className="arch-pill">{ARCH_LABELS[p.archetype] ?? p.archetype}</span></td>
                   <td>{p.developmentCurve}</td>
                   <td>
                     <span style={{ color: ratingColor(ovr), fontWeight: "bold" }}>
@@ -164,6 +200,7 @@ export default function Prospects() {
                     </select>
                   </td>
                   <td>
+                    <button className="btn-secondary" style={{ padding: "4px 8px", marginRight: 8 }} onClick={() => toggleShortlist(p.id)}>{shortlist.has(p.id) ? "★" : "☆"}</button>
                     {canAfford ? (
                       <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>Sign</button>
                     ) : (
@@ -179,6 +216,10 @@ export default function Prospects() {
           </tbody>
         </table>
       )}
+      <details style={{ marginTop: 18 }}>
+        <summary className="muted">Advanced / Debug: Pool Health</summary>
+        <PoolHealth prospects={prospects} challengersLog={challengersLog} />
+      </details>
     </div>
   );
 }

@@ -9,6 +9,8 @@ import { calcTeamOvr } from "../engine/teamOvr.js";
 import { getTeamCap, getSigningCost, getResignDemand } from "../engine/rosterAI.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -168,6 +170,7 @@ export default function Dashboard({ setScreen }) {
         className="db-club-banner"
         style={{ borderTop: `3px solid ${teamHex}`, background: bannerGradient }}
       >
+        <TeamLogo team={resolveTeamDisplay(userTeamId, schedule)} size={44} className="db-banner-logo" />
         <div className="db-cb-inner">
           <div className="db-cb-left">
             <div>

@@ -8,6 +8,8 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { calcTeamOvr } from "../engine/teamOvr.js";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 export default function Standings() {
   const { state } = useGame();
@@ -103,6 +105,7 @@ export default function Standings() {
                   style={{ color: team.color }}
                   onClick={() => openTeamHub(team.id)}
                 >
+                  <TeamLogo team={resolveTeamDisplay(team.id, schedule)} size={18} />
                   {team.name}
                 </span>
                 {team.id === userTeamId && <span className="you-badge"> YOU</span>}

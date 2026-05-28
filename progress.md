@@ -398,3 +398,15 @@ Player shape (key fields):
   teamHistory: [{ season, teamId }],   // which team per season; travels with player
 }
 ```
+
+## Update 2026-05-28
+- Regular Majors now run as a 16-team DE event: 12 CDL seeds from `stageStandings` + 4 temporary Challenger qualifier seeds (13–16).
+- Added Challenger qualifier simulation from unsigned prospects and temporary event-team support via `schedule.currentMajorEventTeams`.
+- Added DE16 bracket build + simulation path for Majors while leaving Champs flow untouched.
+- Major Tournament overlay layout widened and compressed vertically for better bracket visibility; bracket columns now support horizontal overflow instead of cramped/cut-off cards.
+- Challenger qualifier teams now draw from a fixed named identity pool (name/tag/color) instead of generic temporary labels.
+- Match Center now resolves temporary Major event teams via `schedule.currentMajorEventTeams` for names/tags/colors + roster loading + OVR display, and uses Overload/OVR labels instead of Control/CTL.
+- Added static `challengerRatingOverrides` data + normalized-name matching and prospect-time override application for manually reviewed Challenger OVR/POT values.
+- Manual Challenger override import now also creates missing rated players as unsigned prospects (deterministic defaults), applies overrides to existing players/prospects, and dedupes normalized-name collisions.
+- Challengers screen refreshed as a market-style "Challengers Circuit" view with hero chips, tabs, cleaner filters, readable archetype labels, shortlist stars, and collapsed debug Pool Health.
+- Added shared team-display + TeamLogo fallback component and wired logo-safe rendering into core surfaces (dashboard banner, standings, schedule, next match overlay, match center pre/final, match log), including temporary event-team metadata support.

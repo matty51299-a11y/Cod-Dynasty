@@ -4,6 +4,8 @@
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
@@ -78,6 +80,7 @@ export default function Schedule() {
                         onClick={e => { e.stopPropagation(); openTeamHub(match.a); }}
                       >
                         {teamTag(match.a)}
+                        <TeamLogo team={resolveTeamDisplay(match.a, schedule)} size={16} />
                         {match.played && result && (
                           <span className={`sched-score ${result.winnerId === match.a ? "sc-win" : "sc-loss"}`}>
                             {result.teamAId === match.a ? result.winsA : result.winsB}
@@ -102,6 +105,7 @@ export default function Schedule() {
                           </span>
                         )}
                         {teamTag(match.b)}
+                        <TeamLogo team={resolveTeamDisplay(match.b, schedule)} size={16} />
                       </span>
 
                       {!match.played && isUser && (
