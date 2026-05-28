@@ -13,13 +13,15 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import SeriesDetail from "./SeriesDetail.jsx";
+import TeamLogo from "./TeamLogo.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
-function teamName(id, schedule) { return getTeamMeta(id, schedule)?.name ?? id; }
-function teamTag(id, schedule)  { return getTeamMeta(id, schedule)?.tag ?? id; }
-function teamColor(id, schedule){ return getTeamMeta(id, schedule)?.color ?? "#888"; }
+function teamName(id, schedule) { return resolveTeamDisplay(id, schedule)?.name ?? id; }
+function teamTag(id, schedule)  { return resolveTeamDisplay(id, schedule)?.tag ?? id; }
+function teamColor(id, schedule){ return resolveTeamDisplay(id, schedule)?.color ?? "#888"; }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -219,6 +221,17 @@ function NextMatchCard({ bracket, curRound, userTeamId, dispatch, onPlayMatch, m
 }
 
 // ── Single bracket match card ─────────────────────────────────────────────────
+function BracketTeamLine({ teamId, seed, schedule, onClickTeam }) {
+  const display = resolveTeamDisplay(teamId, schedule);
+  return (
+    <div className="mto-bc-teamline">
+      {seed && <span className="mto-bc-seed">{seed}</span>}
+      <TeamLogo team={display} variant="bracket" size={20} />
+      <span className="mto-bc-name team-link" style={{ color: display.color }} onClick={() => onClickTeam(teamId)}>{display.tag}</span>
+    </div>
+  );
+}
+
 function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, cardKey, schedule }) {
   const { openTeamHub } = useTeamHub();
   const isPlayed     = match.played;
@@ -238,14 +251,8 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
   if (!isPlayed) {
     return (
       <div className="mto-bracket-card">
-        <div className="mto-bc-team">
-          {seedA && <span className="mto-bc-seed">{seedA}</span>}
-          <span className="mto-bc-name team-link" style={{ color: teamColor(match.a, schedule) }} onClick={() => openTeamHub(match.a)}>{teamTag(match.a, schedule)}</span>
-        </div>
-        <div className="mto-bc-team">
-          {seedB && <span className="mto-bc-seed">{seedB}</span>}
-          <span className="mto-bc-name team-link" style={{ color: teamColor(match.b, schedule) }} onClick={() => openTeamHub(match.b)}>{teamTag(match.b, schedule)}</span>
-        </div>
+        <BracketTeamLine teamId={match.a} seed={seedA} schedule={schedule} onClickTeam={openTeamHub} />
+        <BracketTeamLine teamId={match.b} seed={seedB} schedule={schedule} onClickTeam={openTeamHub} />
       </div>
     );
   }
@@ -265,12 +272,14 @@ function MatchCard({ match, bracket, userTeamId, expandedKey, setExpandedKey, ca
       <div className="mto-bc-score-center">
         <div className="mto-bc-sc-side">
           {winnerSeed && <span className="mto-bc-seed">{winnerSeed}</span>}
+          <TeamLogo team={resolveTeamDisplay(winnerId, schedule)} variant="bracket" size={20} />
           <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(winnerId, schedule) }} onClick={() => openTeamHub(winnerId)}>
             {teamTag(winnerId, schedule)}
           </span>
         </div>
         <span className="mto-bc-sc-score">{result.score}</span>
         <div className="mto-bc-sc-side mto-bc-sc-loser">
+          <TeamLogo team={resolveTeamDisplay(loserId, schedule)} variant="bracket" size={20} />
           <span className="mto-bc-sc-tag team-link" style={{ color: teamColor(loserId, schedule) }} onClick={() => openTeamHub(loserId)}>
             {teamTag(loserId, schedule)}
           </span>
