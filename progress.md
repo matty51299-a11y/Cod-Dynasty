@@ -433,3 +433,10 @@ Player shape (key fields):
 - `MajorTournamentOverlay` now returns a recoverable in-overlay error panel ("Return to Season" button) when `phase === "major"` and `enteredMajorIdx === majorIdx` but the bracket is missing/empty, and a similar fallback for ChampionScreen if `enteredMajor.bracket` is missing. Previously both threw on `bracket.rounds`.
 - `MajorEntryOverlay` returns null if `bracket.seeds` is missing/empty (previously rendered into `bracket.seeds.map`).
 
+## Update 2026-05-29 (Cannot read properties of undefined (reading 'id'))
+- Root cause: after offseason transitions, `fillMinimumRoster` only signed candidates the AI could afford. When the FA / unsigned-challenger pool was too pricey for a low-budget team, the team entered Season N+1 with only 2–3 starters. `simMap` indexes `teamA4[i]` for `i=0..3` unconditionally, so the very next stage match threw on the missing 4th-slot player. The stack was `simMap → simMatch → simMatchday` and surfaced through `useReducer`, blanking the screen.
+- Engine fix: `padTeamToFour` in `matchSim.js` pads any team object's `.players` array to four entries with low-rated placeholders. Applied at the top of both `simMap` and `simMatch`, so every code path (AI burst sim and the interactive Match Center) sees a consistent 4-starter slate. Thin teams now play badly instead of crashing.
+- Engine fix: `fillMinimumRoster` now has a last-resort over-cap fill — if no affordable candidate is available, it signs the cheapest remaining candidate regardless of budget (logged as `reason: "roster_fill_over_cap"`). AI teams can no longer enter a stage thin.
+- Validation: `findPhaseInvariantViolations` now also reports any CDL team with fewer than 4 starters, so the ErrorBoundary panel and `window.__phaseProblems` will surface the condition next time it appears (the user is still allowed to play with a thin roster — only the AI is force-filled).
+- Verified by `scripts/reproThinRoster.mjs` (Season 1 → offseason → Season 2 Stage 1 matchday, previously crashed, now passes) and `scripts/stressSeason.mjs` (120 randomized runs across every CDL team — 0 crashes).
+

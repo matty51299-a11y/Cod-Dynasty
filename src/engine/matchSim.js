@@ -24,6 +24,35 @@
 
 import { calcChemistry } from "./chemistry.js";
 
+// Defensive: every code path in simMap assumes a 4-player starter slate (it
+// does indexed reads like teamA4[i] for i=0..3). Roster windows are supposed
+// to keep all teams at 4, but a stretch of bad budget + cleanups can leave
+// 1–2 holes. Pad to four with a low-rated placeholder so the match still
+// runs (badly, for the thin team) instead of throwing.
+const PLACEHOLDER_BASE = {
+  overall: 60, potential: 65, primary: "Flex", secondary: "AR",
+  gunny: 50, awareness: 50, objective: 50, searchIQ: 50,
+  clutch: 50, teamwork: 50, composure: 50, adaptability: 50,
+  ego: 50, workEthic: 50, tiltResistance: 3, leadership: 50, metaDependence: 50,
+  form: 50, age: 22, experience: 0, region: "NA",
+};
+function padTeamToFour(team) {
+  const existing = Array.isArray(team?.players) ? team.players : [];
+  const real = existing.filter(Boolean);
+  if (real.length >= 4 && real === existing) return team;
+  const padded = real.slice(0, 4);
+  while (padded.length < 4) {
+    const slot = padded.length;
+    padded.push({
+      ...PLACEHOLDER_BASE,
+      id: `__placeholder_${team?.id ?? "team"}_${slot}`,
+      name: `Sub ${slot + 1}`,
+      teamId: team?.id ?? null,
+    });
+  }
+  return { ...team, players: padded };
+}
+
 // Standard CDL BO5 rotation
 const MAP_ROTATION = [
   { mode: "Hardpoint",        short: "HP"  },
@@ -401,6 +430,8 @@ function applyTraitModifiers(players, ctx) {
  * }
  */
 export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
+  teamAObj = padTeamToFour(teamAObj);
+  teamBObj = padTeamToFour(teamBObj);
   const mapDef = MAP_ROTATION[mapIdx];
   const chemA  = calcChemistry(teamAObj.players);
   const chemB  = calcChemistry(teamBObj.players);
@@ -515,6 +546,10 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
  * External result shape is unchanged.
  */
 export function simMatch(teamA, teamB, seed) {
+  // Pad once so seriesMods, updateForm, and the inner simMap calls all see a
+  // consistent 4-starter view.
+  teamA = padTeamToFour(teamA);
+  teamB = padTeamToFour(teamB);
   const rng   = seededRng(seed);
   const chemA = calcChemistry(teamA.players);
   const chemB = calcChemistry(teamB.players);
