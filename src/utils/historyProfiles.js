@@ -157,7 +157,7 @@ export function buildPlayerHistory(state, player) {
   const events = [];
   const ensureSeason = (season) => {
     const s = Number(season || state.season || 1);
-    if (!seasonMap.has(s)) seasonMap.set(s, { season: s, kills: 0, deaths: 0, matches: 0, maps: 0, teams: new Set(), roles: new Set(), events: [] });
+    if (!seasonMap.has(s)) seasonMap.set(s, { season: s, kills: 0, deaths: 0, matches: 0, maps: 0, teams: new Set(), roles: new Set(), events: [], awards: [] });
     return seasonMap.get(s);
   };
 
@@ -170,6 +170,7 @@ export function buildPlayerHistory(state, player) {
     row.matches = archived.matches || 0;
     row.maps = archived.maps || 0;
     row.events = Array.isArray(archived.events) ? [...archived.events] : [];
+    row.awards = Array.isArray(archived.awards) ? [...archived.awards] : [];
     for (const teamId of archived.teams || []) if (teamId) row.teams.add(teamId);
     for (const role of archived.roles || []) if (role) row.roles.add(role);
   }
@@ -265,6 +266,12 @@ export function buildPlayerHistory(state, player) {
     row.events.push({ season: tx.season, eventName: tx.type?.replaceAll("_", " ") || "Roster move", eventType: "transaction", teamId, teamName: findTeamEverywhere(state, teamId)?.name, maps: null, kills: null, deaths: null, placement: tx.note || "Roster move" });
   }
 
+  for (const award of (state.awards || []).filter(a => a.type === "player" && String(a.playerId) === id)) {
+    const row = ensureSeason(award.season);
+    if (!row.awards.some(a => (a.id || a.awardName) === (award.id || award.awardName))) row.awards.push(award);
+    if (award.teamId) row.teams.add(award.teamId);
+  }
+
   for (const th of player.teamHistory || []) {
     const row = ensureSeason(th.season);
     if (th.teamId) row.teams.add(th.teamId);
@@ -308,7 +315,7 @@ export function buildPlayerHistory(state, player) {
   return {
     seasons,
     events,
-    summary: { seasonsPlayed: seasons.length, teamsPlayed: teamIds.size, maps, kills, deaths, kd: kd(kills, deaths), majorAppearances, champsAppearances, challengerQualifierAppearances, bestMajor, bestChamps, bestCQ },
+    summary: { seasonsPlayed: seasons.length, teamsPlayed: teamIds.size, maps, kills, deaths, kd: kd(kills, deaths), majorAppearances, champsAppearances, challengerQualifierAppearances, bestMajor, bestChamps, bestCQ, awards: seasons.flatMap(s => s.awards || []) },
   };
 }
 
@@ -317,7 +324,7 @@ export function buildTeamHistory(state, teamId) {
   const seasonMap = new Map();
   const ensureSeason = (season) => {
     const s = Number(season || state.season || 1);
-    if (!seasonMap.has(s)) seasonMap.set(s, { season: s, wins: 0, losses: 0, points: 0, maps: 0, kills: 0, deaths: 0, events: [], rosterIds: new Set(), majors: [], champs: null, challengerQualifiers: [] });
+    if (!seasonMap.has(s)) seasonMap.set(s, { season: s, wins: 0, losses: 0, points: 0, maps: 0, kills: 0, deaths: 0, events: [], awards: [], rosterIds: new Set(), majors: [], champs: null, challengerQualifiers: [] });
     return seasonMap.get(s);
   };
   const archivedSeasons = new Set();
@@ -332,6 +339,7 @@ export function buildTeamHistory(state, teamId) {
     row.deaths = archived.deaths || 0;
     row.avgKd = archived.avgKd ?? kd(row.kills, row.deaths);
     row.events = Array.isArray(archived.events) ? [...archived.events] : [];
+    row.awards = Array.isArray(archived.awards) ? [...archived.awards] : [];
     row.majors = archived.majors || [];
     row.champs = archived.champs || null;
     row.challengerQualifiers = archived.challengerQualifiers || [];
@@ -372,6 +380,11 @@ export function buildTeamHistory(state, teamId) {
     const pointsText = award ? ` · +${award.points || 0} pts` : " · played Major bracket";
     row.events.push({ eventName: major.name || `Major ${majorIdx + 1}`, result: `${placementText(place)}${pointsText}`, placement: placementText(place), cdlPoints: award?.points || 0 });
   }
+  for (const award of (state.awards || []).filter(a => a.teamId && String(a.teamId) === String(teamId))) {
+    const row = ensureSeason(award.season);
+    if (!row.awards.some(a => (a.id || a.awardName) === (award.id || award.awardName))) row.awards.push(award);
+  }
+
   const roster = getTeamRoster(state, teamId);
   const currentRec = state.schedule?.standings?.[teamId] ?? { wins: 0, losses: 0, points: 0 };
   if (!seasonMap.has(Number(state.season))) {

@@ -107,6 +107,22 @@ export default function PlayerProfileOverlay() {
             </div>
           </div>
 
+
+          {season.awards?.length > 0 && (
+            <div className="pm-section">
+              <div className="pm-section-title">Awards</div>
+              <div className="profile-awards-list">
+                {season.awards.map(award => (
+                  <div key={award.id || award.awardName} className="profile-award-pill">
+                    <strong>{award.awardName}</strong>
+                    {award.teamName && <span>{award.teamName}</span>}
+                    {award.context && <em>{award.context}</em>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pm-section">
             <div className="pm-section-title">Event Breakdown</div>
             {!season.events?.length ? <p className="muted">No tracked event history for this season yet.</p> : (

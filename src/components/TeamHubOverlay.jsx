@@ -189,6 +189,18 @@ export default function TeamHubOverlay() {
             <span className="th-stat-val">{seasonHistory.wins}W–{seasonHistory.losses}L</span>
             <span className="th-stat-pts">{seasonHistory.points ? `${seasonHistory.points} pts · ` : ""}{kdText(seasonHistory.kills, seasonHistory.deaths)} K/D</span>
           </div>
+          {seasonHistory.awards?.length > 0 && (
+            <div className="profile-awards-list team-awards-list">
+              {seasonHistory.awards.map(award => (
+                <div key={award.id || award.awardName} className="profile-award-pill">
+                  <strong>{award.awardName}</strong>
+                  {award.playerName && <button className="link-button player-link" onClick={() => openPlayerProfile(award.playerId)}>{award.playerName}</button>}
+                  {award.context && <em>{award.context}</em>}
+                </div>
+              ))}
+            </div>
+          )}
+
           {seasonHistory.events?.length ? (
             <div className="team-history-list">
               {seasonHistory.events.slice(-8).reverse().map((event, i) => (

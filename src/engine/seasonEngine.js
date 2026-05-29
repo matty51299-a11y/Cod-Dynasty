@@ -26,6 +26,7 @@ import fazeFalconsLogo from "../assets/logos/challengers/FazeFalconslogo.png";
 import forFunEsportsLogo from "../assets/logos/challengers/ForFunEsports.png";
 import { qualifierPlacementLabel } from "../utils/placementDisplay.js";
 import { archiveCompletedSeason } from "../utils/seasonArchive.js";
+import { calculateSeasonAwards, mergeSeasonAwards } from "../utils/seasonAwards.js";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
 const CHALLENGER_REGIONS = {
@@ -1371,9 +1372,17 @@ function _advanceMajorPhase(schedule, gameState) {
     schedule.phase    = "preChamps";
     schedule.majorIdx = null;
   } else {
-    // Champs → Offseason
+    // Champs → archived season awards gate → Offseason. Keep the completed
+    // outgoing schedule visible until the user continues from the awards overlay.
     schedule.phase    = "offseason";
     schedule.majorIdx = null;
+    const archived = archiveCompletedSeason(nextState);
+    const seasonAwards = calculateSeasonAwards(archived);
+    const withAwards = mergeSeasonAwards(archived, seasonAwards);
+    const seen = new Set((withAwards.seenAwardsSeasons || []).map(Number));
+    nextState = seen.has(Number(seasonAwards.season))
+      ? withAwards
+      : { ...withAwards, pendingSeasonAwards: seasonAwards };
   }
 
   // AI roster window after each regular major (not after Champs), once the
@@ -1828,7 +1837,6 @@ export function enterContractPhase(gameState) {
 
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
-  gameState = archiveCompletedSeason(gameState);
   const standings      = gameState.schedule?.standings ?? {};
   const newSeason      = (gameState.schedule?.season ?? 1) + 1;
   const outgoingSeason = gameState.schedule?.season ?? 1;
