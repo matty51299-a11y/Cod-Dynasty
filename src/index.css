@@ -6976,3 +6976,309 @@ body { margin: 0; }
 .team-awards-list {
   margin: 10px 0;
 }
+
+/* ── Offseason Hub ─────────────────────────────────────────────────────────── */
+.offseason-hub {
+  gap: 18px;
+}
+
+.oh-hero {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) auto minmax(220px, auto);
+  gap: 18px;
+  align-items: center;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 58%, rgba(226, 232, 240, 0.72) 100%);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.oh-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.oh-logo { flex: 0 0 auto; }
+.oh-kicker {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.oh-hero h2 {
+  color: var(--text-head);
+  font-size: 34px;
+  line-height: 1;
+  margin: 4px 0 8px;
+}
+
+.oh-team-line {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.oh-team-line span:not(:first-child)::before { content: "• "; color: var(--border); }
+
+.oh-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  gap: 10px;
+}
+
+.oh-hero-stats > div,
+.oh-outlook-grid > div {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.oh-hero-stats span,
+.oh-outlook-grid span {
+  display: block;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.oh-hero-stats strong,
+.oh-outlook-grid strong {
+  display: block;
+  color: var(--text-head);
+  font-size: 16px;
+  margin-top: 4px;
+}
+
+.oh-hero-stats em { color: var(--text-dim); font-size: 11px; font-style: normal; }
+
+.oh-hero-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.oh-hero-action span,
+.oh-contract-footer span {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.oh-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.85fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.oh-main,
+.oh-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.oh-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.oh-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.oh-card-header h3 {
+  color: var(--text-head);
+  font-size: 15px;
+  margin: 0;
+}
+
+.oh-card-header p {
+  margin: 3px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.oh-contract-card .contract-panel {
+  margin-bottom: 0;
+  box-shadow: none;
+}
+
+.oh-warning,
+.oh-ok {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.oh-warning {
+  background: rgba(220, 38, 38, 0.10);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: var(--red);
+}
+
+.oh-ok {
+  background: rgba(22, 163, 74, 0.10);
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  color: var(--green);
+}
+
+.oh-contract-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.oh-outlook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.oh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.oh-list.compact { gap: 6px; }
+
+.oh-rank-row,
+.oh-move-row,
+.oh-grad-row,
+.oh-available-row,
+.oh-recap-row,
+.oh-major-winners > div {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 9px 10px;
+  min-width: 0;
+}
+
+.oh-rank-row {
+  grid-template-columns: 38px 28px minmax(120px, 1fr) 64px minmax(100px, 1fr) minmax(100px, 1fr);
+}
+
+.oh-move-row,
+.oh-grad-row,
+.oh-available-row {
+  grid-template-columns: minmax(92px, 0.8fr) minmax(0, 1.5fr);
+}
+
+.oh-available-row,
+.oh-grad-row { grid-template-columns: minmax(110px, 1fr) minmax(120px, 1fr); }
+
+.oh-recap-row,
+.oh-major-winners > div {
+  grid-template-columns: minmax(130px, 1fr) minmax(120px, auto);
+}
+
+.oh-rank-num,
+.oh-recap-row span,
+.oh-major-winners span,
+.oh-move-row strong {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.oh-rank-row strong {
+  color: var(--text-head);
+  font-size: 13px;
+}
+
+.oh-rank-row span,
+.oh-rank-row em,
+.oh-move-row span,
+.oh-grad-row span,
+.oh-grad-row em,
+.oh-available-row span,
+.oh-available-row em {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: normal;
+  min-width: 0;
+}
+
+.oh-recap-row strong,
+.oh-major-winners em {
+  color: var(--text-head);
+  font-size: 13px;
+  font-style: normal;
+  text-align: right;
+}
+
+.oh-recap-list,
+.oh-major-winners {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.oh-major-winners {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.oh-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg);
+}
+
+@media (max-width: 1100px) {
+  .oh-hero,
+  .oh-layout { grid-template-columns: 1fr; }
+  .oh-hero-stats { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+  .oh-rank-row { grid-template-columns: 32px 26px minmax(120px, 1fr) 58px; }
+  .oh-rank-row > span:last-child,
+  .oh-rank-row > em { display: none; }
+}
+
+@media (max-width: 720px) {
+  .oh-hero { padding: 16px; }
+  .oh-hero-left { align-items: flex-start; }
+  .oh-hero h2 { font-size: 28px; }
+  .oh-contract-footer { flex-direction: column; align-items: flex-start; }
+  .oh-move-row,
+  .oh-grad-row,
+  .oh-available-row,
+  .oh-recap-row,
+  .oh-major-winners > div { grid-template-columns: 1fr; }
+  .oh-recap-row strong { text-align: left; }
+}
