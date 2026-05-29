@@ -6763,3 +6763,178 @@ body { margin: 0; }
   margin-top: 10px;
   line-height: 1.6;
 }
+
+/* ── Season Awards Overlay ─────────────────────────────────────────────────── */
+.sao-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+
+.sao-panel {
+  width: min(1120px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(17, 24, 39, 0.96));
+  border-radius: 24px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+  padding: 26px;
+  color: var(--text);
+}
+
+.sao-header,
+.sao-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+}
+
+.sao-kicker {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.sao-header h2 {
+  margin: 4px 0 0;
+  font-size: 34px;
+}
+
+.sao-close {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sao-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.sao-card {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.72);
+  border-radius: 18px;
+  padding: 16px;
+  min-height: 132px;
+}
+
+.sao-card-award {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.sao-card-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sao-winner {
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.sao-subline,
+.sao-context {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.sao-context {
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  padding-top: 10px;
+  margin-top: 12px;
+}
+
+.sao-major-recap {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.32);
+  margin-bottom: 18px;
+}
+
+.sao-section-title {
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.sao-major-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.sao-major-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.sao-major-row span,
+.sao-major-row strong {
+  color: var(--text);
+}
+
+.sao-footer {
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  padding-top: 16px;
+}
+
+.sao-footer p {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.profile-awards-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-award-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  background: rgba(250, 204, 21, 0.08);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.profile-award-pill em,
+.profile-award-pill span {
+  color: var(--text-dim);
+  font-style: normal;
+}
+
+.team-awards-list {
+  margin: 10px 0;
+}

@@ -239,6 +239,9 @@ function createInitialGameState(userTeamId) {
     seasonHistory: [],
     playerCareerHistory: [],
     teamCareerHistory: [],
+    awards: [],
+    pendingSeasonAwards: null,
+    seenAwardsSeasons: [],
     challengerDraftSeed,      // stored for reference; roster is already built — do not re-use
   };
   // Build randomized starting Challenger rosters for this new save.
@@ -266,6 +269,9 @@ function reducer(state, action) {
         seasonHistory: action.state?.seasonHistory ?? [],
         playerCareerHistory: action.state?.playerCareerHistory ?? [],
         teamCareerHistory: action.state?.teamCareerHistory ?? [],
+        awards: action.state?.awards ?? [],
+        pendingSeasonAwards: action.state?.pendingSeasonAwards ?? null,
+        seenAwardsSeasons: action.state?.seenAwardsSeasons ?? [],
       };
       loaded.schedule = {
         ...loaded.schedule,
@@ -409,7 +415,16 @@ function reducer(state, action) {
       return runIfUserRosterValid(state, () => beginChamps({ ...state }));
 
     case "ENTER_CONTRACT_PHASE":
+      if (state.pendingSeasonAwards) return state;
       return enterContractPhase({ ...state });
+
+    case "CONTINUE_FROM_SEASON_AWARDS": {
+      const season = Number(action.season ?? state.pendingSeasonAwards?.season);
+      const seenAwardsSeasons = Number.isFinite(season)
+        ? [...new Set([...(state.seenAwardsSeasons || []).map(Number), season])]
+        : (state.seenAwardsSeasons || []);
+      return { ...state, pendingSeasonAwards: null, seenAwardsSeasons, enteredMajorIdx: null };
+    }
 
     // ── Offseason — retirements, prospect class, notable AI signings, roster moves ──
     case "ADVANCE_OFFSEASON": {
