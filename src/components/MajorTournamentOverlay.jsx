@@ -89,7 +89,7 @@ function teamsAlive(bracket, userTeamId) {
 }
 
 // ── Champion celebration screen ───────────────────────────────────────────────
-function ChampionScreen({ major, dispatch, schedule }) {
+function ChampionScreen({ major, dispatch, schedule, hasPendingAwards = false }) {
   const bracket  = major.bracket;
   const champId  = bracket?.champion;
   const champTeam = getTeamMeta(champId, schedule);
@@ -129,7 +129,7 @@ function ChampionScreen({ major, dispatch, schedule }) {
           </div>
         )}
         <button className="mto-return-btn" onClick={() => dispatch({ type: "DISMISS_MAJOR" })}>
-          Return to Season →
+          {hasPendingAwards ? "Continue to Season Awards →" : "Return to Season →"}
         </button>
       </div>
     </div>
@@ -454,7 +454,7 @@ export default function MajorTournamentOverlay() {
     }
     return (
       <div className="mto-backdrop mto-backdrop-champ">
-        <ChampionScreen major={enteredMajor} dispatch={dispatch} schedule={schedule} />
+        <ChampionScreen major={enteredMajor} dispatch={dispatch} schedule={schedule} hasPendingAwards={!!state.pendingSeasonAwards} />
       </div>
     );
   }
