@@ -14,6 +14,7 @@ import { calcTeamOvr } from "../engine/teamOvr.js";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { isUserRosterPlayable } from "../utils/rosterValidation.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -283,7 +284,7 @@ function ResultView({ result, userTeamId, preStandings, postStandings, matchLog,
 
 // ── Main overlay ──────────────────────────────────────────────────────────────
 export default function NextMatchOverlay({ isOpen, onClose }) {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const { openMatchCenter } = useMatchCenter();
 
   if (!isOpen || !state) return null;
@@ -306,6 +307,10 @@ export default function NextMatchOverlay({ isOpen, onClose }) {
   })();
 
   function handlePlay() {
+    if (!isUserRosterPlayable(state)) {
+      dispatch({ type: "SHOW_ROSTER_INCOMPLETE" });
+      return;
+    }
     onClose();
     openMatchCenter("stage");
   }

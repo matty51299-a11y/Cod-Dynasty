@@ -931,6 +931,14 @@ export function ensureCdlRosterIntegrity(gameState, options = {}) {
   });
 
   for (const team of CDL_TEAMS) {
+    if (team.id === state.userTeamId) {
+      const roster = getActiveCdlRoster(players, team.id);
+      if (roster.length < 4) {
+        repairs.push({ type: "user_thin_cdl_roster_allowed", teamId: team.id, count: roster.length });
+      }
+      continue;
+    }
+
     let roster = getActiveCdlRoster(players, team.id);
     let fillSlot = 0;
     while (roster.length < 4 && fillSlot++ < 8) {
