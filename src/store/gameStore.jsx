@@ -8,6 +8,7 @@ import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
+import { generateMajorFeed, generateChallengerQualFeed, generateRosterMoveFeed, generateOffseasonFeed } from "../engine/feedGenerator.js";
 import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { canAffordStarterResign } from "../utils/contractBudget.js";
 import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/rosterValidation.js";
@@ -15,7 +16,7 @@ import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 
 const SAVE_KEY  = "cdl_manager_save";
-const FEED_CAP  = 100;
+const FEED_CAP  = 200;
 
 // ── Feed helpers ──────────────────────────────────────────────────────────────
 // Each feed item: { id, type, message, season, phase, read }
@@ -41,28 +42,6 @@ function teamRank(standings, teamId) {
   return idx >= 0 ? idx + 1 : 0;
 }
 
-// ── K/D leader from matchLog ──────────────────────────────────────────────────
-function computeKDLeader(matchLog) {
-  const stats = {};
-  for (const m of matchLog) {
-    if (!m.playerStats) continue;
-    for (const [, ps] of Object.entries(m.playerStats)) {
-      if (!ps.name) continue;
-      const key = ps.name;
-      if (!stats[key]) stats[key] = { kills: 0, deaths: 0, matches: 0 };
-      stats[key].kills   += ps.kills  ?? 0;
-      stats[key].deaths  += ps.deaths ?? 0;
-      stats[key].matches += 1;
-    }
-  }
-  let bestName = null, bestKD = 0;
-  for (const [name, s] of Object.entries(stats)) {
-    if (s.matches < 5) continue;
-    const kd = s.deaths > 0 ? s.kills / s.deaths : s.kills;
-    if (kd > bestKD) { bestKD = kd; bestName = name; }
-  }
-  return bestName ? { name: bestName, kd: bestKD } : null;
-}
 
 // ── Streak detection ──────────────────────────────────────────────────────────
 // Called after stage sims. `fullLog` is the final log; `prevLen` is how many
@@ -115,54 +94,6 @@ function detectStandingsFeed(prevRank, newStandings, userTeamId, season, phase) 
   return items;
 }
 
-// ── Major completion feed ─────────────────────────────────────────────────────
-// `wasCompleted` captured as boolean before sim — immune to mutation.
-function detectMajorFeed(wasCompleted, newState, majorIdx) {
-  if (wasCompleted) return [];
-  const major = newState.schedule?.majors?.[majorIdx];
-  if (!major?.completed) return [];
-
-  const season  = newState.schedule?.season ?? newState.season ?? 1;
-  const champId = major.bracket?.champion;
-  if (!champId) return [];
-
-  const champTag  = CDL_TEAMS.find(t => t.id === champId)?.tag ?? champId;
-  const items = [];
-
-  if (majorIdx === 4) {
-    items.push(mkFeed("champs_champ", `${champTag} are World Champions!`, season, "major"));
-  } else {
-    items.push(mkFeed("major_champ",  `${champTag} win ${major.name}`,    season, "major"));
-    const awards = (major.pointsAwards ?? []).filter(a => (a.points ?? 0) > 0).sort((a, b) => a.place - b.place);
-    if (awards.length) {
-      const top = awards.slice(0, 4)
-        .map(a => `${CDL_TEAMS.find(t => t.id === a.teamId)?.tag ?? a.teamId} +${a.points}`)
-        .join(" · ");
-      items.push(mkFeed("major_points", `${major.name} points: ${top}`, season, "major"));
-    }
-  }
-
-  // First-round eliminations (round 0 losers in both SE and DE)
-  const firstRound = major.bracket?.rounds?.[0];
-  if (firstRound?.matches) {
-    for (const m of firstRound.matches) {
-      if (m.result?.loserId) {
-        const tag = CDL_TEAMS.find(t => t.id === m.result.loserId)?.tag ?? m.result.loserId;
-        const roundLabel = firstRound.name ?? "Round 1";
-        items.push(mkFeed("major_elim", `${tag} out in ${roundLabel}`, season, "major"));
-      }
-    }
-  }
-
-  // K/D leader after each major
-  const leader = computeKDLeader(newState.schedule?.matchLog ?? []);
-  if (leader) {
-    items.push(mkFeed("kd_leader",
-      `${leader.name} leads the league at ${leader.kd.toFixed(2)} K/D`, season, "major"));
-  }
-
-  return items;
-}
 
 
 function blockIfUserRosterInvalid(state) {
@@ -398,7 +329,7 @@ function reducer(state, action) {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajor({ ...state });
-      return pushFeed(newState, detectMajorFeed(wasCompleted, newState, majorIdx));
+      return pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       });
     }
 
@@ -407,7 +338,7 @@ function reducer(state, action) {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simNextMajorMatch({ ...state });
-      return pushFeed(newState, detectMajorFeed(wasCompleted, newState, majorIdx));
+      return pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       });
     }
 
@@ -416,7 +347,7 @@ function reducer(state, action) {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajorRound({ ...state });
-      return pushFeed(newState, detectMajorFeed(wasCompleted, newState, majorIdx));
+      return pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       });
     }
 
@@ -436,7 +367,7 @@ function reducer(state, action) {
       const feedItems = [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
-        ...(majorIdx != null ? detectMajorFeed(wasCompleted, newState, majorIdx) : []),
+        ...(majorIdx != null ? generateMajorFeed(wasCompleted, newState, majorIdx) : []),
       ];
       return pushFeed(newState, feedItems);
       });
@@ -457,8 +388,13 @@ function reducer(state, action) {
     case "SIM_CHALLENGER_QUALIFIER_ROUND":
       return runIfUserRosterValid(state, () => simChallengerQualifierRound({ ...state }));
 
-    case "CONTINUE_FROM_CHALLENGER_QUALIFIER":
-      return runIfUserRosterValid(state, () => continueFromChallengerQualifier({ ...state }));
+    case "CONTINUE_FROM_CHALLENGER_QUALIFIER": {
+      return runIfUserRosterValid(state, () => {
+        const majorIdx = state.schedule?.majorIdx ?? state.schedule?.stageIdx ?? 0;
+        const newState = continueFromChallengerQualifier({ ...state });
+        return pushFeed(newState, generateChallengerQualFeed(newState, majorIdx));
+      });
+    }
 
     case "BEGIN_CHAMPS":
       return runIfUserRosterValid(state, () => beginChamps({ ...state }));
@@ -466,7 +402,7 @@ function reducer(state, action) {
     case "ENTER_CONTRACT_PHASE":
       return enterContractPhase({ ...state });
 
-    // ── Offseason — retirements, prospect class, notable AI signings ───────
+    // ── Offseason — retirements, prospect class, notable AI signings, roster moves ──
     case "ADVANCE_OFFSEASON": {
       const blocked = blockIfUserOffseasonAdvanceInvalid(state);
       if (blocked) return blocked;
@@ -475,45 +411,16 @@ function reducer(state, action) {
       const prevFreeIds    = new Set(
         (state.players ?? []).filter(p => !p.teamId).map(p => p.id)
       );
-      const season = state.season; // outgoing season
+      const prevMovesLen = state.rosterMovesLog?.length ?? 0;
+      const season       = state.season; // outgoing season
 
       const advanced = advanceOffseason({ ...state });
       const newState = { ...advanced, enteredMajorIdx: null };
 
-      const feedItems = [];
-
-      // Pro retirements (skip prospect retirements — less visible)
-      const newlyRetired = (newState.retiredPlayers ?? []).slice(prevRetiredLen);
-      for (const r of newlyRetired) {
-        if (!r.isProspect) {
-          feedItems.push(mkFeed("retirement", `${r.name} retires at ${r.age}`, season, "offseason"));
-        }
-      }
-
-      // Notable AI signings (80+ OVR free agents who found a new home)
-      const aiSigned = (newState.players ?? []).filter(p =>
-        p.teamId &&
-        p.teamId !== state.userTeamId &&
-        prevFreeIds.has(p.id) &&
-        (p.overall ?? 0) >= 80
-      );
-      for (const p of aiSigned.slice(0, 3)) {
-        const tag = CDL_TEAMS.find(t => t.id === p.teamId)?.tag ?? p.teamId;
-        feedItems.push(mkFeed("signing", `${tag} sign ${p.name}`, season, "offseason"));
-      }
-
-      // Prospect class size
-      const lastLog = newState.challengersLog?.slice(-1)[0];
-      if (lastLog?.annualIntake > 0) {
-        feedItems.push(mkFeed(
-          "prospect_class",
-          `Season ${newState.season} draft class: ${lastLog.annualIntake} new challengers`,
-          season,
-          "offseason"
-        ));
-      }
-
-      return pushFeed(newState, feedItems);
+      return pushFeed(newState, [
+        ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, newState, season),
+        ...generateRosterMoveFeed(newState, prevMovesLen),
+      ]);
       });
     }
 
