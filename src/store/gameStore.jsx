@@ -7,7 +7,7 @@ import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { canAffordStarterResign } from "../utils/contractBudget.js";
 import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/rosterValidation.js";
@@ -286,6 +286,11 @@ function createInitialGameState(userTeamId) {
     seen.add(key);
     return true;
   });
+  // Generate a unique seed for this save's initial Challenger roster draft.
+  // Two bits of entropy: milliseconds and a secondary counter derived from the
+  // prospect generation seed, so rapid successive new-games still differ.
+  const t = Date.now();
+  const challengerDraftSeed = ((t % 999983) * 1009 + (t % 97) * 37 + 1) | 0;
   const state = {
     userTeamId,
     season: 1,
@@ -300,8 +305,10 @@ function createInitialGameState(userTeamId) {
     playerOvrHistory:  {},    // { [playerId]: [{ season, overall }, ...] }
     challengersLog:    [],    // per-season challengers pool snapshots (for Pool Health panel)
     challengerTransactions: [],
+    challengerDraftSeed,      // stored for reference; roster is already built — do not re-use
   };
-  ensureChallengerTeams(state);
+  // Build randomized starting Challenger rosters for this new save.
+  buildChallengerRostersForNewGame(state, challengerDraftSeed);
   return ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
 }
 

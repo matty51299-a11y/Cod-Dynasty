@@ -664,6 +664,116 @@ function simulateChallengerQualifier(gameState, schedule, eventKey = "major") {
   return qualifierRowsToEventTeams(results.filter(r => r.qualified), gameState, schedule, eventKey);
 }
 
+// Org reputation tiers: higher = slightly more attractive to top players in the snake draft.
+// Scale 1–3: 3 = premium, 2 = established, 1 = developing.
+const CHALLENGER_ORG_TIER = {
+  omit_brooklyn: 3, omit_noir: 3, project_notorious: 3, project_7: 3,
+  telluride_bush: 3, faze_falcons: 3, five_fears: 2, for_fun_esports: 2,
+  huntsmen: 2, stallions: 2, death_by_cabal: 2, next_threat_black: 1,
+  stallions_x_bush: 1, omnia_ggs: 1, high_treason: 1, for_fun_black: 1,
+};
+
+function _buildMergedChallengerTeams(gameState) {
+  const existing = gameState.challengerTeams || [];
+  const byId = new Map(existing.map(t => [t.id, t]));
+  const mkTeam = (base) => ({
+    ...base,
+    region: CHALLENGER_REGIONS[base.id] ?? "NA",
+    playerIds: [],
+    circuitPoints: 0,
+    form: 0,
+    lastQualifierPlacement: null,
+    qualifiedMajorIdxs: [],
+  });
+  return CHALLENGER_TEAM_POOL.map(base => {
+    const cur = byId.get(base.id);
+    return cur ? { ...mkTeam(base), ...cur, ...base, region: cur.region ?? CHALLENGER_REGIONS[base.id] ?? "NA" } : mkTeam(base);
+  });
+}
+
+// Used for new-game only: randomized snake draft across all 16 teams.
+// seed must be a non-zero integer unique to this save creation.
+export function buildChallengerRostersForNewGame(gameState, seed) {
+  const merged = _buildMergedChallengerTeams(gameState);
+  const rng = seededRng(seed);
+
+  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
+  const byPlayerId = new Map([...(gameState.players || []), ...(gameState.prospects || [])].map(p => [p.id, p]));
+
+  // Gather all eligible unsigned prospects
+  const eligible = (gameState.prospects || [])
+    .filter(p => !p.teamId && !isInactivePlayer(p) && !cdlNames.has(normalizePlayerName(p.name)))
+    .map(p => ({ ...p }));
+
+  // Sort into rating bands, shuffle within each band
+  const elite  = shuffle(eligible.filter(p => (p.overall ?? 0) >= 75), rng);
+  const strong = shuffle(eligible.filter(p => (p.overall ?? 0) >= 70 && (p.overall ?? 0) < 75), rng);
+  const solid  = shuffle(eligible.filter(p => (p.overall ?? 0) >= 63 && (p.overall ?? 0) < 70), rng);
+  const filler = shuffle(eligible.filter(p => (p.overall ?? 0) < 63), rng);
+  const pool = [...elite, ...strong, ...solid, ...filler];
+
+  // Shuffle team order by region, with org-tier bias applied as a small rating bump
+  // so premium orgs tend to end up with a slightly earlier draft slot but are not fixed.
+  const regions = ["NA", "EU", "MENA"];
+  const teamsByRegion = {};
+  for (const r of regions) teamsByRegion[r] = [];
+  for (const t of merged) {
+    const r = t.region in teamsByRegion ? t.region : "NA";
+    teamsByRegion[r].push(t);
+  }
+  // Within each region, sort by (tier + small noise), then shuffle slightly by tier
+  for (const r of regions) {
+    teamsByRegion[r] = teamsByRegion[r]
+      .map(t => ({ t, sortKey: (CHALLENGER_ORG_TIER[t.id] ?? 1) + rng() * 1.2 }))
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .map(({ t }) => t);
+  }
+  // Interleave regions: NA, EU, MENA, NA, EU, MENA... to spread talent across regions
+  const draftOrder = [];
+  const regionQueues = regions.map(r => [...teamsByRegion[r]]);
+  let i = 0;
+  while (draftOrder.length < merged.length) {
+    const queue = regionQueues[i % regions.length];
+    if (queue.length) draftOrder.push(queue.shift());
+    i++;
+  }
+
+  // Snake draft: round 1 forward, round 2 reverse, round 3 forward, round 4 reverse
+  const usedIds = new Set();
+  const usedNames = new Set();
+  const assignments = new Map(draftOrder.map(t => [t.id, []]));
+
+  for (let round = 0; round < 4; round++) {
+    const order = round % 2 === 0 ? draftOrder : [...draftOrder].reverse();
+    for (const team of order) {
+      if (assignments.get(team.id).length >= 4) continue;
+      // Find best available player: prefer same-region, then any
+      const teamRegion = team.region;
+      const pick =
+        pool.find(p => !usedIds.has(p.id) && !usedNames.has(normalizePlayerName(p.name)) && (p.region === teamRegion)) ||
+        pool.find(p => !usedIds.has(p.id) && !usedNames.has(normalizePlayerName(p.name)));
+      if (!pick) continue;
+      usedIds.add(pick.id);
+      usedNames.add(normalizePlayerName(pick.name));
+      assignments.get(team.id).push(pick.id);
+    }
+  }
+
+  // Apply assignments and set challengerTeamId on prospects
+  for (const team of merged) {
+    team.playerIds = assignments.get(team.id) || [];
+    for (const pid of team.playerIds) {
+      const p = byPlayerId.get(pid);
+      if (p) {
+        p.challengerTeamId = team.id;
+        if (!p.region) p.region = team.region;
+      }
+    }
+  }
+
+  gameState.challengerTeams = merged;
+}
+
 export function ensureChallengerTeams(gameState) {
   const existing = gameState.challengerTeams || [];
   const byId = new Map(existing.map(t => [t.id, t]));
