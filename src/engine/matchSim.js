@@ -225,20 +225,25 @@ export function generateSeriesMods(players, rng) {
 
 function targetKDForMap(player, won, mode, rng, seriesMod) {
   const qualityMod = (player.overall - 82) / 90;
-  const winMod     = won ? 0.06 : -0.06;
+  // Reduced from ±0.06 to ±0.055 — keeps meaningful directional team signal while
+  // the now-tighter HP/OVR pool gaps and softer death exponent do more of the work.
+  // S&D noise is separately controlled below.
+  const winMod     = won ? 0.055 : -0.055;
   const roleMod    = ROLE_KD_MOD[player.primary] ?? 0;
   const formMod    = ((player.form || 70) - 70) / 900;
 
-  // S&D has higher per-map variance (small round count), but series totals still
-  // regress because the series mod is shared across all maps.
-  const noiseWidth = mode === "Search & Destroy" ? 0.13
-                   : mode === "Overload"          ? 0.10
-                   :                                0.08;
+  // S&D variance reduced from 0.13 to 0.09 to prevent small-round-count luck from
+  // dominating series totals (a 6-5 S&D still generated extreme individual K/Ds).
+  // The series mod already provides structured player-level variation across all maps.
+  const noiseWidth = mode === "Search & Destroy" ? 0.09
+                   : mode === "Overload"          ? 0.09
+                   :                                0.07;
   const noise = (rng() - 0.5) * 2 * noiseWidth;
 
   const sm = seriesMod ?? 0;
   const kd = 1.0 + qualityMod + winMod + roleMod + formMod + noise + sm;
-  return Math.max(0.43, Math.min(1.80, kd));
+  // Tightened ceiling (1.80→1.70) to reduce elite-in-blowout compounding outliers.
+  return Math.max(0.45, Math.min(1.70, kd));
 }
 
 function killsForMap(player, won, mode, rng) {
@@ -483,25 +488,34 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
     const lose = Math.min(scoreA, scoreB);
     if (mapDef.mode === "Hardpoint") {
       const close = lose >= 220 ? 2 : lose >= 170 ? 1 : 0;
-      const winTot = close === 2 ? ri(110, 140, rng) : close === 1 ? ri(100, 125, rng) : ri(90, 115, rng);
-      const loseTot = close === 2 ? ri(105, 135, rng) : close === 1 ? ri(90, 115, rng) : ri(70, 95, rng);
+      // Kill pool gap tightened: the old blowout split (90–115 win / 70–95 lose)
+      // created a ~1.24 team pool K/D independent of individual performance.
+      // New ranges keep winner advantage but let individual targets drive the spread.
+      const winTot = close === 2 ? ri(106, 130, rng) : close === 1 ? ri(92, 116, rng) : ri(82, 104, rng);
+      const loseTot = close === 2 ? ri(102, 126, rng) : close === 1 ? ri(86, 110, rng) : ri(77, 97, rng);
       const tAWin = scoreA > scoreB;
       const kA = tAWin ? winTot : loseTot;
       const kB = tAWin ? loseTot : winTot;
       killsA = _weightedAllocate(kA, kTargetsA);
       killsB = _weightedAllocate(kB, kTargetsB);
     } else { // Overload
+      // OVR winner gets a modest kill advantage (smaller gap than HP since Control
+      // is a symmetrical mode). Old code gave BOTH teams the same random range,
+      // meaning the loser randomly "won" the kill count ~50% of the time, making
+      // the OVR map a noise source that kept 3-0 losers near K/D 1.0.
       const close = lose >= 2 ? 2 : lose >= 1 ? 1 : 0;
-      const range = close === 2 ? [100, 130] : close === 1 ? [85, 115] : [70, 95];
-      killsA = _weightedAllocate(ri(range[0], range[1], rng), kTargetsA);
-      killsB = _weightedAllocate(ri(range[0], range[1], rng), kTargetsB);
+      const winRange  = close === 2 ? [97, 122] : close === 1 ? [83, 107] : [76, 97];
+      const loseRange = close === 2 ? [93, 118] : close === 1 ? [78, 102] : [70, 90];
+      const tAWin = scoreA > scoreB;
+      killsA = _weightedAllocate(ri(tAWin ? winRange[0] : loseRange[0], tAWin ? winRange[1] : loseRange[1], rng), kTargetsA);
+      killsB = _weightedAllocate(ri(!tAWin ? winRange[0] : loseRange[0], !tAWin ? winRange[1] : loseRange[1], rng), kTargetsB);
     }
-    // Use 1/sqrt(k) instead of 1/k for death weights: this makes actual series
-    // K/D approximately track targetKD rather than squaring the separation.
-    // With 1/k, a player at target 1.8 got proportionally more kills AND
-    // proportionally fewer deaths — compounding to K/D >> 1.8 in practice.
-    deathsA = _weightedAllocate(killsB.reduce((s, v) => s + v, 0), kTargetsA.map(k => 1 / Math.sqrt(Math.max(0.2, k))));
-    deathsB = _weightedAllocate(killsA.reduce((s, v) => s + v, 0), kTargetsB.map(k => 1 / Math.sqrt(Math.max(0.2, k))));
+    // Death weights use 1/k^0.38 (softer than the old 1/k^0.5 / sqrt).
+    // With sqrt: K/D ∝ k_i^1.5 — a target of 1.5 amplified to ~1.84× the median.
+    // With k^0.38: K/D ∝ k_i^1.38 — same direction, less compounding, so elite
+    // players still stand out but the gap between best and worst shrinks.
+    deathsA = _weightedAllocate(killsB.reduce((s, v) => s + v, 0), kTargetsA.map(k => 1 / Math.pow(Math.max(0.2, k), 0.38)));
+    deathsB = _weightedAllocate(killsA.reduce((s, v) => s + v, 0), kTargetsB.map(k => 1 / Math.pow(Math.max(0.2, k), 0.38)));
   }
 
   for (let i = 0; i < 4; i++) {
