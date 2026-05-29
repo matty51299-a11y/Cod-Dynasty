@@ -10,7 +10,7 @@ import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInact
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
-import { isValidGameState, isValidTeamId } from "./gameValidation.js";
+import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 100;
@@ -655,11 +655,47 @@ function addNotif(state, msg) {
   return { ...state, notifications: [...state.notifications, msg] };
 }
 
+// ── Reducer wrapper: track lastAction + validate post-state invariants ────────
+// Stores diagnostics on `window.__lastAction` and `window.__phaseProblems` so
+// the ErrorBoundary can show them when a render crash happens, and so console
+// users can inspect what just happened. Never throws.
+function instrumentedReducer(prevState, action) {
+  const phaseBefore = prevState?.schedule?.phase ?? null;
+  const nextState = reducer(prevState, action);
+  const phaseAfter = nextState?.schedule?.phase ?? null;
+  if (typeof window !== "undefined") {
+    const payloadKeys = action && typeof action === "object"
+      ? Object.keys(action).filter(k => k !== "type" && k !== "state").slice(0, 8)
+      : [];
+    window.__lastAction = {
+      type: action?.type ?? "(unknown)",
+      payloadKeys,
+      phaseBefore,
+      phaseAfter,
+      timestamp: new Date().toISOString(),
+    };
+    if (nextState) {
+      const problems = findPhaseInvariantViolations(nextState);
+      window.__phaseProblems = problems;
+      if (problems.length) {
+        console.warn(
+          `[gameStore] phase invariants violated after ${action?.type}:`,
+          problems,
+          { phaseBefore, phaseAfter }
+        );
+      }
+    } else {
+      window.__phaseProblems = [];
+    }
+  }
+  return nextState;
+}
+
 // ── Context ───────────────────────────────────────────────────────────────────
 const GameContext = createContext(null);
 
 export function GameProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, null);
+  const [state, dispatch] = useReducer(instrumentedReducer, null);
 
   // Expose state on window so the poolReport() console utility can access it.
   if (typeof window !== "undefined") window.__gameState = state;

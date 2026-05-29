@@ -25,7 +25,12 @@ export default function MajorEntryOverlay() {
   const bracket  = major?.bracket;
   const isEntered = (state.enteredMajorIdx ?? null) === majorIdx;
 
+  // No bracket yet, or already past the entry gate, or seeds are missing —
+  // nothing meaningful to render. Skipping the overlay is safer than letting
+  // downstream rendering hit `bracket.seeds.map`/`bracket.rounds[0]` on a
+  // partial bracket and blank the app.
   if (!bracket || isEntered) return null;
+  if (!Array.isArray(bracket.seeds) || !bracket.seeds.length) return null;
 
   const isChamps = majorIdx === 4;
   const isDE     = bracket.type === "DE" || bracket.type === "DE16";

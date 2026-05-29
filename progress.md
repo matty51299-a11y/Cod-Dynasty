@@ -423,3 +423,13 @@ Player shape (key fields):
   - Empty state when no qualifier has run
   - Compact qualifier history cards with season/major, winner, and top-4 qualified teams
 - Major Entry overlay now explicitly shows **Challenger Qualifiers (Seeds 13–16)** with qualifier ordering, team identity, region, and OVR so qualifier entrants are clearly visible before the event starts.
+
+## Update 2026-05-28 (Champs blank-screen safety net)
+- Added `ErrorBoundary` (`src/components/ErrorBoundary.jsx`) wrapping the entire app. Any uncaught render error now shows a diagnostic panel (phase, season, stage/major idx, userTeamId, entered major, event team ids, last dispatched action, current major / champs / qualifier summary, error message + stack + component stack) instead of blanking the screen. The save is preserved.
+- Reducer is now wrapped in `instrumentedReducer` that records `window.__lastAction = { type, payloadKeys, phaseBefore, phaseAfter, timestamp }` and runs `findPhaseInvariantViolations` after every action. Violations are logged to the console with full detail and exposed on `window.__phaseProblems` for the error panel.
+- `findPhaseInvariantViolations` (`src/store/gameValidation.js`) checks: userTeamId valid, phase in known set, stage phase has a stage, challengerQualifier phase has a populated qualifier, major phase has a bracket with seeds that all resolve to either a CDL team or a `currentMajorEventTeams` entry — and that every team-id referenced by any bracket match resolves.
+- `_advanceMajorPhase()` now clears `currentMajorEventTeams` AND `currentChallengerQualifier` after every major (regular AND Champs), so stale event metadata can never leak into the next phase's rendering. Previously the Champs branch left both populated.
+- `beginChamps()` now builds the Champs bracket BEFORE flipping `phase`/`majorIdx`, pads to 12 CDL seeds when standings is sparse, pads the bracket to 16 entrants if the qualifier produced fewer (defensive — better than indexing into undefined inside `buildMajorBracketDE16`), and explicitly resets `majors[4].completed = false` so a partially-played Champs from an interrupted run can't be treated as already-finished.
+- `MajorTournamentOverlay` now returns a recoverable in-overlay error panel ("Return to Season" button) when `phase === "major"` and `enteredMajorIdx === majorIdx` but the bracket is missing/empty, and a similar fallback for ChampionScreen if `enteredMajor.bracket` is missing. Previously both threw on `bracket.rounds`.
+- `MajorEntryOverlay` returns null if `bracket.seeds` is missing/empty (previously rendered into `bracket.seeds.map`).
+
