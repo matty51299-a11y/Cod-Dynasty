@@ -7,6 +7,7 @@ import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
 import { getTeamRosterStatus } from "../utils/rosterValidation.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
+import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 
 const RATING_KEYS = [
   { key: "gunny",        label: "Gunny" },
@@ -20,11 +21,11 @@ const RATING_KEYS = [
 ];
 
 function ratingColor(v) {
-  if (v >= 90) return "#166534";
-  if (v >= 80) return "#15803d";
-  if (v >= 70) return "#b45309";
-  if (v >= 60) return "#c2410c";
-  return "#ef5350";
+  if (v >= 90) return "#fbbf24";
+  if (v >= 80) return "#34d399";
+  if (v >= 70) return "#60a5fa";
+  if (v >= 60) return "#fb923c";
+  return "#f87171";
 }
 
 export default function Roster() {
@@ -44,6 +45,9 @@ export default function Roster() {
   const sorted   = [...starters, ...subs];
   const rosterStatus = getTeamRosterStatus(players, selectedTeam);
   const showIncomplete = selectedTeam === userTeamId && !rosterStatus.valid;
+  const avgOvr = starters.length ? Math.round(starters.reduce((sum, p) => sum + (p.overall ?? 0), 0) / starters.length) : "—";
+  const expiringCount = myPlayers.filter(p => (p.contractYears ?? 2) <= 1).length;
+  const starCount = myPlayers.filter(p => (p.overall ?? 0) >= 85).length;
 
   return (
     <div className="roster-page">
@@ -61,9 +65,26 @@ export default function Roster() {
         ))}
       </div>
 
-      <div className="roster-header">
-        <h2 style={{ color: team?.color }}>{team?.name}</h2>
-        <span className="chem-badge">Chemistry: {chem} – {chemLabel(chem)}</span>
+      <PageHeader
+        eyebrow="Squad Management"
+        title={team?.name}
+        subtitle="Manage starters, substitute depth, contracts and rating profile. Click any player row for the full profile."
+        accent={team?.color}
+        meta={(
+          <div className="ui-stat-grid compact">
+            <StatCard label="Starters" value={`${starters.length}/4`} tone={showIncomplete ? "danger" : "success"} />
+            <StatCard label="Avg OVR" value={avgOvr} />
+            <StatCard label="Chemistry" value={chem} hint={chemLabel(chem)} />
+            <StatCard label="Expiring" value={expiringCount} tone={expiringCount ? "warning" : "neutral"} />
+          </div>
+        )}
+      />
+
+      <div className="roster-alert-row">
+        {starCount > 0 && <Pill tone="gold">★ {starCount} star player{starCount === 1 ? "" : "s"}</Pill>}
+        {expiringCount > 0 && <Pill tone="warning">{expiringCount} expiring contract{expiringCount === 1 ? "" : "s"}</Pill>}
+        {starters.some(p => (p.form ?? 50) < 45) && <Pill tone="danger">Low form watchlist</Pill>}
+        {starters.some(p => (p.overall ?? 0) >= 82 && (p.form ?? 50) < 50) && <Pill tone="danger">Underperformer flagged</Pill>}
       </div>
 
       {showIncomplete && (
@@ -73,10 +94,11 @@ export default function Roster() {
         </div>
       )}
 
+      <SectionCard title="First Team & Bench" subtitle="Dense squad view with ratings, form, salary and contract status.">
       {sorted.length === 0 ? (
-        <p className="muted">No players on this roster.</p>
+        <EmptyState title="No players on this roster" detail="Use Free Agency or Challengers to add players." />
       ) : (
-        <table className="roster-table">
+        <div className="ui-table-wrap roster-table-wrap"><table className="roster-table data-table">
           <thead>
             <tr>
               <th>Player</th>
@@ -112,10 +134,14 @@ export default function Roster() {
                     paddingLeft: 8,
                   }}
                 >
-                  {p.name} {p.isSub && <span className="sub-label">SUB</span>}
+                  <button className="link-button player-link roster-player-link" onClick={(e) => { e.stopPropagation(); openPlayerProfile(p); }}>{p.name}</button>
+                  {p.overall >= 85 && <span className="ui-mini-flag star">★</span>}
+                  {(p.contractYears ?? 2) <= 1 && <span className="ui-mini-flag warn">EXP</span>}
+                  {(p.form ?? 50) < 45 && <span className="ui-mini-flag danger">FORM</span>}
+                  {p.isSub && <span className="sub-label">SUB</span>}
                 </td>
                 <td>{p.age}</td>
-                <td><span className="role-pill">{p.primary}</span></td>
+                <td><span className="role-pill ui-pill ui-pill-neutral">{p.primary}</span></td>
                 <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
                 <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
                 <td>
@@ -144,8 +170,9 @@ export default function Roster() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
+      </SectionCard>
 
     </div>
   );
