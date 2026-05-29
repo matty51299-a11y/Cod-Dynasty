@@ -9,6 +9,7 @@ import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
+import { canAffordStarterResign } from "../utils/contractBudget.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 
@@ -471,14 +472,12 @@ function reducer(state, action) {
       const player = state.players.find(p => p.id === playerId);
       if (!player || player.teamId !== state.userTeamId) return state;
 
-      // Hard budget check for starters (subs exempt, matching SIGN_PLAYER logic)
+      // Hard budget check for starters (subs exempt, matching SIGN_PLAYER logic).
+      // Contract review excludes unaccepted expiring salaries, so a new deal replaces
+      // this player's old expiring salary instead of stacking on top of it.
       if (salary != null && !player.isSub) {
-        const otherStarters = state.players.filter(
-          p => p.teamId === state.userTeamId && !p.isSub && p.id !== playerId
-        );
-        const committed = otherStarters.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
-        const cap = getTeamCap(state.userTeamId);
-        if (committed + salary > cap) {
+        const budget = canAffordStarterResign(state.players, state.userTeamId, playerId, salary);
+        if (!budget.affordable) {
           return addNotif(state, `Over budget — re-signing ${player.name} would exceed your cap.`);
         }
       }

@@ -448,3 +448,9 @@ Player shape (key fields):
 - AI roster-window cuts are transaction-like: release transaction logs are deferred until a replacement signing succeeds, and failed replacement attempts roll back the release candidate instead of leaving the roster thin.
 - User active-starter releases are blocked when they would drop a CDL team below 4 active players.
 - Added `scripts/stressRosterIntegrity.mjs`, which validates 24 multi-season simulations through Season 4 plus an exhausted-market emergency replacement regression.
+
+## Update 2026-05-29 (Contract review re-sign budget validation)
+- Contract review budget math now uses shared helpers in `src/utils/contractBudget.js` so the UI summary, deal after-space display, and `RESIGN_PLAYER` affordability validation use the same source of truth.
+- Expiring starters whose deals have not been accepted are excluded from committed salary during contract review; selecting a new deal replaces that player's old expiring salary instead of stacking on top of it.
+- Accepted re-signings immediately become locked (`contractYears > 1`) and count toward the remaining available space for later expiring-player decisions.
+- Added `scripts/testContractBudget.mjs` to cover the LA Thieves-style case where $504k locked + $346k available makes an $85k Nium re-sign affordable before other accepted deals are counted.
