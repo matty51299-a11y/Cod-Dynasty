@@ -72,6 +72,13 @@ export default function Prospects() {
   if (!state) return null;
 
   const { prospects, userTeamId, players, challengersLog, challengerTeams, schedule, challengerTransactions } = state;
+
+  if (typeof window !== "undefined" && window.__CLM_DEBUG_CHALLENGER_TX__) {
+    console.debug("[challenger-tx] Prospects Latest Moves state", {
+      count: challengerTransactions?.length ?? 0,
+      latest: (challengerTransactions || []).slice(-3),
+    });
+  }
   const myRoster = players.filter(p => p.teamId === userTeamId);
   const starterCount = myRoster.filter(p => !p.isSub).length;
   const subCount = myRoster.filter(p => p.isSub).length;

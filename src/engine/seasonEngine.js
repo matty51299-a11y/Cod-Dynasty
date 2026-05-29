@@ -1221,9 +1221,16 @@ function _simOneMajorMatch(schedule, gameState, precomputedResult = null) {
 }
 
 // ── Internal: advance season phase after a major completes ────────────────────
+function logChallengerTxDiagnostic(label, payload) {
+  const enabled = typeof globalThis !== "undefined" && (globalThis.__CLM_DEBUG_CHALLENGER_TX__ || globalThis.__CLM_TRACE_CHALLENGER_TX__);
+  if (enabled) console.debug(`[challenger-tx] ${label}`, payload);
+}
+
 function _advanceMajorPhase(schedule, gameState) {
   const majorIdx = schedule.majorIdx;
   let nextState = gameState;
+  const txBeforeMajorCompletion = gameState?.challengerTransactions?.length ?? 0;
+  logChallengerTxDiagnostic("before Major completion", { majorIdx, count: txBeforeMajorCompletion });
 
   // Award Major placement points to CDL teams only (regular majors).
   awardMajorPlacementPoints(schedule, majorIdx);
@@ -1259,10 +1266,28 @@ function _advanceMajorPhase(schedule, gameState) {
   }
 
   // AI roster window after each regular major (not after Champs), once the
-  // schedule has safely left the Major phase.
-  if (majorIdx <= 3) nextState = runAIMajorRosterWindow(nextState, majorIdx);
+  // schedule has safely left the Major phase.  Keep the completed Major index
+  // available while the window runs so transaction records are stamped with the
+  // event that caused them, then restore the already-advanced schedule.
+  if (majorIdx <= 3) {
+    const advancedSchedule = { ...schedule };
+    const rosterWindowInput = { ...nextState, schedule: { ...advancedSchedule, majorIdx } };
+    nextState = runAIMajorRosterWindow(rosterWindowInput, majorIdx);
+    logChallengerTxDiagnostic("after runAIMajorRosterWindow", {
+      majorIdx,
+      before: txBeforeMajorCompletion,
+      after: nextState?.challengerTransactions?.length ?? 0,
+    });
+    nextState = { ...nextState, schedule: advancedSchedule };
+  }
 
-  return withCdlRosterIntegrity(nextState, majorIdx <= 3 ? "post_major_transition" : "post_champs_transition");
+  const integrityState = withCdlRosterIntegrity(nextState, majorIdx <= 3 ? "post_major_transition" : "post_champs_transition");
+  logChallengerTxDiagnostic("after _advanceMajorPhase returns", {
+    majorIdx,
+    before: txBeforeMajorCompletion,
+    after: integrityState?.challengerTransactions?.length ?? 0,
+  });
+  return integrityState;
 }
 
 // ── PUBLIC: Begin Championship (triggered by user from preChamps window) ───────
