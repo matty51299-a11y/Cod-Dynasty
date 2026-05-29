@@ -8,6 +8,7 @@ import { getTeamCap, getSigningCost, getChallengerStockLabel } from "../engine/r
 import { isInactivePlayer } from "../utils/playerIdentity.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
@@ -25,11 +26,11 @@ function formatRecentKd(player, playerSeasonStats, season) {
 const RATING_KEYS = ["gunny","awareness","objective","searchIQ","clutch","teamwork","composure","adaptability"];
 
 function ratingColor(v) {
-  if (v >= 90) return "#166534";
-  if (v >= 80) return "#15803d";
-  if (v >= 70) return "#1d4ed8";
-  if (v >= 60) return "#9a3412";
-  return "#dc2626";
+  if (v >= 90) return "#fbbf24";
+  if (v >= 80) return "#34d399";
+  if (v >= 70) return "#60a5fa";
+  if (v >= 60) return "#fb923c";
+  return "#f87171";
 }
 
 export default function FreeAgency() {
@@ -71,21 +72,27 @@ export default function FreeAgency() {
 
   return (
     <div className="fa-page">
-      <h2>Free Agency</h2>
-      {state.offseason?.freeAgencyOpen && <p className="muted">Offseason user window is open: AI teams will not bid until you click <strong>Run AI Free Agency</strong> from the Offseason Hub.</p>}
-      <p className="muted">
-        Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub.
-      </p>
-      <div style={{ marginBottom: "14px" }}>
-        <span className="muted">
-          Cap: <strong>${(teamCap / 1000).toFixed(0)}k</strong>
-          {" · "}Committed: <strong>${(committed / 1000).toFixed(0)}k</strong>
-          {" · "}Remaining:{" "}
-          <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong>
-        </span>
-        <div style={{ height: "5px", background: "#2a2a2a", borderRadius: "3px", marginTop: "5px", width: "300px" }}>
-          <div style={{ height: "100%", width: `${budgetPct}%`, background: budgetColor, borderRadius: "3px", transition: "width 0.3s" }} />
+      <PageHeader
+        eyebrow="Recruitment"
+        title="Free Agency"
+        subtitle="Open-market players, salary demands, role fit and roster-slot controls."
+        meta={(
+          <div className="ui-stat-grid compact">
+            <StatCard label="Market" value={filtered.length} hint={`${freeAgents.length} total`} />
+            <StatCard label="Starters" value={`${starterCount}/4`} tone={starterCount < 4 ? "warning" : "neutral"} />
+            <StatCard label="Sub" value={`${subCount}/1`} />
+            <StatCard label="Remaining" value={fmtMoney(remaining)} tone={remaining < 0 ? "danger" : "success"} />
+          </div>
+        )}
+      />
+      {state.offseason?.freeAgencyOpen && <div className="ui-warning-banner"><strong>User free-agency window is open.</strong> AI teams will not bid until you click <strong>Run AI Free Agency</strong> from the Offseason Hub.</div>}
+      <div className="cm-hero ui-budget-panel">
+        <div className="cm-chip-row">
+          <Pill>Cap {fmtMoney(teamCap)}</Pill>
+          <Pill>Committed {fmtMoney(committed)}</Pill>
+          <Pill tone={remaining < 0 ? "danger" : "success"}>Remaining {fmtMoney(remaining)}</Pill>
         </div>
+        <div className="cm-budget-bar"><div style={{ width: `${budgetPct}%`, background: budgetColor }} /></div>
       </div>
 
       <div className="filters">
@@ -105,10 +112,11 @@ export default function FreeAgency() {
         </div>
       </div>
 
+      <SectionCard title="Available Players" subtitle="Sort and filter the market, then choose whether to sign players as starters or substitute depth.">
       {filtered.length === 0 ? (
-        <p className="muted">No free agents available.</p>
+        <EmptyState title="No free agents available" detail="The market is empty for the current phase and filters." />
       ) : (
-        <table className="roster-table">
+        <div className="ui-table-wrap"><table className="roster-table data-table">
           <thead>
             <tr>
               <th>Player</th>
@@ -145,7 +153,7 @@ export default function FreeAgency() {
                 <tr key={p.id}>
                   <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></td>
                   <td>{p.age}</td>
-                  <td><span className="role-pill">{p.primary}</span></td>
+                  <td><span className="role-pill ui-pill ui-pill-neutral">{p.primary}</span></td>
                   <td>{p.previousTeamId ? (resolveTeamDisplay(p.previousTeamId, state.schedule)?.tag || p.previousTeamId) : "Unsigned"}</td>
                   <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
                   <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
@@ -154,7 +162,7 @@ export default function FreeAgency() {
                   <td style={{ color: ratingColor(p.searchIQ) }}>{p.searchIQ}</td>
                   <td style={{ color: ratingColor(p.teamwork) }}>{p.teamwork}</td>
                   <td>{formatRecentKd(p, state.playerSeasonStats, state.offseason?.outgoingSeason ?? state.season)}</td>
-                  <td>{getChallengerStockLabel(p, state)}</td>
+                  <td><Pill tone="accent">{getChallengerStockLabel(p, state)}</Pill></td>
                   <td className="salary">{fmtMoney(cost)}</td>
                   <td>
                     <select
@@ -179,8 +187,9 @@ export default function FreeAgency() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       )}
+      </SectionCard>
     </div>
   );
 }
