@@ -780,21 +780,36 @@ function fillMinimumRoster(teamId, players, prospects, rosterMovesLog, season, w
     const budgetLeft  = getTeamCap(teamId) - committed;
 
     const cdlNames = buildCdlRosterNameSet(cur.players);
-    const pick = [
+    const pool = [
       ...cur.players.filter(p => !p.teamId && !p.isProspect),
       ...cur.prospects.filter(p => !p.teamId),
     ]
       .filter(c => !isInactivePlayer(c))
-      .filter(c => !cdlNames.has(normalizePlayerName(c.name)))
+      .filter(c => !cdlNames.has(normalizePlayerName(c.name)));
+
+    // Preferred: best affordable candidate.
+    let pick = pool
       .filter(c => getSigningCost(c) <= budgetLeft)
       .sort((a, b) => (b.overall || 70) - (a.overall || 70))[0];
+    let reason = "roster_fill";
 
-    if (!pick) break; // nothing affordable — stop rather than go over budget
+    // Emergency: if nothing is affordable we still MUST get to 4 starters —
+    // running a match sim with a thin roster crashes simMap. Sign the
+    // cheapest remaining candidate even if it goes over cap; logged so the
+    // analytics screens can show this happened.
+    if (!pick) {
+      pick = pool
+        .slice()
+        .sort((a, b) => getSigningCost(a) - getSigningCost(b))[0];
+      if (pick) reason = "roster_fill_over_cap";
+    }
+
+    if (!pick) break; // genuinely no candidate available anywhere
 
     const signed = signCandidate(pick, teamId, cur.players, cur.prospects);
     if (signed.rejected) break;
     cur = signed;
-    additions.push({ out: null, in: pick.name, fromChallengers: !!pick.isProspect, reason: "roster_fill" });
+    additions.push({ out: null, in: pick.name, fromChallengers: !!pick.isProspect, reason });
   }
 
   if (additions.length > 0) {

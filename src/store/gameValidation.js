@@ -89,5 +89,17 @@ export function findPhaseInvariantViolations(state) {
     if (majorIdx != null) problems.push(`preChamps phase but majorIdx is ${majorIdx}`);
   }
 
+  // Roster integrity — every CDL team needs 4 starters for match sim to work.
+  // simMap now pads thin rosters so this is no longer fatal, but report it so
+  // the user/AI window can be inspected if it ever shows up.
+  if (Array.isArray(state.players)) {
+    for (const team of CDL_TEAMS) {
+      const starters = state.players.filter(p => p.teamId === team.id && !p.isSub);
+      if (starters.length < 4) {
+        problems.push(`team ${team.id} has only ${starters.length} starter(s)`);
+      }
+    }
+  }
+
   return problems;
 }
