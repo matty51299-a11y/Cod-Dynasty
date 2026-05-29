@@ -716,8 +716,10 @@ function addNotif(state, msg) {
 // users can inspect what just happened. Never throws.
 function instrumentedReducer(prevState, action) {
   const phaseBefore = prevState?.schedule?.phase ?? null;
+  const txBefore = prevState?.challengerTransactions?.length ?? 0;
   const nextState = reducer(prevState, action);
   const phaseAfter = nextState?.schedule?.phase ?? null;
+  const txAfter = nextState?.challengerTransactions?.length ?? 0;
   if (typeof window !== "undefined") {
     const payloadKeys = action && typeof action === "object"
       ? Object.keys(action).filter(k => k !== "type" && k !== "state").slice(0, 8)
@@ -727,8 +729,19 @@ function instrumentedReducer(prevState, action) {
       payloadKeys,
       phaseBefore,
       phaseAfter,
+      challengerTransactionsBefore: txBefore,
+      challengerTransactionsAfter: txAfter,
       timestamp: new Date().toISOString(),
     };
+    if (window.__CLM_DEBUG_CHALLENGER_TX__) {
+      console.debug("[challenger-tx] reducer final state", {
+        action: action?.type ?? "(unknown)",
+        phaseBefore,
+        phaseAfter,
+        before: txBefore,
+        after: txAfter,
+      });
+    }
     if (nextState) {
       const problems = findPhaseInvariantViolations(nextState);
       window.__phaseProblems = problems;
