@@ -84,7 +84,7 @@ export default function PlayerProfileOverlay() {
               <ProfileStat label="Champs Apps" value={summary.champsAppearances || "Not tracked yet"} />
               <ProfileStat label="CQ Apps" value={summary.challengerQualifierAppearances || "Not tracked yet"} />
               <ProfileStat label="Best Major" value={summary.bestMajor || "Not tracked yet"} />
-              <ProfileStat label="Best Champs" value="Not tracked yet" />
+              <ProfileStat label="Best Champs" value={summary.bestChamps || "Not tracked yet"} />
               <ProfileStat label="Best CQ" value={summary.bestCQ || "Not tracked yet"} />
             </div>
           </div>

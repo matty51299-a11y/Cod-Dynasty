@@ -236,6 +236,9 @@ function createInitialGameState(userTeamId) {
     playerOvrHistory:  {},    // { [playerId]: [{ season, overall }, ...] }
     challengersLog:    [],    // per-season challengers pool snapshots (for Pool Health panel)
     challengerTransactions: [],
+    seasonHistory: [],
+    playerCareerHistory: [],
+    teamCareerHistory: [],
     challengerDraftSeed,      // stored for reference; roster is already built — do not re-use
   };
   // Build randomized starting Challenger rosters for this new save.
@@ -257,7 +260,13 @@ function reducer(state, action) {
       if (!action.state || !isValidGameState(action.state)) return null;
 
       // Backfill `feed` for saves that predate this feature
-      const loaded = { ...action.state, feed: action.state?.feed ?? [] };
+      const loaded = {
+        ...action.state,
+        feed: action.state?.feed ?? [],
+        seasonHistory: action.state?.seasonHistory ?? [],
+        playerCareerHistory: action.state?.playerCareerHistory ?? [],
+        teamCareerHistory: action.state?.teamCareerHistory ?? [],
+      };
       loaded.schedule = {
         ...loaded.schedule,
         challengerQualifierResults: loaded.schedule?.challengerQualifierResults ?? [],

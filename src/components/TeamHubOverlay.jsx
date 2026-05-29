@@ -187,7 +187,7 @@ export default function TeamHubOverlay() {
           <div className="th-stat-row">
             <span className="th-stat-label">Season {seasonHistory.season}</span>
             <span className="th-stat-val">{seasonHistory.wins}W–{seasonHistory.losses}L</span>
-            <span className="th-stat-pts">{kdText(seasonHistory.kills, seasonHistory.deaths)} K/D</span>
+            <span className="th-stat-pts">{seasonHistory.points ? `${seasonHistory.points} pts · ` : ""}{kdText(seasonHistory.kills, seasonHistory.deaths)} K/D</span>
           </div>
           {seasonHistory.events?.length ? (
             <div className="team-history-list">
@@ -199,8 +199,10 @@ export default function TeamHubOverlay() {
               ))}
             </div>
           ) : <p className="muted">No tracked events for this team season yet.</p>}
-          {roster.length > 0 && (
-            <div className="team-history-roster muted">Current roster: {roster.map((p, i) => <span key={p.id}>{i > 0 ? ", " : ""}<button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></span>)}</div>
+          {(seasonHistory.roster?.length || roster.length > 0) && (
+            <div className="team-history-roster muted">
+              {seasonHistory.season === state.season ? "Current roster" : "Roster snapshot"}: {(seasonHistory.roster?.length ? seasonHistory.roster : roster).map((p, i) => <span key={p.id}>{i > 0 ? ", " : ""}<button className="link-button player-link" onClick={() => openPlayerProfile(p.id || p)}>{p.name}</button></span>)}
+            </div>
           )}
         </div>
 
