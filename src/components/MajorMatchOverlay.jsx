@@ -11,6 +11,7 @@ import { CDL_TEAMS } from "../data/teams.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { calcTeamOvr } from "../engine/teamOvr.js";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
+import { isUserRosterPlayable } from "../utils/rosterValidation.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -166,7 +167,7 @@ function ResultView({ result, userTeamId, latestBracket, majorName, roundName, o
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function MajorMatchOverlay({ isOpen, onClose }) {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const { openMatchCenter } = useMatchCenter();
 
   if (!isOpen || !state) return null;
@@ -189,6 +190,10 @@ export default function MajorMatchOverlay({ isOpen, onClose }) {
   }
 
   function handlePlay() {
+    if (!isUserRosterPlayable(state)) {
+      dispatch({ type: "SHOW_ROSTER_INCOMPLETE" });
+      return;
+    }
     onClose();
     openMatchCenter("major");
   }

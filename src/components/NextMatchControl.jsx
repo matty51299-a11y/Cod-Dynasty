@@ -4,9 +4,10 @@
 
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import { isUserRosterPlayable } from "../utils/rosterValidation.js";
 
 export default function NextMatchControl({ onOpen }) {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   if (!state) return null;
 
   const { schedule, userTeamId } = state;
@@ -24,8 +25,16 @@ export default function NextMatchControl({ onOpen }) {
   const oppId   = nextMatch.a === userTeamId ? nextMatch.b : nextMatch.a;
   const oppTeam = CDL_TEAMS.find(t => t.id === oppId);
 
+  function handleOpen() {
+    if (!isUserRosterPlayable(state)) {
+      dispatch({ type: "SHOW_ROSTER_INCOMPLETE" });
+      return;
+    }
+    onOpen();
+  }
+
   return (
-    <button className="nmc-btn" onClick={onOpen} title={`Play next matchday vs ${oppTeam?.name ?? oppId}`}>
+    <button className="nmc-btn" onClick={handleOpen} title={`Play next matchday vs ${oppTeam?.name ?? oppId}`}>
       <span className="nmc-play-label">Play Matchday</span>
       <span className="nmc-divider">·</span>
       <span className="nmc-vs">vs</span>

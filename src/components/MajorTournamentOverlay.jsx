@@ -17,6 +17,7 @@ import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
+import { isUserRosterPlayable } from "../utils/rosterValidation.js";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamName(id, schedule) { return resolveTeamDisplay(id, schedule)?.name ?? id; }
@@ -514,7 +515,10 @@ export default function MajorTournamentOverlay() {
                 dispatch={dispatch}
                 major={major}
                 schedule={schedule}
-                onPlayMatch={() => openMatchCenter("major")}
+                onPlayMatch={() => {
+                  if (!isUserRosterPlayable(state)) dispatch({ type: "SHOW_ROSTER_INCOMPLETE" });
+                  else openMatchCenter("major");
+                }}
               />
             )}
 

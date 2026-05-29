@@ -7,6 +7,7 @@ import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { getTeamRosterStatus } from "../utils/rosterValidation.js";
 
 const RATING_KEYS = [
   { key: "gunny",        label: "Gunny" },
@@ -42,6 +43,8 @@ export default function Roster() {
   const starters = myPlayers.filter(p => !p.isSub);
   const subs     = myPlayers.filter(p => p.isSub);
   const sorted   = [...starters, ...subs];
+  const rosterStatus = getTeamRosterStatus(players, selectedTeam);
+  const showIncomplete = selectedTeam === userTeamId && !rosterStatus.valid;
 
   return (
     <div className="roster-page">
@@ -63,6 +66,13 @@ export default function Roster() {
         <h2 style={{ color: team?.color }}>{team?.name}</h2>
         <span className="chem-badge">Chemistry: {chem} – {chemLabel(chem)}</span>
       </div>
+
+      {showIncomplete && (
+        <div className="roster-warning" role="status">
+          <strong>Roster incomplete</strong> — {team?.name} have {rosterStatus.count}/{rosterStatus.required} starters.
+          Sign {rosterStatus.missing} more {rosterStatus.missing === 1 ? "player" : "players"} before playing or simming matches.
+        </div>
+      )}
 
       {sorted.length === 0 ? (
         <p className="muted">No players on this roster.</p>
