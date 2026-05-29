@@ -53,7 +53,7 @@ function validate(state, label) {
   const problems = [];
   for (const team of CDL_TEAMS) {
     const roster = activeRoster(state, team.id);
-    if (roster.length < 4) problems.push(`${label}: ${team.id} has ${roster.length} active CDL players`);
+    if (team.id !== state.userTeamId && roster.length < 4) problems.push(`${label}: ${team.id} has ${roster.length} active CDL players`);
     for (const p of roster) {
       const key = normalizePlayerName(p.name);
       if (ids.has(p.id)) problems.push(`${label}: duplicate active player id ${p.id}`);
@@ -75,7 +75,7 @@ function runAction(state, label, fn) {
 }
 
 function exhaustMarketRegression() {
-  let state = newGame("toronto", 777);
+  let state = newGame("lat", 777);
   const torontoKeep = activeRoster(state, "toronto").slice(0, 3).map(p => p.id);
   state = {
     ...state,
@@ -137,5 +137,5 @@ for (const teamId of selectedTeams) {
   }
 }
 const generated = exhaustMarketRegression();
-console.log(`Roster integrity stress passed: ${runs} runs reached Season 4 with all CDL rosters >= 4 active players.`);
+console.log(`Roster integrity stress passed: ${runs} runs reached Season 4 with AI CDL rosters >= 4 active players; user-managed teams may be temporarily thin.`);
 console.log(`Emergency market-exhaustion regression generated ${generated} replacement(s) and remained valid.`);

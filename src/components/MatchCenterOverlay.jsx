@@ -18,6 +18,7 @@ import { CDL_TEAMS }       from "../data/teams.js";
 import { simMap, makeMatchRng, generateSeriesMods } from "../engine/matchSim.js";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamColor(id, schedule) { return getTeamMeta(id, schedule)?.color ?? "#888"; }
@@ -229,7 +230,7 @@ function MomentumBar({ momentum, teamA, teamB, schedule }) {
   );
 }
 
-function PlayerRow({ pid, stats, teamId, userTeamId, isHeader, schedule }) {
+function PlayerRow({ pid, stats, teamId, userTeamId, isHeader, schedule, onPlayer }) {
   if (isHeader) {
     return (
       <div className="mco-player-row mco-player-header">
@@ -248,7 +249,7 @@ function PlayerRow({ pid, stats, teamId, userTeamId, isHeader, schedule }) {
   return (
     <div className={`mco-player-row ${isUser ? "mco-pr-user-team" : ""}`}>
       <span className="mco-pr-name" style={isUser ? { color: teamColor(teamId, schedule) } : {}}>
-        {stats.name}
+        <button className="link-button player-link" onClick={() => onPlayer(pid)}>{stats.name}</button>
       </span>
       <span className="mco-pr-k">{stats.kills}</span>
       <span className="mco-pr-d">{stats.deaths}</span>
@@ -257,7 +258,7 @@ function PlayerRow({ pid, stats, teamId, userTeamId, isHeader, schedule }) {
   );
 }
 
-function LiveView({ teamA, teamB, currentMapStats, userTeamId, schedule }) {
+function LiveView({ teamA, teamB, currentMapStats, userTeamId, schedule, onPlayer }) {
   const aPlayers = teamA.players.slice(0, 4);
   const bPlayers = teamB.players.slice(0, 4);
 
@@ -272,6 +273,7 @@ function LiveView({ teamA, teamB, currentMapStats, userTeamId, schedule }) {
             stats={currentMapStats?.[p.id] ?? { name: p.name, kills: "—", deaths: "—", kd: null }}
             teamId={teamA.id} userTeamId={userTeamId}
             schedule={schedule}
+            onPlayer={onPlayer}
           />
         ))}
       </div>
@@ -289,6 +291,7 @@ function LiveView({ teamA, teamB, currentMapStats, userTeamId, schedule }) {
             stats={currentMapStats?.[p.id] ?? { name: p.name, kills: "—", deaths: "—", kd: null }}
             teamId={teamB.id} userTeamId={userTeamId}
             schedule={schedule}
+            onPlayer={onPlayer}
           />
         ))}
       </div>
@@ -338,6 +341,7 @@ function TacticButton({ label, desc, active, disabled, onClick }) {
 export default function MatchCenterOverlay() {
   const { ctx, closeMatchCenter }  = useMatchCenter();
   const { state, dispatch: gDispatch } = useGame();
+  const { openPlayerProfile } = usePlayerProfile();
   const [mcState, mcDispatch]      = useReducer(reducer, INIT);
   const [visibleProcs, setVisibleProcs] = useState([]);
   const [activeTactic, setActiveTactic] = useState(null);
@@ -562,7 +566,7 @@ export default function MatchCenterOverlay() {
               const divider = p === teamB.players[0] ? "mco-fst-divider" : "";
               return (
                 <div key={p.id} className={`mco-fst-row ${p.teamId === userTeamId ? "mco-fst-user" : ""} ${divider}`}>
-                  <span className="mco-fst-name" style={{ color: teamColor(p.teamId, state.schedule) }}>{s.name}</span>
+                  <span className="mco-fst-name" style={{ color: teamColor(p.teamId, state.schedule) }}><button className="link-button player-link" onClick={() => openPlayerProfile(p.id)}>{s.name}</button></span>
                   <span className="mco-fst-k">{s.kills}</span>
                   <span className="mco-fst-d">{s.deaths}</span>
                   <span className={`mco-fst-kd ${kdCls}`}>{s.kd?.toFixed(2)}</span>
@@ -628,6 +632,7 @@ export default function MatchCenterOverlay() {
                   currentMapStats={currentMapStats}
                   userTeamId={userTeamId}
                   schedule={state.schedule}
+                  onPlayer={openPlayerProfile}
                 />
               </>
             )}

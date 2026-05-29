@@ -8,6 +8,7 @@ import { useGame } from "../store/gameStore.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function ratingColor(n) {
   return n >= 80 ? "#86efac" : n >= 74 ? "#bef264" : n >= 68 ? "#fcd34d" : "#fca5a5";
@@ -29,20 +30,20 @@ function scoreFor(match, teamId) {
   return "";
 }
 
-function MatchTeamLine({ row, seed, score, winner, schedule }) {
+function MatchTeamLine({ row, seed, score, winner, schedule, onTeam }) {
   if (!row) return <div className="cqo-bm-team empty"><span>TBD</span></div>;
   const display = resolveTeamDisplay(row.teamId, schedule);
   return (
     <div className={`cqo-bm-team ${winner ? "winner" : ""}`}>
       <TeamLogo team={display} size={18} />
       <span className="cqo-bm-seed">#{seed ?? row.seed}</span>
-      <span className="cqo-bm-name">{display.name ?? row.teamName}</span>
+      <span className="cqo-bm-name" onClick={(e) => { e.stopPropagation(); onTeam?.(row.teamId); }}>{display.name ?? row.teamName}</span>
       <strong>{score}</strong>
     </div>
   );
 }
 
-function BracketMatch({ match, fieldMap, isNext, onClick, schedule }) {
+function BracketMatch({ match, fieldMap, isNext, onClick, schedule, onTeam }) {
   const a = fieldMap[match.a];
   const b = fieldMap[match.b];
   const winnerId = match.result?.winnerId;
@@ -54,8 +55,8 @@ function BracketMatch({ match, fieldMap, isNext, onClick, schedule }) {
       onClick={clickable ? onClick : undefined}
       disabled={!clickable}
     >
-      <MatchTeamLine row={a} seed={match.seedA} score={scoreFor(match, match.a)} winner={winnerId === match.a} schedule={schedule} />
-      <MatchTeamLine row={b} seed={match.seedB} score={scoreFor(match, match.b)} winner={winnerId === match.b} schedule={schedule} />
+      <MatchTeamLine row={a} seed={match.seedA} score={scoreFor(match, match.a)} winner={winnerId === match.a} schedule={schedule} onTeam={onTeam} />
+      <MatchTeamLine row={b} seed={match.seedB} score={scoreFor(match, match.b)} winner={winnerId === match.b} schedule={schedule} onTeam={onTeam} />
     </button>
   );
 }
@@ -107,33 +108,34 @@ function MatchDetailModal({ match, fieldMap, qualifier, schedule, onClose }) {
   );
 }
 
-function MatchPreview({ a, b, schedule }) {
-  const Side = ({ row }) => {
-    if (!row) return <div className="cqo-prev-side"><span className="muted">TBD</span></div>;
-    const display = resolveTeamDisplay(row.teamId, schedule);
-    return (
-      <div className="cqo-prev-side">
-        <div className="cqo-prev-head">
-          <TeamLogo team={display} size={26} />
-          <div>
-            <strong style={{ color: display.color }}>{row.teamName}</strong>
-            <span>{row.region} · OVR {row.teamOvr}</span>
-          </div>
-        </div>
-        <div className="cqo-prev-meta">
-          <span>Circuit Pts: <b>{row.circuitPointsBefore ?? 0}</b></span>
-          <span>Form: <b>{(row.formBefore ?? 0) > 0 ? "+" : ""}{row.formBefore ?? 0}</b></span>
-          <span>Seed: <b>#{row.seed}</b></span>
+function MatchPreviewSide({ row, schedule }) {
+  if (!row) return <div className="cqo-prev-side"><span className="muted">TBD</span></div>;
+  const display = resolveTeamDisplay(row.teamId, schedule);
+  return (
+    <div className="cqo-prev-side">
+      <div className="cqo-prev-head">
+        <TeamLogo team={display} size={26} />
+        <div>
+          <strong style={{ color: display.color }}>{row.teamName}</strong>
+          <span>{row.region} · OVR {row.teamOvr}</span>
         </div>
       </div>
-    );
-  };
+      <div className="cqo-prev-meta">
+        <span>Circuit Pts: <b>{row.circuitPointsBefore ?? 0}</b></span>
+        <span>Form: <b>{(row.formBefore ?? 0) > 0 ? "+" : ""}{row.formBefore ?? 0}</b></span>
+        <span>Seed: <b>#{row.seed}</b></span>
+      </div>
+    </div>
+  );
+}
+
+function MatchPreview({ a, b, schedule }) {
   return (
     <div className="cqo-modal-body">
       <div className="cqo-preview-grid">
-        <Side row={a} />
+        <MatchPreviewSide row={a} schedule={schedule} />
         <span className="cqo-modal-vs cqo-prev-vs">vs</span>
-        <Side row={b} />
+        <MatchPreviewSide row={b} schedule={schedule} />
       </div>
       <p className="cqo-help">Match not yet simulated. Sim it from the controls above to see player stats and map breakdown.</p>
     </div>
@@ -142,6 +144,7 @@ function MatchPreview({ a, b, schedule }) {
 
 export default function ChallengerQualifierOverlay() {
   const { state, dispatch } = useGame();
+  const { openTeamHub } = useTeamHub();
   const [selectedKey, setSelectedKey] = useState(null);
   const [showField, setShowField] = useState(false);
 
@@ -241,7 +244,7 @@ export default function ChallengerQualifierOverlay() {
                 <div key={row.teamId} className="cqo-field-chip">
                   <span className="cqo-seed">#{row.seed}</span>
                   <TeamLogo team={fieldRowToTeam(row)} size={18} />
-                  <span className="cqo-field-name">{row.teamName}</span>
+                  <button className="link-button team-link cqo-field-name" onClick={() => openTeamHub(row.teamId)}>{row.teamName}</button>
                   <span className="cqo-field-region">{row.region}</span>
                   <span style={{ color: ratingColor(row.teamOvr), fontWeight: 900 }}>{row.teamOvr}</span>
                 </div>

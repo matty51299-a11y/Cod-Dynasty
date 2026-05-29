@@ -10,6 +10,7 @@ import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInact
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { canAffordStarterResign } from "../utils/contractBudget.js";
+import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/rosterValidation.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 
@@ -164,6 +165,29 @@ function detectMajorFeed(wasCompleted, newState, majorIdx) {
 }
 
 
+function blockIfUserRosterInvalid(state) {
+  const message = getRosterIncompleteMessage(state);
+  return message ? addNotif(state, message) : null;
+}
+
+function runIfUserRosterValid(state, runner) {
+  const blocked = blockIfUserRosterInvalid(state);
+  return blocked ?? runner();
+}
+
+function blockIfUserOffseasonAdvanceInvalid(state) {
+  if (state?.schedule?.phase !== "contracts") return blockIfUserRosterInvalid(state);
+  const status = getTeamRosterStatus(state.players, state.userTeamId);
+  const projectedCount = (status.activeStarters || []).filter(p => (p.contractYears ?? 2) > 1).length;
+  if (projectedCount >= status.required) return null;
+  const teamName = CDL_TEAMS.find(t => t.id === state.userTeamId)?.name ?? "Your team";
+  const missing = status.required - projectedCount;
+  return addNotif(
+    state,
+    `Roster incomplete — ${teamName} would have ${projectedCount}/${status.required} starters after expiring contracts. Re-sign or sign ${missing} more ${missing === 1 ? "player" : "players"} before continuing.`
+  );
+}
+
 function shouldRetireOnRelease(player) {
   return (player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70);
 }
@@ -310,6 +334,7 @@ function reducer(state, action) {
 
     // ── Stage sims — detect streaks + standings changes ────────────────────
     case "SIM_NEXT_MATCH": {
+      return runIfUserRosterValid(state, () => {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
@@ -318,9 +343,11 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      });
     }
 
     case "SIM_MATCHDAY": {
+      return runIfUserRosterValid(state, () => {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
@@ -329,9 +356,11 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      });
     }
 
     case "SIM_USER_MATCHDAY": {
+      return runIfUserRosterValid(state, () => {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
@@ -340,9 +369,11 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      });
     }
 
     case "SIM_STAGE": {
+      return runIfUserRosterValid(state, () => {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
@@ -351,32 +382,40 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      });
     }
 
     // ── Major sims — detect champion + eliminations + K/D leader ──────────
     case "SIM_MAJOR": {
+      return runIfUserRosterValid(state, () => {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajor({ ...state });
       return pushFeed(newState, detectMajorFeed(wasCompleted, newState, majorIdx));
+      });
     }
 
     case "SIM_NEXT_MAJOR_MATCH": {
+      return runIfUserRosterValid(state, () => {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simNextMajorMatch({ ...state });
       return pushFeed(newState, detectMajorFeed(wasCompleted, newState, majorIdx));
+      });
     }
 
     case "SIM_MAJOR_ROUND": {
+      return runIfUserRosterValid(state, () => {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajorRound({ ...state });
       return pushFeed(newState, detectMajorFeed(wasCompleted, newState, majorIdx));
+      });
     }
 
     // ── Interactive match result from MatchCenterOverlay ──────────────
     case "COMMIT_USER_MATCH_RESULT": {
+      return runIfUserRosterValid(state, () => {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = majorIdx != null
         ? (state.schedule?.majors?.[majorIdx]?.completed ?? true)
@@ -393,34 +432,38 @@ function reducer(state, action) {
         ...(majorIdx != null ? detectMajorFeed(wasCompleted, newState, majorIdx) : []),
       ];
       return pushFeed(newState, feedItems);
+      });
     }
 
     case "ENTER_MAJOR":
-      return { ...state, enteredMajorIdx: action.majorIdx };
+      return runIfUserRosterValid(state, () => ({ ...state, enteredMajorIdx: action.majorIdx }));
 
     case "DISMISS_MAJOR":
       return { ...state, enteredMajorIdx: null };
 
     case "SIM_CHALLENGER_QUALIFIER":
-      return simChallengerQualifier({ ...state });
+      return runIfUserRosterValid(state, () => simChallengerQualifier({ ...state }));
 
     case "SIM_NEXT_CHALLENGER_QUALIFIER_MATCH":
-      return simNextChallengerQualifierMatch({ ...state });
+      return runIfUserRosterValid(state, () => simNextChallengerQualifierMatch({ ...state }));
 
     case "SIM_CHALLENGER_QUALIFIER_ROUND":
-      return simChallengerQualifierRound({ ...state });
+      return runIfUserRosterValid(state, () => simChallengerQualifierRound({ ...state }));
 
     case "CONTINUE_FROM_CHALLENGER_QUALIFIER":
-      return continueFromChallengerQualifier({ ...state });
+      return runIfUserRosterValid(state, () => continueFromChallengerQualifier({ ...state }));
 
     case "BEGIN_CHAMPS":
-      return beginChamps({ ...state });
+      return runIfUserRosterValid(state, () => beginChamps({ ...state }));
 
     case "ENTER_CONTRACT_PHASE":
       return enterContractPhase({ ...state });
 
     // ── Offseason — retirements, prospect class, notable AI signings ───────
     case "ADVANCE_OFFSEASON": {
+      const blocked = blockIfUserOffseasonAdvanceInvalid(state);
+      if (blocked) return blocked;
+      return runIfUserRosterValid(state, () => {
       const prevRetiredLen = state.retiredPlayers?.length ?? 0;
       const prevFreeIds    = new Set(
         (state.players ?? []).filter(p => !p.teamId).map(p => p.id)
@@ -464,6 +507,7 @@ function reducer(state, action) {
       }
 
       return pushFeed(newState, feedItems);
+      });
     }
 
     // ── RE-SIGN PLAYER ────────────────────────────────────────────────────────
@@ -599,8 +643,8 @@ function reducer(state, action) {
       const wasOnCdlRoster = !!player.teamId && isCdlTeamId(player.teamId) && !isInactivePlayer(player);
       if (!wasOnCdlRoster) return addNotif(state, `${player.name || "Player"} is not on an active CDL roster.`);
 
-      const activeStarters = state.players.filter(p => p.teamId === player.teamId && !p.isSub && !isInactivePlayer(p));
-      if (!player.isSub && activeStarters.length <= 4) {
+      const activeStarters = getTeamRosterStatus(state.players, player.teamId).count;
+      if (player.teamId !== state.userTeamId && !player.isSub && activeStarters <= 4) {
         return addNotif(state, `Cannot release ${player.name}; CDL rosters must keep at least 4 active players.`);
       }
 
@@ -620,7 +664,9 @@ function reducer(state, action) {
               type: releaseToRetire ? "RETIREMENT" : "CDL_RELEASE_TO_CHALLENGERS", playerId: released.id, playerName: released.name, fromTeamId: player.teamId, toTeamId: null,
               note: releaseToRetire ? `${released.name} retired after release` : `${released.name} moved to Challengers pool`,
             }),
-          }, `${player.name} released.`),
+          }, !player.isSub && player.teamId === state.userTeamId
+            ? `${player.name} released. ${getRosterIncompleteMessage({ ...state, players: state.players.filter(p => p.id !== action.playerId) }) ?? ""}`.trim()
+            : `${player.name} released.`),
           [feedItem]
         );
       }
@@ -639,10 +685,15 @@ function reducer(state, action) {
             playerId: player.id, playerName: player.name, fromTeamId: player.teamId, toTeamId: null,
             note: releaseToChallengers ? `${player.name} moved to Challengers pool` : `${player.name} retired after release`,
           }),
-        }, `${player.name} released.`),
+        }, !player.isSub && player.teamId === state.userTeamId
+          ? `${player.name} released. ${getRosterIncompleteMessage({ ...state, players: state.players.filter(p => p.id !== action.playerId) }) ?? ""}`.trim()
+          : `${player.name} released.`),
         [feedItem]
       );
     }
+
+    case "SHOW_ROSTER_INCOMPLETE":
+      return blockIfUserRosterInvalid(state) ?? state;
 
     case "CLEAR_NOTIF":
       return { ...state, notifications: state.notifications.slice(1) };

@@ -96,7 +96,7 @@ export function findPhaseInvariantViolations(state) {
     const activeNames = new Set();
     for (const team of CDL_TEAMS) {
       const starters = state.players.filter(p => p.teamId === team.id && !p.isSub && !isInactivePlayer(p));
-      if (starters.length < 4) problems.push(`team ${team.id} has only ${starters.length} valid active starter(s)`);
+      if (team.id !== userTeamId && starters.length < 4) problems.push(`team ${team.id} has only ${starters.length} valid active starter(s)`);
       for (const player of starters) {
         const key = normalizePlayerName(player.name);
         if (activeIds.has(player.id)) problems.push(`duplicate active CDL player id: ${player.id}`);

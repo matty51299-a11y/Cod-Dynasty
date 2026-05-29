@@ -454,3 +454,15 @@ Player shape (key fields):
 - Expiring starters whose deals have not been accepted are excluded from committed salary during contract review; selecting a new deal replaces that player's old expiring salary instead of stacking on top of it.
 - Accepted re-signings immediately become locked (`contractYears > 1`) and count toward the remaining available space for later expiring-player decisions.
 - Added `scripts/testContractBudget.mjs` to cover the LA Thieves-style case where $504k locked + $346k available makes an $85k Nium re-sign affordable before other accepted deals are counted.
+
+## Update 2026-05-29 (User roster release grace period)
+- User-managed CDL teams can now release an active starter even when the move drops them below 4 starters. The existing release destinations and transaction logging remain unchanged, and the release notification includes roster-incomplete context when applicable.
+- Progression and match-entry actions now gate on the user roster having 4 valid active starters. Stage play/sim, Major/Champs sim, Challenger Qualifier sim/continue, interactive match commit, Champs start, and offseason advancement show a clear "Roster incomplete" notification instead of silently simming or emergency-filling the user team.
+- Roster UI now marks the user roster incomplete with a 3/4-style warning so the user can intentionally create cap space and then manually sign a replacement.
+- AI roster integrity remains automatic: `ensureCdlRosterIntegrity()` skips emergency filling only for the user-managed team, while AI CDL teams below 4 are still repaired with pool, over-cap, or generated emergency replacements.
+
+## Update 2026-05-29 (Player and Team profile history surfaces)
+- Added a global player profile overlay opened from shared `PlayerProfileProvider`. It resolves CDL, Challenger, unsigned, inactive/retired, and match-log-only player references safely, then derives career totals, current status, season tabs, and per-event rows from existing `playerSeasonStats`, current `matchLog`, team history, and challenger transaction data. Mode-specific K/D and placements remain explicitly marked as not tracked when the existing save data does not contain them.
+- Roster, Free Agency, K/D Leaders, Match Log standouts, SeriesDetail stat tables, Match Center stat rows, Challengers pool rows, Challenger team cards, qualifier field chips, and recent Challenger/CDL move entries now expose clickable player/team profile links where the underlying ids are available.
+- TeamHub now works as a broader Team Profile for CDL teams and persistent Challenger teams. It resolves Challenger teams from the save, shows current roster/OVR/record/points context, clickable roster players, season tabs, match-log-derived records/stat summaries, Major placement rows when available, and Challenger qualifier history/circuit-point rows where stored.
+- Added `scripts/testProfileHistory.mjs` to verify profile lookup and history aggregation from existing match logs without changing simulation, ratings, contracts, budgets, bracket logic, points, or logos.
