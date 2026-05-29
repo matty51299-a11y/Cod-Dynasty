@@ -9,6 +9,7 @@ import TeamLogo from "./TeamLogo.jsx";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { placementText } from "../utils/placementDisplay.js";
 
 function ratingColor(n) {
   return n >= 80 ? "#86efac" : n >= 74 ? "#bef264" : n >= 68 ? "#fcd34d" : "#fca5a5";
@@ -280,7 +281,7 @@ export default function ChallengerQualifierOverlay() {
               </div>
               {resultRows.map(row => (
                 <div key={row.teamId} className={`cqo-row ${row.qualified ? "qualified" : row.placement <= 8 ? "near" : "missed"}`}>
-                  <span className="cqo-seed">#{row.placement}</span>
+                  <span className="cqo-seed">{placementText(row.placement)}</span>
                   <span className="cqo-team">
                     <TeamLogo team={fieldRowToTeam(row)} size={22} />
                     <span>{row.teamName}</span>
