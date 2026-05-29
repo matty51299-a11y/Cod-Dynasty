@@ -762,7 +762,7 @@ function candidateScore(candidate, teamPlayers, context, evaluation, neededRole,
   return score;
 }
 
-function getChallengerStockLabel(candidate, gameState = null) {
+export function getChallengerStockLabel(candidate, gameState = null) {
   const ovr = candidate.overall ?? 70;
   const pot = candidate.potential ?? ovr;
   const age = candidate.age ?? 22;
@@ -866,7 +866,7 @@ function refillAllChallengerRosters(challengerTeams, players, prospects) {
     }
     team.playerIds = cleanIds.slice(0, 4);
   }
-  const allPool = [...players.filter(p => !p.teamId && !isInactivePlayer(p)), ...prospects.filter(p => !p.teamId && !isInactivePlayer(p))]
+  const allPool = [...players.filter(p => !p.teamId && p.status !== "freeAgent" && !isInactivePlayer(p)), ...prospects.filter(p => !p.teamId && !isInactivePlayer(p))]
     .sort((a, b) => ((b.overall ?? 0) + (b.potential ?? 0) * 0.35) - ((a.overall ?? 0) + (a.potential ?? 0) * 0.35));
   for (const team of teams) {
     while (team.playerIds.length < 4) {
@@ -1099,7 +1099,7 @@ export function ensureCdlRosterIntegrity(gameState, options = {}) {
     const invalid = isInactivePlayer(player) || !key || seenIds.has(player.id) || seenNames.has(key);
     if (invalid) {
       repairs.push({ type: "removed_invalid_cdl_reference", teamId: player.teamId, playerId: player.id, playerName: player.name });
-      return { ...player, teamId: null, challengerTeamId: null, isSub: false, status: isInactivePlayer(player) ? player.status : "free_agent" };
+      return { ...player, teamId: null, challengerTeamId: null, isSub: false, status: isInactivePlayer(player) ? player.status : "freeAgent" };
     }
     seenIds.add(player.id);
     seenNames.add(key);
@@ -1407,6 +1407,136 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
 
 export function runAIMajorRosterWindow(gameState, majorIdx) {
   return runRosterWindow(gameState, { windowType: "major", majorIdx });
+}
+
+
+function freeAgentContractYears(player) {
+  const age = player.age ?? 24;
+  const overall = player.overall ?? 70;
+  if (overall >= 88 && age <= 29) return 3;
+  if (overall >= 82 && age <= 30) return 2;
+  if ((player.potential ?? overall) - overall >= 8 && age <= 23) return 2;
+  return 1;
+}
+
+function teamNeedForFreeAgent(teamPlayers, candidate) {
+  const starters = teamPlayers.filter(p => !p.isSub && !isInactivePlayer(p));
+  if (starters.length < 4) return { score: 55 + (4 - starters.length) * 16, replace: null, reason: "missing starter" };
+  const sameRole = starters.filter(p => p.primary === candidate.primary || p.secondary === candidate.primary);
+  const weakestRole = sameRole.sort((a, b) => (a.overall ?? 70) - (b.overall ?? 70))[0];
+  const weakest = [...starters].sort((a, b) => (a.overall ?? 70) - (b.overall ?? 70))[0];
+  const replace = weakestRole || weakest;
+  const upgrade = (candidate.overall ?? 70) - (replace?.overall ?? 70);
+  const roleBonus = weakestRole ? 12 : 3;
+  return { score: upgrade * 6 + roleBonus, replace, reason: upgrade > 0 ? `upgrade over ${replace?.name}` : "depth check" };
+}
+
+export function runAIFreeAgencyMarket(gameState, options = {}) {
+  const teamContexts = ensureContexts(gameState);
+  let players = [...(gameState.players || [])];
+  let prospects = [...(gameState.prospects || [])];
+  let challengerTeams = (gameState.challengerTeams || []).map(t => ({ ...t, playerIds: [...(t.playerIds || [])] }));
+  let challengerTransactions = [...(gameState.challengerTransactions || [])];
+  const rosterMovesLog = [...(gameState.rosterMovesLog || [])];
+  const diagnostics = { enteringMarket: [], topFreeAgents: [], teamNeeds: [], offers: [], signings: [], leftUnsigned: [], marketExits: [], rosterSizes: [] };
+  const season = gameState.season ?? gameState.schedule?.season ?? 1;
+  const cdlNames = () => buildCdlRosterNameSet(players);
+
+  const waves = [
+    { name: "elite", min: 86, limitPerTeam: 1 },
+    { name: "veteran", min: 78, limitPerTeam: 2 },
+    { name: "depth", min: 70, limitPerTeam: 2 },
+  ];
+
+  diagnostics.enteringMarket = players.filter(p => !p.teamId && p.status === "freeAgent" && !isInactivePlayer(p)).map(p => ({ id: p.id, name: p.name, overall: p.overall, previousTeamId: p.previousTeamId ?? null }));
+  diagnostics.topFreeAgents = [...diagnostics.enteringMarket].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)).slice(0, 20);
+
+  for (const team of CDL_TEAMS) {
+    if (team.id === gameState.userTeamId) continue;
+    const starters = getStarters(players, team.id);
+    const evaluation = evaluateTeam(team.id, { ...gameState, players, prospects }, "freeAgency", null);
+    diagnostics.teamNeeds.push({ teamId: team.id, starters: starters.length, avgOverall: Number((evaluation.avgOverall ?? 0).toFixed(1)), standingRank: evaluation.standingRank });
+  }
+
+  for (const wave of waves) {
+    const signedByTeam = new Map();
+    let pool = players
+      .filter(p => !p.teamId && p.status === "freeAgent" && !isInactivePlayer(p) && (p.overall ?? 70) >= wave.min)
+      .filter(p => !cdlNames().has(normalizePlayerName(p.name)))
+      .sort((a, b) => (b.overall ?? 70) - (a.overall ?? 70) || (b.potential ?? 70) - (a.potential ?? 70));
+
+    for (const candidate of pool) {
+      if (players.find(p => p.id === candidate.id)?.teamId) continue;
+      const offers = [];
+      for (const team of CDL_TEAMS) {
+        if (team.id === gameState.userTeamId) continue;
+        if ((signedByTeam.get(team.id) ?? 0) >= wave.limitPerTeam) continue;
+        const roster = players.filter(p => p.teamId === team.id && !p.isSub && !isInactivePlayer(p));
+        const committed = roster.reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
+        const demand = getSigningCost(candidate);
+        const budgetLeft = getTeamCap(team.id) - committed;
+        const need = teamNeedForFreeAgent(roster, candidate);
+        const evaluation = evaluateTeam(team.id, { ...gameState, players, prospects }, "freeAgency", null);
+        const context = teamContexts[team.id] || { philosophy: "balanced_value", volatility: 0.4 };
+        const contender = Math.max(0, 13 - (evaluation.standingRank ?? 8));
+        const kd = getCurrentKD(candidate, gameState.playerSeasonStats, gameState.season);
+        const stock = getChallengerStockLabel(candidate, gameState);
+        const affordable = demand <= budgetLeft || roster.length < 4;
+        if (!affordable) continue;
+        let score = need.score + (candidate.overall ?? 70) * 1.15 + ((candidate.potential ?? candidate.overall ?? 70) - (candidate.overall ?? 70)) * 1.2;
+        score += kd >= 1.1 ? 8 : kd < 0.9 ? -7 : 0;
+        score += candidate.age <= 23 ? 5 : candidate.age >= 30 ? -6 : 0;
+        score += contender * ((candidate.age ?? 24) >= 27 ? 1.4 : 0.7);
+        score += context.philosophy === "win_now" ? 6 : context.philosophy === "youth_upside" && (candidate.age ?? 24) <= 23 ? 7 : 0;
+        score += stock === "Blue Chip" ? 5 : stock === "Veteran" ? 2 : 0;
+        score += Math.min(14, Math.max(0, budgetLeft - demand) / 25000);
+        if (candidate.previousTeamId === team.id) score += 3;
+        if (need.replace && need.score < 10 && roster.length >= 4) continue;
+        offers.push({ teamId: team.id, playerId: candidate.id, playerName: candidate.name, salary: demand, years: freeAgentContractYears(candidate), score: Number(score.toFixed(2)), reason: need.reason });
+      }
+      offers.sort((a, b) => b.score - a.score || b.salary - a.salary);
+      diagnostics.offers.push(...offers.slice(0, 3).map(o => ({ ...o, wave: wave.name })));
+      const winner = offers[0];
+      if (!winner || winner.score < (wave.name === "elite" ? 130 : wave.name === "veteran" ? 105 : 92)) continue;
+
+      const team = CDL_TEAMS.find(t => t.id === winner.teamId);
+      const currentRoster = players.filter(p => p.teamId === winner.teamId && !p.isSub && !isInactivePlayer(p));
+      const need = teamNeedForFreeAgent(currentRoster, candidate);
+      if (currentRoster.length >= 4 && need.replace) {
+        players = players.map(p => p.id === need.replace.id ? { ...p, teamId: null, isSub: false, challengerTeamId: null, contractYears: 0, status: "freeAgent", previousTeamId: winner.teamId } : p);
+        challengerTransactions = pushTx(challengerTransactions, gameState, { type: "FREE_AGENT_ENTERED", playerId: need.replace.id, playerName: need.replace.name, fromTeamId: winner.teamId, toTeamId: null, note: `${need.replace.name} entered free agency after leaving ${team?.name || winner.teamId}.` });
+      }
+      const salary = winner.salary;
+      players = players.map(p => p.id === candidate.id ? normalizeSignedCdlPlayer({ ...p, contractYears: winner.years, salary }, winner.teamId, salary) : p);
+      challengerTeams = challengerTeams.map(t => ({ ...t, playerIds: (t.playerIds || []).filter(id => id !== candidate.id) }));
+      signedByTeam.set(winner.teamId, (signedByTeam.get(winner.teamId) ?? 0) + 1);
+      challengerTransactions = pushTx(challengerTransactions, gameState, { type: "FREE_AGENT_SIGNING", playerId: candidate.id, playerName: candidate.name, fromTeamId: candidate.previousTeamId ?? null, toTeamId: winner.teamId, note: `${team?.name || winner.teamId} signed ${candidate.name} to a ${winner.years}-year free-agent deal.` });
+      diagnostics.signings.push({ playerId: candidate.id, playerName: candidate.name, teamId: winner.teamId, salary, years: winner.years, wave: wave.name });
+    }
+  }
+
+  players = players.map(p => {
+    if (p.teamId || p.status !== "freeAgent" || isInactivePlayer(p)) return p;
+    const age = p.age ?? 24;
+    const overall = p.overall ?? 70;
+    if (age >= 33 && overall < 78) {
+      diagnostics.marketExits.push({ playerId: p.id, playerName: p.name, status: "retired" });
+      challengerTransactions = pushTx(challengerTransactions, gameState, { type: "FREE_AGENT_RETIRED", playerId: p.id, playerName: p.name, fromTeamId: p.previousTeamId ?? null, toTeamId: null, note: `${p.name} retired after going unsigned.` });
+      return { ...p, status: "retired", teamId: null, challengerTeamId: null };
+    }
+    if (overall < 76 && age <= 30) {
+      diagnostics.marketExits.push({ playerId: p.id, playerName: p.name, status: "challengers" });
+      challengerTransactions = pushTx(challengerTransactions, gameState, { type: "FREE_AGENT_TO_CHALLENGERS", playerId: p.id, playerName: p.name, fromTeamId: p.previousTeamId ?? null, toTeamId: null, note: `${p.name} joined Challengers after going unsigned.` });
+      prospects.push({ ...p, teamId: null, challengerTeamId: null, contractYears: 0, status: "challengers" });
+      return null;
+    }
+    diagnostics.leftUnsigned.push({ playerId: p.id, playerName: p.name, overall: p.overall });
+    return p;
+  }).filter(Boolean);
+
+  diagnostics.rosterSizes = CDL_TEAMS.map(t => ({ teamId: t.id, count: players.filter(p => p.teamId === t.id && !p.isSub && !isInactivePlayer(p)).length }));
+  rosterMovesLog.push({ season, windowType: "freeAgency", moveCount: diagnostics.signings.length, philosophy: "open_market", diagnostics });
+  return { ...gameState, players, prospects, teamContexts, challengerTeams, challengerTransactions, rosterMovesLog, offseasonFreeAgencyDiagnostics: diagnostics };
 }
 
 export function runAIOffseasonRosterWindow(gameState) {

@@ -472,3 +472,11 @@ Player shape (key fields):
 - Player profile Major/CQ summaries, player event rows, Team Profile season/event history, Challenger Qualifier final placements, Prospects qualifier history tables, and qualifier labels now use the same placement formatter.
 - Best Major and Best CQ summary ranking now parses formatted band labels safely, preserving existing-save compatibility while avoiding `T5` for 5th-6th finishes.
 - Added `scripts/testPlacementDisplay.mjs` to verify the required placement band wording and legacy shorthand normalization.
+
+## Update 2026-05-29 (Open offseason free agency market)
+- Split the end-of-season contract flow so contract review now opens a user free-agency window before AI teams bid. Expiring players who are not re-signed are standardized as `status: "freeAgent"`, `teamId: null`, `challengerTeamId: null`, `contractYears: 0`, and retain `previousTeamId` for transaction context.
+- Added AI free-agency waves for elite players, veterans, and depth options. AI offers score player OVR/POT, age, role need, recent K/D, budget room, team strength/standing, team philosophy, and stock labels; winning bids sign players to 1–3 year deals while respecting normal cap rules outside emergency roster repair.
+- Challenger/inactive/retirement outcomes now happen after market evaluation. Low-value unsigned free agents may move to Challengers or retire, while stronger remaining players can stay unsigned as free agents. Challenger team refill excludes open `freeAgent` players to avoid duplicate assignments.
+- Offseason Hub now labels the user free-agency window, exposes a Free Agents section with salary/stock context and sign buttons, and only runs AI free agency when the user advances from that window. The Free Agency page also explains that AI bidding is paused during the user window.
+- Added readable free-agency transaction types (`FREE_AGENT_ENTERED`, `FREE_AGENT_SIGNING`, `FREE_AGENT_TO_CHALLENGERS`, `FREE_AGENT_RETIRED`) and a diagnostic script (`scripts/diagnoseOffseasonFreeAgency.mjs`) that prints market entrants, top free agents, AI needs, offers, signings, leftovers, market exits, and roster sizes.
+- Updated the roster-integrity stress script for the two-step offseason flow (`contracts -> free agency window -> AI free agency/new season`).

@@ -54,7 +54,7 @@ const CHALLENGER_TEAM_POOL = [
   { id: "for_fun_black", name: "For Fun Black", tag: "FFB", color: "#334155" },
 ];
 import { runProgression } from "./progression.js";
-import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand, ensureCdlRosterIntegrity } from "./rosterAI.js";
+import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, runAIFreeAgencyMarket, getResignDemand, ensureCdlRosterIntegrity } from "./rosterAI.js";
 import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
@@ -1837,6 +1837,19 @@ export function enterContractPhase(gameState) {
 
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
+  if (gameState.schedule?.phase === "offseason" && gameState.offseason?.freeAgencyOpen) {
+    const outgoingSeason = gameState.offseason?.outgoingSeason ?? gameState.schedule?.season ?? gameState.season ?? 1;
+    const newSeason = gameState.offseason?.newSeason ?? outgoingSeason + 1;
+    const marketState = runAIFreeAgencyMarket(gameState);
+    const withAiMoves = runAIOffseasonRosterWindow(marketState);
+    return withCdlRosterIntegrity({
+      ...withAiMoves,
+      schedule: buildSeason(newSeason),
+      season: newSeason,
+      offseason: { ...(withAiMoves.offseason || {}), freeAgencyOpen: false, completedFreeAgencySeason: outgoingSeason },
+    }, "post_offseason");
+  }
+
   const standings      = gameState.schedule?.standings ?? {};
   const newSeason      = (gameState.schedule?.season ?? 1) + 1;
   const outgoingSeason = gameState.schedule?.season ?? 1;
@@ -1889,12 +1902,23 @@ export function advanceOffseason(gameState) {
     return { ...p, teamHistory: [...history, { season: outgoingSeason, teamId: p.teamId }] };
   });
 
-  // Release players whose contracts hit 0 — they become free agents
+  const freeAgencyTransactions = [];
+  // Release players whose contracts hit 0 into the open CDL free-agent market.
+  // Challenger/inactive/retirement transitions happen only after AI/user market evaluation.
   const withExpiry = withTeamHistorySnapshot.map(p => {
     if (p.teamId && (p.contractYears ?? 1) === 0) {
-      return { ...p, teamId: null, isSub: false };
+      const prevTeam = CDL_TEAMS.find(t => t.id === p.teamId);
+      freeAgencyTransactions.push({
+        type: "FREE_AGENT_ENTERED",
+        playerId: p.id,
+        playerName: p.name,
+        fromTeamId: p.teamId,
+        toTeamId: null,
+        note: `${p.name} entered free agency after leaving ${prevTeam?.name || p.teamId}.`,
+      });
+      return { ...p, teamId: null, challengerTeamId: null, isSub: false, contractYears: 0, status: "freeAgent", previousTeamId: p.teamId };
     }
-    return p;
+    return p.teamId ? { ...p, status: "cdl", circuit: "cdl" } : p;
   });
 
   // Age up all players and prospects, reset form
@@ -1957,20 +1981,44 @@ export function advanceOffseason(gameState) {
     removedByCap:        poolMetrics.removedByCap,
   };
 
+  const txBase = [...(gameState.challengerTransactions || [])];
+  const txKeys = new Set(txBase.map(tx => [tx.season ?? "", tx.type ?? "", tx.playerId ?? tx.playerName ?? "", tx.fromTeamId ?? "", tx.toTeamId ?? ""].join("|")));
+  const challengerTransactions = [...txBase];
+  for (const entry of freeAgencyTransactions) {
+    const tx = { season: outgoingSeason, stageIdx: gameState.schedule?.stageIdx ?? null, majorIdx: gameState.schedule?.majorIdx ?? null, ...entry };
+    const key = [tx.season ?? "", tx.type ?? "", tx.playerId ?? tx.playerName ?? "", tx.fromTeamId ?? "", tx.toTeamId ?? ""].join("|");
+    if (!txKeys.has(key)) {
+      txKeys.add(key);
+      challengerTransactions.push(tx);
+    }
+  }
+
   const withProgression = {
     ...gameState,
-    players:          updatedPlayers,
+    players:          updatedPlayers.map(p => (!p.teamId && !p.isProspect && !isInactivePlayer(p) && !p.status) ? { ...p, status: "freeAgent", contractYears: 0 } : p),
     prospects:        refreshedProspects,
     progressionLog,
     playerSeasonStats,
     playerOvrHistory,
     retiredPlayers:   [...(gameState.retiredPlayers || []), ...retired],
     challengersLog:   [...(gameState.challengersLog || []), challengersEntry],
-    schedule:         buildSeason(newSeason),
-    season:           newSeason,
+    challengerTransactions,
+    schedule:         { ...gameState.schedule, phase: "offseason" },
+    offseason:        { ...(gameState.offseason || {}), freeAgencyOpen: true, contractsProcessed: true, outgoingSeason, newSeason },
   };
 
-  return withCdlRosterIntegrity(runAIOffseasonRosterWindow(withProgression), "post_offseason");
+  if (gameState.schedule?.phase === "contracts") {
+    return withCdlRosterIntegrity(withProgression, "open_free_agency");
+  }
+
+  const marketState = runAIFreeAgencyMarket(withProgression);
+  const withAiMoves = runAIOffseasonRosterWindow(marketState);
+  return withCdlRosterIntegrity({
+    ...withAiMoves,
+    schedule: buildSeason(newSeason),
+    season: newSeason,
+    offseason: { ...(withAiMoves.offseason || {}), freeAgencyOpen: false, completedFreeAgencySeason: outgoingSeason },
+  }, "post_offseason");
 }
 
 // ── Prospect Pool Refresh ─────────────────────────────────────────────────────

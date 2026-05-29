@@ -107,16 +107,10 @@ function runIfUserRosterValid(state, runner) {
 }
 
 function blockIfUserOffseasonAdvanceInvalid(state) {
-  if (state?.schedule?.phase !== "contracts") return blockIfUserRosterInvalid(state);
-  const status = getTeamRosterStatus(state.players, state.userTeamId);
-  const projectedCount = (status.activeStarters || []).filter(p => (p.contractYears ?? 2) > 1).length;
-  if (projectedCount >= status.required) return null;
-  const teamName = CDL_TEAMS.find(t => t.id === state.userTeamId)?.name ?? "Your team";
-  const missing = status.required - projectedCount;
-  return addNotif(
-    state,
-    `Roster incomplete — ${teamName} would have ${projectedCount}/${status.required} starters after expiring contracts. Re-sign or sign ${missing} more ${missing === 1 ? "player" : "players"} before continuing.`
-  );
+  // Contract review may intentionally create openings; the user gets the next
+  // offseason hub/free-agency screen to repair them before the new season starts.
+  if (state?.schedule?.phase === "contracts") return null;
+  return blockIfUserRosterInvalid(state);
 }
 
 function shouldRetireOnRelease(player) {
@@ -430,7 +424,7 @@ function reducer(state, action) {
     case "ADVANCE_OFFSEASON": {
       const blocked = blockIfUserOffseasonAdvanceInvalid(state);
       if (blocked) return blocked;
-      return runIfUserRosterValid(state, () => {
+      const runAdvance = () => {
       const prevRetiredLen = state.retiredPlayers?.length ?? 0;
       const prevFreeIds    = new Set(
         (state.players ?? []).filter(p => !p.teamId).map(p => p.id)
@@ -445,7 +439,8 @@ function reducer(state, action) {
         ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, newState, season),
         ...generateRosterMoveFeed(newState, prevMovesLen),
       ]);
-      });
+      };
+      return state.schedule?.phase === "contracts" ? runAdvance() : runIfUserRosterValid(state, runAdvance);
     }
 
     // ── RE-SIGN PLAYER ────────────────────────────────────────────────────────
@@ -528,7 +523,7 @@ function reducer(state, action) {
           ? existingHistory
           : [...existingHistory, { season: state.season, teamId: userTeam }];
         const signed = {
-          ...prospect, teamId: userTeam, isSub: slotType === "sub",
+          ...prospect, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: slotType === "sub",
           scouted: true, contractYears: 2, teamHistory: historyUpdated,
         };
         return pushFeed(
@@ -560,14 +555,14 @@ function reducer(state, action) {
               ? existingHistory
               : [...existingHistory, { season: state.season, teamId: userTeam }];
             return {
-              ...p, teamId: userTeam, isSub: slotType === "sub",
+              ...p, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: slotType === "sub",
               scouted: true, contractYears: 2, teamHistory: historyUpdated,
             };
           }),
           challengerTeams: (state.challengerTeams || []).map(t => t.id === target.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) } : t),
           challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
-            type: "CDL_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.challengerTeamId ?? null, toTeamId: userTeam,
-            note: `${tag} signed ${target.name}`,
+            type: target.status === "freeAgent" ? "FREE_AGENT_SIGNING" : "CDL_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.previousTeamId ?? target.challengerTeamId ?? null, toTeamId: userTeam,
+            note: target.status === "freeAgent" ? `${tag} signed ${target.name} in free agency` : `${tag} signed ${target.name}`,
           }),
         }, `${target.name} signed!`),
         [mkFeed("signing", `${tag} sign ${target.name}`, state.season, phase)]

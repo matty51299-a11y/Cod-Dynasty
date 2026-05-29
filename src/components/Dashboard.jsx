@@ -6,7 +6,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
 import { calcTeamOvr } from "../engine/teamOvr.js";
-import { getSigningCost, getResignDemand } from "../engine/rosterAI.js";
+import { getSigningCost, getResignDemand, getTeamCap } from "../engine/rosterAI.js";
 import { getContractReviewBudget } from "../utils/contractBudget.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
@@ -29,6 +29,10 @@ function placementText(place) {
 function readableMoveType(type) {
   const t = String(type || "");
   if (t === "CDL_SIGNING") return "Signing";
+  if (t === "FREE_AGENT_ENTERED") return "Free agent";
+  if (t === "FREE_AGENT_SIGNING") return "FA signing";
+  if (t === "FREE_AGENT_TO_CHALLENGERS") return "To Challengers";
+  if (t === "FREE_AGENT_RETIRED") return "Retirement";
   if (t === "CDL_RELEASE_TO_CHALLENGERS") return "Release";
   if (t === "RETIREMENT") return "Retirement";
   if (t === "EMERGENCY_ROSTER_FILL") return "Emergency fill";
@@ -329,9 +333,9 @@ export default function Dashboard({ setScreen }) {
             )}
             {isOffseason && (
               <>
-                <span className="db-cb-cta-hint">Season complete</span>
-                <button className="btn-cta" onClick={() => dispatch({ type: "ENTER_CONTRACT_PHASE" })}>
-                  Review Contracts →
+                <span className="db-cb-cta-hint">{state.offseason?.freeAgencyOpen ? "Free agency open" : "Season complete"}</span>
+                <button className="btn-cta" onClick={() => dispatch({ type: state.offseason?.freeAgencyOpen ? "ADVANCE_OFFSEASON" : "ENTER_CONTRACT_PHASE" })}>
+                  {state.offseason?.freeAgencyOpen ? "Advance Offseason →" : "Review Contracts →"}
                 </button>
               </>
             )}
@@ -772,9 +776,12 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
     return { team: t, ovr: calcTeamOvr(t.id, players || []), keyPlayer, prev };
   }).sort((a, b) => b.ovr - a.ovr).slice(0, 6);
 
+  const freeAgencyOpen = !!state.offseason?.freeAgencyOpen;
   const primaryAction = isContracts
-    ? { label: `Continue to Season ${nextSeason} →`, hint: "Process contracts, progression, free agency, and AI moves", type: "ADVANCE_OFFSEASON" }
-    : { label: "Review Contracts →", hint: "Lock in extensions before the new season", type: "ENTER_CONTRACT_PHASE" };
+    ? { label: "Open Free Agency →", hint: "Process expiring contracts; AI waits while you shop the market", type: "ADVANCE_OFFSEASON" }
+    : freeAgencyOpen
+      ? { label: `Run AI Free Agency → Season ${nextSeason}`, hint: "Sign anyone you want first; AI bids after this click", type: "ADVANCE_OFFSEASON" }
+      : { label: "Review Contracts →", hint: "Lock in extensions before the market opens", type: "ENTER_CONTRACT_PHASE" };
 
   return (
     <div className="dashboard offseason-hub">
@@ -821,7 +828,7 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
               playerSeasonStats={state.playerSeasonStats}
             />
             <div className="oh-contract-footer">
-              <span>{isContracts ? "Ready to process offseason once your roster decisions are set." : "Enter the contract period to preserve the current offseason flow."}</span>
+              <span>{isContracts ? "Unre-signed players will enter free agency first." : freeAgencyOpen ? "Open market is live. AI teams wait until you advance." : "Enter the contract period to preserve the current offseason flow."}</span>
               <button className="btn-primary" onClick={() => dispatch({ type: primaryAction.type })}>{primaryAction.label}</button>
             </div>
           </section>
@@ -899,15 +906,22 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
           </section>
 
           <section className="oh-card">
-            <div className="oh-card-header"><h3>Top Available Players</h3><button className="db-rp-link" onClick={() => setScreen?.("fa")}>Free Agency →</button></div>
+            <div className="oh-card-header"><h3>{freeAgencyOpen ? "Free Agents — User Window" : "Top Available Players"}</h3><button className="db-rp-link" onClick={() => setScreen?.("fa")}>Free Agency →</button></div>
+            {freeAgencyOpen && <p className="oh-empty">AI signings are paused until you advance. Normal cap and roster limits apply.</p>}
             {available.length ? <div className="oh-list compact">
-              {available.map(ply => (
+              {available.map(ply => {
+                const roster = players.filter(p => p.teamId === userTeamId);
+                const starters = roster.filter(p => !p.isSub);
+                const committed = starters.reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
+                const canSign = freeAgencyOpen && starters.length < 4 && committed + getSigningCost(ply) <= getTeamCap(userTeamId);
+                return (
                 <div className="oh-available-row" key={ply.id}>
                   <button className="link-button player-link" onClick={() => openPlayerProfile(ply.id)}>{ply.name}</button>
                   <span>{ply.primary || ply.role || "Role TBD"} · {ply.overall || "—"}/{ply.potential || "—"}</span>
                   <em>{fmtMoney(getSigningCost(ply))} · {stockLabel(ply)} · {ply.region || "NA"}</em>
+                  {freeAgencyOpen && (canSign ? <button className="btn-primary-sm" onClick={() => dispatch({ type: "SIGN_PLAYER", playerId: ply.id, slotType: "starter" })}>Sign</button> : <small className="muted">Full/over cap</small>)}
                 </div>
-              ))}
+              );})}
             </div> : <p className="oh-empty">No available players found.</p>}
           </section>
         </aside>
