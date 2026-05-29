@@ -10,11 +10,41 @@ import { getSigningCost, getResignDemand } from "../engine/rosterAI.js";
 import { getContractReviewBudget } from "../utils/contractBudget.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { getMajorPlacementMap } from "../utils/historyProfiles.js";
+import { isInactivePlayer } from "../utils/playerIdentity.js";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
-function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
+function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
+function placementText(place) {
+  if (place == null) return "Not tracked yet";
+  const n = Number(place);
+  if (n === 1) return "1st";
+  if (n === 2) return "2nd";
+  if (n === 3) return "3rd";
+  return `${n}th`;
+}
+function readableMoveType(type) {
+  const t = String(type || "");
+  if (t === "CDL_SIGNING") return "Signing";
+  if (t === "CDL_RELEASE_TO_CHALLENGERS") return "Release";
+  if (t === "RETIREMENT") return "Retirement";
+  if (t === "EMERGENCY_ROSTER_FILL") return "Emergency fill";
+  if (t === "INACTIVE") return "Inactive";
+  return t.replaceAll("_", " ").toLowerCase().replace(/^./, c => c.toUpperCase());
+}
+function stockLabel(player) {
+  const ovr = player?.overall || 0;
+  const pot = player?.potential || ovr;
+  if (isInactivePlayer(player)) return "Inactive";
+  if (pot >= 88 && ovr >= 75) return "Blue-chip";
+  if (pot >= 86) return "High upside";
+  if (ovr >= 82) return "Ready now";
+  if (player?.isProspect) return "Developmental";
+  return "Depth option";
+}
 
 // Darken a hex color until it meets the target contrast ratio vs white (#ffffff).
 // minRatio: 4.5 for body text, 3.0 for large/bold text (WCAG AA).
@@ -56,14 +86,10 @@ function chemColor(chem) {
   return "#dc2626";
 }
 
-// Hex color with alpha suffix (e.g. teamColor + "18" = 9% opacity)
-function hexAlpha(hex, alphaHex) {
-  return `${hex}${alphaHex}`;
-}
-
 export default function Dashboard({ setScreen }) {
   const { state, dispatch } = useGame();
   const { openTeamHub } = useTeamHub();
+  const { openPlayerProfile } = usePlayerProfile();
   const [expandedIdx, setExpandedIdx] = useState(null);
 
   if (!state) return null;
@@ -163,6 +189,27 @@ export default function Dashboard({ setScreen }) {
   const teamHexSafe = ensureContrast(teamHex, 3.0);   // large/bold text threshold
   const teamHexBody = ensureContrast(teamHex, 4.5);   // body-size text threshold
   const bannerGradient = `linear-gradient(135deg, ${teamHex}18 0%, #ffffff 60%)`;
+
+  if (isOffseason || isContracts) {
+    return (
+      <OffseasonHub
+        state={state}
+        dispatch={dispatch}
+        setScreen={setScreen}
+        userTeamId={userTeamId}
+        team={team}
+        season={season}
+        players={players}
+        myPlayers={myPlayers}
+        mySeason={mySeason}
+        chem={chem}
+        teamOvr={teamOvr}
+        isContracts={isContracts}
+        openTeamHub={openTeamHub}
+        openPlayerProfile={openPlayerProfile}
+      />
+    );
+  }
 
   return (
     <div className="dashboard">
@@ -626,7 +673,6 @@ export default function Dashboard({ setScreen }) {
                 {remainingFixtures.map((m, i) => {
                   const oppId  = m.a === userTeamId ? m.b : m.a;
                   const oppTeam = CDL_TEAMS.find(t => t.id === oppId);
-                  const oppRec  = stageStandings[oppId] ?? { wins: 0, losses: 0 };
                   return (
                     <div key={i} className="db-fixture-row">
                       <span className="db-fixture-you" style={{ color: teamHexBody }}>
@@ -668,6 +714,216 @@ export default function Dashboard({ setScreen }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+
+function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, players, myPlayers, mySeason, chem, teamOvr, isContracts, openTeamHub, openPlayerProfile }) {
+  const schedule = state.schedule || {};
+  const activeStarters = myPlayers.filter(p => !p.isSub && !isInactivePlayer(p));
+  const subs = myPlayers.filter(p => p.isSub && !isInactivePlayer(p));
+  const roles = ["Main AR", "Flex", "Entry SMG", "Slayer SMG"];
+  const roleCounts = roles.map(role => ({ role, count: activeStarters.filter(p => p.primary === role).length }));
+  const missingRoles = roleCounts.filter(r => r.count === 0).map(r => r.role);
+  const weakest = activeStarters.length ? [...activeStarters].sort((a, b) => (a.overall || 0) - (b.overall || 0))[0] : null;
+  const bestPlayer = activeStarters.length ? [...activeStarters].sort((a, b) => (b.overall || 0) - (a.overall || 0))[0] : null;
+  const { cap, lockedCost, space } = getContractReviewBudget(myPlayers, userTeamId);
+  const rosterWarning = activeStarters.length < 4 ? `Roster incomplete: ${activeStarters.length}/4 starters signed.` : null;
+  const completedSeason = season;
+  const nextSeason = Number(season || 1) + 1;
+
+  const standingsRows = CDL_TEAMS
+    .map(t => ({ ...t, rec: schedule.standings?.[t.id] || { wins: 0, losses: 0, points: 0 } }))
+    .sort((a, b) => (b.rec.points || 0) - (a.rec.points || 0) || (b.rec.wins || 0) - (a.rec.wins || 0));
+  const standingsWinner = standingsRows[0] || null;
+  const champs = schedule.majors?.[4];
+  const champsWinnerId = champs?.bracket?.champion || null;
+  const champsWinner = champsWinnerId ? resolveTeamDisplay(champsWinnerId, schedule) : null;
+  const champsPlacement = champs?.bracket ? getMajorPlacementMap(champs)[userTeamId] : null;
+  const majorWinners = (schedule.majors || []).slice(0, 4).map((major, idx) => ({
+    name: major?.name || `Major ${idx + 1}`,
+    winnerId: major?.bracket?.champion || null,
+    winner: major?.bracket?.champion ? resolveTeamDisplay(major.bracket.champion, schedule) : null,
+  }));
+  const seasonAwards = (state.awards || []).filter(a => Number(a.season) === Number(completedSeason));
+  const awardByKey = key => seasonAwards.find(a => a.key === key) || null;
+  const seasonMvp = awardByKey("season_mvp");
+  const rookie = awardByKey("rookie_of_year");
+  const champsMvp = awardByKey("champs_mvp");
+
+  const recentMoves = [...(state.challengerTransactions || [])]
+    .filter(tx => Number(tx.season ?? completedSeason) === Number(completedSeason))
+    .slice(-8)
+    .reverse();
+  const graduates = recentMoves.filter(tx => tx.type === "CDL_SIGNING" && tx.fromTeamId && tx.toTeamId).slice(0, 5);
+  const available = [
+    ...(players || []).filter(ply => !ply.teamId),
+    ...(state.prospects || []),
+  ]
+    .filter((ply, idx, arr) => arr.findIndex(x => x.id === ply.id) === idx)
+    .sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0))
+    .slice(0, 6);
+  const powerRankings = CDL_TEAMS.map(t => {
+    const starters = (players || []).filter(ply => ply.teamId === t.id && !ply.isSub && !isInactivePlayer(ply));
+    const keyPlayer = starters.sort((a, b) => (b.overall || 0) - (a.overall || 0))[0];
+    const history = (state.teamCareerHistory || []).find(h => h.teamId === t.id && Number(h.season) === Number(completedSeason));
+    const prev = history?.champs?.placement || history?.bestChamps || (history?.record ? `${history.record.wins}W-${history.record.losses}L` : "Season archived");
+    return { team: t, ovr: calcTeamOvr(t.id, players || []), keyPlayer, prev };
+  }).sort((a, b) => b.ovr - a.ovr).slice(0, 6);
+
+  const primaryAction = isContracts
+    ? { label: `Continue to Season ${nextSeason} →`, hint: "Process contracts, progression, free agency, and AI moves", type: "ADVANCE_OFFSEASON" }
+    : { label: "Review Contracts →", hint: "Lock in extensions before the new season", type: "ENTER_CONTRACT_PHASE" };
+
+  return (
+    <div className="dashboard offseason-hub">
+      <section className="oh-hero" style={{ borderTopColor: team?.color || "var(--accent)" }}>
+        <div className="oh-hero-left">
+          <TeamLogo team={resolveTeamDisplay(userTeamId, schedule)} size={54} className="oh-logo" />
+          <div>
+            <div className="oh-kicker">Season {completedSeason} Complete</div>
+            <h2>Offseason Hub</h2>
+            <div className="oh-team-line">
+              <button className="link-button team-link" onClick={() => openTeamHub(userTeamId)}>{team?.name || userTeamId}</button>
+              <span>{mySeason.wins}W – {mySeason.losses}L</span>
+              <span>{mySeason.points || 0} CDL pts</span>
+              <span>{champsPlacement ? `Champs: ${placementText(champsPlacement)}` : "Champs: Not tracked"}</span>
+            </div>
+          </div>
+        </div>
+        <div className="oh-hero-stats">
+          <div><span>Team OVR</span><strong>{teamOvr || "—"}</strong></div>
+          <div><span>Chemistry</span><strong>{chem} <em>{chemLabel(chem)}</em></strong></div>
+          <div><span>Cap Space</span><strong>{fmtMoney(Math.max(0, space))}</strong></div>
+        </div>
+        <div className="oh-hero-action">
+          <span>{primaryAction.hint}</span>
+          <button className="btn-cta" onClick={() => dispatch({ type: primaryAction.type })}>{primaryAction.label}</button>
+        </div>
+      </section>
+
+      <div className="oh-layout">
+        <main className="oh-main">
+          <section className="oh-card oh-contract-card">
+            <div className="oh-card-header">
+              <div>
+                <h3>Your Team Contract Center</h3>
+                <p>{activeStarters.length}/4 starters · {subs.length} sub · locked {fmtMoney(lockedCost)} / {fmtMoney(cap)}</p>
+              </div>
+              {rosterWarning ? <span className="oh-warning">{rosterWarning}</span> : <span className="oh-ok">Roster complete</span>}
+            </div>
+            <ContractReviewPanel
+              players={myPlayers}
+              dispatch={dispatch}
+              season={season}
+              userTeamId={userTeamId}
+              playerSeasonStats={state.playerSeasonStats}
+            />
+            <div className="oh-contract-footer">
+              <span>{isContracts ? "Ready to process offseason once your roster decisions are set." : "Enter the contract period to preserve the current offseason flow."}</span>
+              <button className="btn-primary" onClick={() => dispatch({ type: primaryAction.type })}>{primaryAction.label}</button>
+            </div>
+          </section>
+
+          <section className="oh-card">
+            <div className="oh-card-header"><h3>Roster Needs / Team Outlook</h3></div>
+            <div className="oh-outlook-grid">
+              <div><span>Need</span><strong>{missingRoles.length ? missingRoles.map(r => `1 ${r}`).join(", ") : "No role gaps"}</strong></div>
+              <div><span>Roles covered</span><strong>{roleCounts.filter(r => r.count > 0).map(r => r.role).join(", ") || "None"}</strong></div>
+              <div><span>Weakest starter</span><strong>{weakest ? `${weakest.name} (${weakest.overall})` : "No starters"}</strong></div>
+              <div><span>Best player</span><strong>{bestPlayer ? `${bestPlayer.name} (${bestPlayer.overall})` : "No starters"}</strong></div>
+              <div><span>Core under contract</span><strong>{activeStarters.filter(p => (p.contractYears ?? 2) > 1).map(p => p.name).slice(0, 4).join(", ") || "None locked yet"}</strong></div>
+              <div><span>Available now</span><strong>{fmtMoney(Math.max(0, space))}</strong></div>
+            </div>
+          </section>
+
+          <section className="oh-card">
+            <div className="oh-card-header"><h3>Early Power Rankings</h3></div>
+            <div className="oh-list">
+              {powerRankings.map((row, idx) => (
+                <div className="oh-rank-row" key={row.team.id}>
+                  <span className="oh-rank-num">#{idx + 1}</span>
+                  <TeamLogo team={row.team} size={24} />
+                  <button className="link-button team-link" onClick={() => openTeamHub(row.team.id)}>{row.team.name}</button>
+                  <strong>{row.ovr || "—"} OVR</strong>
+                  <span>{row.keyPlayer?.name || "No key player"}</span>
+                  <em>{row.prev || "No previous result"}</em>
+                </div>
+              ))}
+            </div>
+          </section>
+        </main>
+
+        <aside className="oh-side">
+          <section className="oh-card">
+            <div className="oh-card-header"><h3>Season Recap</h3></div>
+            <div className="oh-recap-list">
+              <RecapRow label="Champs Winner" value={champsWinner?.name || "Not tracked"} teamId={champsWinnerId} openTeamHub={openTeamHub} />
+              <RecapRow label="Your Champs Result" value={champsPlacement ? placementText(champsPlacement) : "Not tracked"} />
+              <RecapRow label="Season Standings Winner" value={standingsWinner?.name || "Not tracked"} teamId={standingsWinner?.id} openTeamHub={openTeamHub} />
+              <RecapRow label="Season MVP" value={seasonMvp?.playerName || "Not awarded"} playerId={seasonMvp?.playerId} openPlayerProfile={openPlayerProfile} />
+              <RecapRow label="Rookie of the Year" value={rookie?.playerName || "No eligible rookie"} playerId={rookie?.playerId} openPlayerProfile={openPlayerProfile} />
+              <RecapRow label="Champs MVP" value={champsMvp?.playerName || "Not awarded"} playerId={champsMvp?.playerId} openPlayerProfile={openPlayerProfile} />
+            </div>
+            <div className="oh-major-winners">
+              {majorWinners.map(m => (
+                <div key={m.name}><span>{m.name}</span>{m.winnerId ? <button className="link-button team-link" onClick={() => openTeamHub(m.winnerId)}>{m.winner?.tag || m.winnerId}</button> : <em>—</em>}</div>
+              ))}
+            </div>
+          </section>
+
+          <section className="oh-card">
+            <div className="oh-card-header"><h3>League Moves</h3></div>
+            {recentMoves.length ? <div className="oh-list compact">
+              {recentMoves.map((tx, idx) => (
+                <div className="oh-move-row" key={`${tx.playerId || tx.playerName}_${idx}`}>
+                  <strong>{readableMoveType(tx.type)}</strong>
+                  <span>{tx.note || `${tx.playerName} ${readableMoveType(tx.type).toLowerCase()}`}</span>
+                </div>
+              ))}
+            </div> : <p className="oh-empty">No offseason moves yet.</p>}
+          </section>
+
+          <section className="oh-card">
+            <div className="oh-card-header"><h3>Challenger Graduates</h3></div>
+            {graduates.length ? <div className="oh-list compact">
+              {graduates.map((tx, idx) => (
+                <div className="oh-grad-row" key={`${tx.playerId}_${idx}`}>
+                  <button className="link-button player-link" onClick={() => openPlayerProfile(tx.playerId)}>{tx.playerName}</button>
+                  <span>{resolveTeamDisplay(tx.fromTeamId, schedule).name} → {resolveTeamDisplay(tx.toTeamId, schedule).tag}</span>
+                  <em>{players.find(p => p.id === tx.playerId)?.primary || "Role TBD"} · {stockLabel(players.find(p => p.id === tx.playerId) || {})}</em>
+                </div>
+              ))}
+            </div> : <p className="oh-empty">No Challenger graduates yet.</p>}
+          </section>
+
+          <section className="oh-card">
+            <div className="oh-card-header"><h3>Top Available Players</h3><button className="db-rp-link" onClick={() => setScreen?.("fa")}>Free Agency →</button></div>
+            {available.length ? <div className="oh-list compact">
+              {available.map(ply => (
+                <div className="oh-available-row" key={ply.id}>
+                  <button className="link-button player-link" onClick={() => openPlayerProfile(ply.id)}>{ply.name}</button>
+                  <span>{ply.primary || ply.role || "Role TBD"} · {ply.overall || "—"}/{ply.potential || "—"}</span>
+                  <em>{fmtMoney(getSigningCost(ply))} · {stockLabel(ply)} · {ply.region || "NA"}</em>
+                </div>
+              ))}
+            </div> : <p className="oh-empty">No available players found.</p>}
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function RecapRow({ label, value, teamId, playerId, openTeamHub, openPlayerProfile }) {
+  const clickable = teamId || playerId;
+  return (
+    <div className="oh-recap-row">
+      <span>{label}</span>
+      {clickable ? (
+        <button className={`link-button ${teamId ? "team-link" : "player-link"}`} onClick={() => teamId ? openTeamHub?.(teamId) : openPlayerProfile?.(playerId)}>{value}</button>
+      ) : <strong>{value}</strong>}
     </div>
   );
 }
