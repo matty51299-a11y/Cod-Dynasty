@@ -4,15 +4,17 @@
 
 import { useGame } from "../store/gameStore.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 export default function KDLeaders() {
   const { state } = useGame();
   const { openTeamHub } = useTeamHub();
+  const { openPlayerProfile } = usePlayerProfile();
   if (!state) return null;
 
-  const { schedule, players, season, userTeamId } = state;
+  const { schedule, season, userTeamId } = state;
   const matchLog = schedule?.matchLog ?? [];
 
   if (matchLog.length === 0) {
@@ -86,7 +88,7 @@ export default function KDLeaders() {
                       ? <span className="kd-medal">{["🥇","🥈","🥉"][i]}</span>
                       : <span className="kd-rank-num">{i + 1}</span>}
                   </td>
-                  <td className="kd-td kd-td-name">{row.name}</td>
+                  <td className="kd-td kd-td-name"><button className="link-button player-link" onClick={() => openPlayerProfile(row.id)}>{row.name}</button></td>
                   <td className="kd-td">
                     <span
                       className="kd-team-tag team-link"

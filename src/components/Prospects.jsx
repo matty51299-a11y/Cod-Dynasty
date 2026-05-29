@@ -10,6 +10,8 @@ import PoolHealth from "./PoolHealth.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
+import { usePlayerProfile } from "../store/playerProfileContext.jsx";
+import { useTeamHub } from "../store/teamHubContext.jsx";
 
 function ratingColor(v) {
   if (v >= 90) return "#166534";
@@ -54,6 +56,8 @@ function challengerStockLabel(p) {
 
 export default function Prospects() {
   const { state, dispatch } = useGame();
+  const { openPlayerProfile } = usePlayerProfile();
+  const { openTeamHub } = useTeamHub();
   const [roleFilter, setRoleFilter] = useState("All");
   const [archFilter, setArchFilter] = useState("All");
   const [sortKey, setSortKey] = useState("scoutedOverall");
@@ -138,8 +142,8 @@ export default function Prospects() {
           <span className="cm-chip">Cap: <strong>${(teamCap / 1000).toFixed(0)}k</strong></span>
           <span className="cm-chip">Committed: <strong>${(committed / 1000).toFixed(0)}k</strong></span>
           <span className="cm-chip">Remaining: <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong></span>
-          {stats.top && <span className="cm-chip">Top Available: <strong>{stats.top.name}</strong></span>}
-          {stats.topPot && <span className="cm-chip">Highest Potential: <strong>{stats.topPot.name}</strong></span>}
+          {stats.top && <span className="cm-chip">Top Available: <button className="link-button player-link" onClick={() => openPlayerProfile(stats.top)}>{stats.top.name}</button></span>}
+          {stats.topPot && <span className="cm-chip">Highest Potential: <button className="link-button player-link" onClick={() => openPlayerProfile(stats.topPot)}>{stats.topPot.name}</button></span>}
         </div>
         <div className="cm-budget-bar"><div style={{ width: `${budgetPct}%`, background: budgetColor }} /></div>
       </div>
@@ -154,7 +158,7 @@ export default function Prospects() {
             <tbody>{challengerTeams.map(t => {
               const roster = t.playerIds.map(pid => prospects.find(p => p.id===pid) || players.find(p=>p.id===pid)).filter(Boolean);
               const ovr = roster.length ? Math.round(roster.reduce((s,p)=>s+(p.overall??65),0)/roster.length) : 0;
-              return <tr key={t.id}><td>{t.tag} · {t.name}</td><td>{t.region}</td><td>{ovr}</td><td>{roster.map(p=>p.name).join(", ")}</td><td>{t.circuitPoints ?? 0}</td><td>{t.form ?? 0}</td><td>{t.lastQualifierPlacement ?? "-"}</td></tr>;
+              return <tr key={t.id}><td><button className="link-button team-link" onClick={() => openTeamHub(t.id)}>{t.tag} · {t.name}</button></td><td>{t.region}</td><td>{ovr}</td><td>{roster.map((p, idx)=><span key={p.id}>{idx > 0 ? ", " : ""}<button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></span>)}</td><td>{t.circuitPoints ?? 0}</td><td>{t.form ?? 0}</td><td>{t.lastQualifierPlacement ?? "-"}</td></tr>;
             })}</tbody>
           </table>
         </div>
@@ -173,7 +177,7 @@ export default function Prospects() {
               const tDisplay = { ...resolveTeamDisplay(team.id, schedule), ...team };
               return <tr key={`${latestQualifier.season}_${latestQualifier.majorIdx}_${row.teamId}`} style={row.qualified ? { background: "rgba(52,211,153,0.12)" } : undefined}>
                 <td><strong>{row.placement}</strong></td>
-                <td><TeamLogo team={tDisplay} size={16} /> {team.tag} · {team.name}</td>
+                <td><button className="link-button team-link" onClick={() => openTeamHub(team.id)}><TeamLogo team={tDisplay} size={16} /> {team.tag} · {team.name}</button></td>
                 <td>{team.region || "-"}</td>
                 <td>{row.teamOvr ?? "-"}</td>
                 <td>{row.score ?? "-"}</td>
@@ -189,9 +193,9 @@ export default function Prospects() {
           const top4 = q.teams.slice().sort((a,b)=>a.placement-b.placement).slice(0,4);
           const winner = top4[0];
           return <details key={`${q.season}_${q.majorIdx}_${idx}`} style={{ marginBottom: 8 }}>
-            <summary>Season {q.season} · Major {Number(q.majorIdx) + 1} Qualifier — Winner: {teamMap[winner?.teamId]?.name || winner?.teamId}</summary>
+            <summary>Season {q.season} · Major {Number(q.majorIdx) + 1} Qualifier — Winner: <button className="link-button team-link" onClick={(e) => { e.preventDefault(); openTeamHub(winner?.teamId); }}>{teamMap[winner?.teamId]?.name || winner?.teamId}</button></summary>
             <ol style={{ marginTop: 6 }}>
-              {top4.map(r => <li key={r.teamId}>{teamMap[r.teamId]?.name || r.teamId} — Qualified</li>)}
+              {top4.map(r => <li key={r.teamId}><button className="link-button team-link" onClick={() => openTeamHub(r.teamId)}>{teamMap[r.teamId]?.name || r.teamId}</button> — Qualified</li>)}
             </ol>
           </details>;
         })}
@@ -202,7 +206,7 @@ export default function Prospects() {
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {(challengerTransactions || []).slice(-10).reverse().map((tx, i) => (
               <li key={`${tx.playerId}_${tx.season}_${i}`} style={{ marginBottom: 4 }}>
-                S{tx.season} · {transactionLabel(tx.type)} · {tx.note || `${tx.playerName} moved`}
+                S{tx.season} · {transactionLabel(tx.type)} · <button className="link-button player-link" onClick={() => openPlayerProfile(tx.playerId)}>{tx.playerName}</button>{tx.note ? ` — ${tx.note}` : " moved"}
               </li>
             ))}
           </ul>
@@ -264,7 +268,7 @@ export default function Prospects() {
               return (
                 <tr key={p.id}>
                   <td className="player-name">
-                    {p.name}
+                    <button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button>
                     {p.scouted && <span className="signed-badge"> ✓</span>}
                   </td>
                   <td>{p.age}</td>

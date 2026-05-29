@@ -3,6 +3,7 @@
 // Used by Dashboard recent results, MatchLog, and MajorBracket match cards.
 
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 
 function makeTag(schedule)   { return (id) => resolveTeamDisplay(id, schedule).tag ?? id; }
 function makeColor(schedule) { return (id) => resolveTeamDisplay(id, schedule).color ?? "#aaa"; }
@@ -23,7 +24,7 @@ function modeColor(short) {
 }
 
 // ── Player stats table ───────────────────────────────────────────────────────
-function StatsTable({ teamId, teamName: tName, stats, won, color }) {
+function StatsTable({ teamId, teamName: tName, stats, won, color, onPlayer }) {
   const sorted = [...stats].sort((a, b) => (b.kd ?? 0) - (a.kd ?? 0));
 
   return (
@@ -53,7 +54,7 @@ function StatsTable({ teamId, teamName: tName, stats, won, color }) {
           ) : (
             sorted.map((s, i) => (
               <tr key={i}>
-                <td className="player-name">{s.name}</td>
+                <td className="player-name"><button className="link-button player-link" onClick={() => onPlayer(s.id)}>{s.name}</button></td>
                 <td>{s.kills}</td>
                 <td>{s.deaths}</td>
                 <td style={{ color: kdColor(s.kd ?? 0), fontWeight: 600 }}>
@@ -70,8 +71,8 @@ function StatsTable({ teamId, teamName: tName, stats, won, color }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function SeriesDetail({ result, schedule = null }) {
+  const { openPlayerProfile } = usePlayerProfile();
   if (!result) return null;
-
   const tag = makeTag(schedule);
   const color = makeColor(schedule);
 
@@ -92,7 +93,7 @@ export default function SeriesDetail({ result, schedule = null }) {
     );
   }
 
-  const rawStats = Object.values(playerStats || {});
+  const rawStats = Object.entries(playerStats || {}).map(([id, stats]) => ({ id, ...stats }));
   const statsA   = rawStats.filter(s => s.teamId === teamAId);
   const statsB   = rawStats.filter(s => s.teamId === teamBId);
 
@@ -178,6 +179,7 @@ export default function SeriesDetail({ result, schedule = null }) {
             stats={statsA}
             won={teamAId === winnerId}
             color={color}
+            onPlayer={openPlayerProfile}
           />
           <StatsTable
             teamId={teamBId}
@@ -185,6 +187,7 @@ export default function SeriesDetail({ result, schedule = null }) {
             stats={statsB}
             won={teamBId === winnerId}
             color={color}
+            onPlayer={openPlayerProfile}
           />
         </div>
       </div>

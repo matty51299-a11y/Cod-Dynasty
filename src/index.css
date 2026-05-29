@@ -6601,3 +6601,114 @@ body { margin: 0; }
 .roster-warning strong {
   color: #ff6450;
 }
+
+.link-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.player-link,
+.team-link.link-button {
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.player-link:hover,
+.team-link.link-button:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.profile-modal {
+  max-height: 88vh;
+}
+
+.profile-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.profile-stat {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg3);
+}
+
+.profile-stat span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.profile-stat strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-head);
+}
+
+.profile-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.profile-tabs button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg3);
+  color: var(--text-dim);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.profile-tabs button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.profile-tabs.compact {
+  margin-top: 8px;
+}
+
+.profile-season-meta {
+  flex-wrap: wrap;
+}
+
+.profile-event-table td,
+.profile-event-table th {
+  font-size: 12px;
+}
+
+.team-history-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.team-history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg3);
+  font-size: 12px;
+}
+
+.team-history-roster {
+  margin-top: 10px;
+  line-height: 1.6;
+}

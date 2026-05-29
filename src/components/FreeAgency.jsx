@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 import { isInactivePlayer } from "../utils/playerIdentity.js";
+import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 
 const RATING_KEYS = ["gunny","awareness","objective","searchIQ","clutch","teamwork","composure","adaptability"];
 
@@ -19,6 +20,7 @@ function ratingColor(v) {
 
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
+  const { openPlayerProfile } = usePlayerProfile();
   const [sortKey, setSortKey] = useState("overall");
   const [roleFilter, setRoleFilter] = useState("All");
   const [signAs, setSignAs] = useState({}); // playerId -> "starter" | "sub"
@@ -116,7 +118,7 @@ export default function FreeAgency() {
               const canAfford   = overBy === 0;
               return (
                 <tr key={p.id}>
-                  <td className="player-name">{p.name}</td>
+                  <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></td>
                   <td>{p.age}</td>
                   <td><span className="role-pill">{p.primary}</span></td>
                   <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>

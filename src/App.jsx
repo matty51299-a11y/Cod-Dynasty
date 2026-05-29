@@ -7,6 +7,7 @@ import { useGame, saveGame, loadGame, deleteSave } from "./store/gameStore.jsx";
 import { isValidGameState } from "./store/gameValidation.js";
 import "./engine/poolReport.js"; // registers window.poolReport() console utility
 import { TeamHubProvider }        from "./store/teamHubContext.jsx";
+import { PlayerProfileProvider }  from "./store/playerProfileContext.jsx";
 import { MatchCenterProvider }    from "./store/matchCenterContext.jsx";
 import ErrorBoundary              from "./components/ErrorBoundary.jsx";
 import MatchCenterOverlay         from "./components/MatchCenterOverlay.jsx";
@@ -27,6 +28,7 @@ import ChallengerQualifierOverlay from "./components/ChallengerQualifierOverlay.
 import MajorTournamentOverlay from "./components/MajorTournamentOverlay.jsx";
 import OffseasonReport   from "./components/OffseasonReport.jsx";
 import TeamHubOverlay    from "./components/TeamHubOverlay.jsx";
+import PlayerProfileOverlay from "./components/PlayerProfileOverlay.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
 import { CDL_TEAMS }     from "./data/teams.js";
 
@@ -86,6 +88,7 @@ export default function App() {
     <ErrorBoundary>
     <MatchCenterProvider>
     <TeamHubProvider>
+    <PlayerProfileProvider>
     <div className="app">
       {/* ── Top bar ── */}
       <header className="topbar">
@@ -135,6 +138,7 @@ export default function App() {
         <MajorEntryOverlay />
         <MajorTournamentOverlay />
         <TeamHubOverlay />
+        <PlayerProfileOverlay />
         <NotificationsFeed isOpen={showFeed} onClose={() => setShowFeed(false)} />
 
         {/* Screen content */}
@@ -151,6 +155,7 @@ export default function App() {
         </main>
       </div>
     </div>
+    </PlayerProfileProvider>
     </TeamHubProvider>
     </MatchCenterProvider>
     </ErrorBoundary>

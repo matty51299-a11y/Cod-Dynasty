@@ -9,6 +9,7 @@ import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 
 function nameOf(id) { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function colorOf(id){ return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; }
@@ -16,6 +17,7 @@ function colorOf(id){ return CDL_TEAMS.find(t => t.id === id)?.color ?? "#aaa"; 
 export default function MatchLog() {
   const { state } = useGame();
   const { openTeamHub } = useTeamHub();
+  const { openPlayerProfile } = usePlayerProfile();
   const [expanded, setExpanded] = useState(null);
 
   if (!state) return null;
@@ -88,7 +90,7 @@ export default function MatchLog() {
                     <span className="rc-context">{r.stage}</span>
                     {r.standoutName && (
                       <span className="rc-standout">
-                        ★ <strong>{r.standoutName}</strong>
+                        ★ <button className="link-button player-link" onClick={(e) => { e.stopPropagation(); openPlayerProfile(r.standoutId); }}>{r.standoutName}</button>
                         {r.standoutKD > 0 && (
                           <span className="rc-standout-kd"> {r.standoutKD.toFixed(2)} K/D</span>
                         )}
