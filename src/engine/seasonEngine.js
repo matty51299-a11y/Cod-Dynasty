@@ -24,6 +24,7 @@ import tellurideBushLogo from "../assets/logos/challengers/Telluride_Bush_Gaming
 import fiveFearsLogo from "../assets/logos/challengers/FiveFears_logo.png";
 import fazeFalconsLogo from "../assets/logos/challengers/FazeFalconslogo.png";
 import forFunEsportsLogo from "../assets/logos/challengers/ForFunEsports.png";
+import { qualifierPlacementLabel } from "../utils/placementDisplay.js";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
 const CHALLENGER_REGIONS = {
@@ -322,13 +323,6 @@ function calcChallengerTeamOvr(team, gameState, cdlNames) {
   return { roster, ovr };
 }
 
-function placementLabel(placement) {
-  return placement === 1 ? "Qualifier Winner"
-    : placement === 2 ? "Qualifier Runner-up"
-    : placement === 3 ? "Qualifier 3rd"
-    : placement === 4 ? "Qualifier 4th"
-    : `Qualifier ${placement}th`;
-}
 
 function buildChallengerQualifierField(gameState, schedule) {
   ensureChallengerTeams(gameState);
@@ -510,7 +504,7 @@ function finalizeChallengerQualifier(gameState, schedule, current) {
       ...row,
       placement,
       qualified,
-      placementLabel: placementLabel(placement),
+      placementLabel: qualifierPlacementLabel(placement),
       circuitPointsAwarded,
       circuitPointsAfter: (row.circuitPointsBefore ?? 0) + circuitPointsAwarded,
       formAfter,
@@ -621,7 +615,7 @@ function qualifierRowsToEventTeams(rows, gameState, schedule, eventKey = "major"
       ovr: row.teamOvr,
       qualifierPlacement: row.placement,
       qualifierSeed: row.seed,
-      qualifierLabel: row.placementLabel ?? placementLabel(row.placement),
+      qualifierLabel: row.placementLabel ?? qualifierPlacementLabel(row.placement),
       players: roster,
       playerIds: roster.map(p => p.id),
     };

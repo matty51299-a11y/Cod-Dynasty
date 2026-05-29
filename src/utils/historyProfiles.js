@@ -1,6 +1,7 @@
 import { CDL_TEAMS } from "../data/teams.js";
 import { isInactivePlayer } from "./playerIdentity.js";
 import { resolveTeamDisplay } from "./teamDisplay.js";
+import { placementRankValue, placementText } from "./placementDisplay.js";
 
 export function kd(kills, deaths) {
   if (!deaths && !kills) return null;
@@ -11,15 +12,6 @@ export function kdText(kills, deaths) {
   const value = kd(kills, deaths);
   return value == null ? "—" : value.toFixed(2);
 }
-
-export function placementText(place) {
-  if (place == null) return "Not tracked yet";
-  if (place === 1) return "1st";
-  if (place === 2) return "2nd";
-  if (place === 3) return "3rd";
-  return `T${place}`;
-}
-
 
 export function getSeriesResultText(match, teamId) {
   if (!match || !teamId) return "Not tracked yet";
@@ -269,12 +261,12 @@ export function buildPlayerHistory(state, player) {
   const challengerQualifierAppearances = events.filter(e => e.eventType === "challengerQualifier").length;
   const majorPlaces = events
     .filter(e => e.eventType === "major" && e.placement && e.placement !== "Not tracked yet")
-    .map(e => ({ text: e.placement, value: e.placement.startsWith("T") ? Number(e.placement.slice(1)) : Number.parseInt(e.placement, 10) }))
+    .map(e => ({ text: e.placement, value: placementRankValue(e.placement) }))
     .filter(e => Number.isFinite(e.value));
   const bestMajor = majorPlaces.length ? majorPlaces.sort((a, b) => a.value - b.value)[0].text : "Not tracked yet";
   const cqPlaces = events
     .filter(e => e.eventType === "challengerQualifier" && e.placement && e.placement !== "Not tracked yet")
-    .map(e => ({ text: e.placement, value: e.placement.startsWith("T") ? Number(e.placement.slice(1)) : Number.parseInt(e.placement, 10) }))
+    .map(e => ({ text: e.placement, value: placementRankValue(e.placement) }))
     .filter(e => Number.isFinite(e.value));
   const bestCQ = cqPlaces.length ? cqPlaces.sort((a, b) => a.value - b.value)[0].text : "Not tracked yet";
   return {

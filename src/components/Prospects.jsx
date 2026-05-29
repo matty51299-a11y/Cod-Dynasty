@@ -8,6 +8,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 import PoolHealth from "./PoolHealth.jsx";
 import TeamLogo from "./TeamLogo.jsx";
+import { placementText } from "../utils/placementDisplay.js";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
@@ -158,7 +159,7 @@ export default function Prospects() {
             <tbody>{challengerTeams.map(t => {
               const roster = t.playerIds.map(pid => prospects.find(p => p.id===pid) || players.find(p=>p.id===pid)).filter(Boolean);
               const ovr = roster.length ? Math.round(roster.reduce((s,p)=>s+(p.overall??65),0)/roster.length) : 0;
-              return <tr key={t.id}><td><button className="link-button team-link" onClick={() => openTeamHub(t.id)}>{t.tag} · {t.name}</button></td><td>{t.region}</td><td>{ovr}</td><td>{roster.map((p, idx)=><span key={p.id}>{idx > 0 ? ", " : ""}<button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></span>)}</td><td>{t.circuitPoints ?? 0}</td><td>{t.form ?? 0}</td><td>{t.lastQualifierPlacement ?? "-"}</td></tr>;
+              return <tr key={t.id}><td><button className="link-button team-link" onClick={() => openTeamHub(t.id)}>{t.tag} · {t.name}</button></td><td>{t.region}</td><td>{ovr}</td><td>{roster.map((p, idx)=><span key={p.id}>{idx > 0 ? ", " : ""}<button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></span>)}</td><td>{t.circuitPoints ?? 0}</td><td>{t.form ?? 0}</td><td>{t.lastQualifierPlacement != null ? placementText(t.lastQualifierPlacement) : "-"}</td></tr>;
             })}</tbody>
           </table>
         </div>
@@ -176,7 +177,7 @@ export default function Prospects() {
               const formDelta = (row.formAfter ?? 0) - (row.formBefore ?? 0);
               const tDisplay = { ...resolveTeamDisplay(team.id, schedule), ...team };
               return <tr key={`${latestQualifier.season}_${latestQualifier.majorIdx}_${row.teamId}`} style={row.qualified ? { background: "rgba(52,211,153,0.12)" } : undefined}>
-                <td><strong>{row.placement}</strong></td>
+                <td><strong>{placementText(row.placement)}</strong></td>
                 <td><button className="link-button team-link" onClick={() => openTeamHub(team.id)}><TeamLogo team={tDisplay} size={16} /> {team.tag} · {team.name}</button></td>
                 <td>{team.region || "-"}</td>
                 <td>{row.teamOvr ?? "-"}</td>
@@ -195,7 +196,7 @@ export default function Prospects() {
           return <details key={`${q.season}_${q.majorIdx}_${idx}`} style={{ marginBottom: 8 }}>
             <summary>Season {q.season} · Major {Number(q.majorIdx) + 1} Qualifier — Winner: <button className="link-button team-link" onClick={(e) => { e.preventDefault(); openTeamHub(winner?.teamId); }}>{teamMap[winner?.teamId]?.name || winner?.teamId}</button></summary>
             <ol style={{ marginTop: 6 }}>
-              {top4.map(r => <li key={r.teamId}><button className="link-button team-link" onClick={() => openTeamHub(r.teamId)}>{teamMap[r.teamId]?.name || r.teamId}</button> — Qualified</li>)}
+              {top4.map(r => <li key={r.teamId}><strong>{placementText(r.placement)}</strong> — <button className="link-button team-link" onClick={() => openTeamHub(r.teamId)}>{teamMap[r.teamId]?.name || r.teamId}</button> — Qualified</li>)}
             </ol>
           </details>;
         })}

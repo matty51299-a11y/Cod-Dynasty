@@ -466,3 +466,9 @@ Player shape (key fields):
 - Roster, Free Agency, K/D Leaders, Match Log standouts, SeriesDetail stat tables, Match Center stat rows, Challengers pool rows, Challenger team cards, qualifier field chips, and recent Challenger/CDL move entries now expose clickable player/team profile links where the underlying ids are available.
 - TeamHub now works as a broader Team Profile for CDL teams and persistent Challenger teams. It resolves Challenger teams from the save, shows current roster/OVR/record/points context, clickable roster players, season tabs, match-log-derived records/stat summaries, Major placement rows when available, and Challenger qualifier history/circuit-point rows where stored.
 - Added `scripts/testProfileHistory.mjs` to verify profile lookup and history aggregation from existing match logs without changing simulation, ratings, contracts, budgets, bracket logic, points, or logos.
+
+## Update 2026-05-29 (Placement band display formatter)
+- Added a shared placement display helper that renders event placement bands as `1st`, `2nd`, `3rd`, `4th`, `5th-6th`, `7th-8th`, `9th-12th`, and `13th-16th` instead of raw tie labels like `T5`.
+- Player profile Major/CQ summaries, player event rows, Team Profile season/event history, Challenger Qualifier final placements, Prospects qualifier history tables, and qualifier labels now use the same placement formatter.
+- Best Major and Best CQ summary ranking now parses formatted band labels safely, preserving existing-save compatibility while avoiding `T5` for 5th-6th finishes.
+- Added `scripts/testPlacementDisplay.mjs` to verify the required placement band wording and legacy shorthand normalization.
