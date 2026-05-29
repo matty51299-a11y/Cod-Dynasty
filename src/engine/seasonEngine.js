@@ -25,6 +25,7 @@ import fiveFearsLogo from "../assets/logos/challengers/FiveFears_logo.png";
 import fazeFalconsLogo from "../assets/logos/challengers/FazeFalconslogo.png";
 import forFunEsportsLogo from "../assets/logos/challengers/ForFunEsports.png";
 import { qualifierPlacementLabel } from "../utils/placementDisplay.js";
+import { archiveCompletedSeason } from "../utils/seasonArchive.js";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
 const CHALLENGER_REGIONS = {
@@ -1827,6 +1828,7 @@ export function enterContractPhase(gameState) {
 
 // ── Offseason ─────────────────────────────────────────────────────────────────
 export function advanceOffseason(gameState) {
+  gameState = archiveCompletedSeason(gameState);
   const standings      = gameState.schedule?.standings ?? {};
   const newSeason      = (gameState.schedule?.season ?? 1) + 1;
   const outgoingSeason = gameState.schedule?.season ?? 1;

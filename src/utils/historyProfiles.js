@@ -100,6 +100,8 @@ export function findPlayerEverywhere(state, ref) {
   for (const tx of state?.challengerTransactions || []) {
     if (String(tx.playerId) === id) return { id, name: tx.playerName, teamId: tx.toTeamId ?? tx.fromTeamId ?? null, status: "historical" };
   }
+  const archived = (state?.playerCareerHistory || []).find(h => String(h.playerId) === id);
+  if (archived) return { id, name: archived.playerName, teamId: archived.teams?.[archived.teams.length - 1] ?? null, status: "historical" };
   return null;
 }
 
@@ -117,6 +119,8 @@ export function findTeamEverywhere(state, teamId) {
     const row = (result.teams || []).find(r => r.teamId === id);
     if (row) return { id: row.teamId, name: row.teamName || row.teamId, tag: row.tag, region: row.region, circuit: "challengers" };
   }
+  const archived = (state?.teamCareerHistory || []).find(h => h.teamId === id);
+  if (archived) return { id, name: archived.teamName || id, tag: archived.tag || String(id).slice(0, 3).toUpperCase(), color: "#888", circuit: "historical" };
   return id ? { id, name: id, tag: String(id).slice(0, 3).toUpperCase(), color: "#888", circuit: "unknown" } : null;
 }
 
@@ -157,7 +161,21 @@ export function buildPlayerHistory(state, player) {
     return seasonMap.get(s);
   };
 
+  const archivedSeasons = new Set();
+  for (const archived of (state.playerCareerHistory || []).filter(h => String(h.playerId) === id)) {
+    const row = ensureSeason(archived.season);
+    archivedSeasons.add(row.season);
+    row.kills = archived.kills || 0;
+    row.deaths = archived.deaths || 0;
+    row.matches = archived.matches || 0;
+    row.maps = archived.maps || 0;
+    row.events = Array.isArray(archived.events) ? [...archived.events] : [];
+    for (const teamId of archived.teams || []) if (teamId) row.teams.add(teamId);
+    for (const role of archived.roles || []) if (role) row.roles.add(role);
+  }
+
   for (const h of (state.playerSeasonStats?.[id] || [])) {
+    if (archivedSeasons.has(Number(h.season))) continue;
     const row = ensureSeason(h.season);
     row.kills += h.kills || 0;
     row.deaths += h.deaths || 0;
@@ -169,6 +187,7 @@ export function buildPlayerHistory(state, player) {
     const ps = match.playerStats?.[id];
     if (!ps) continue;
     const season = match.season ?? state.schedule?.season ?? state.season;
+    if (archivedSeasons.has(Number(season))) continue;
     const row = ensureSeason(season);
     const maps = match.mapResults?.length || 0;
     row.kills += ps.kills || 0;
@@ -205,6 +224,7 @@ export function buildPlayerHistory(state, player) {
 
   for (const q of state.schedule?.challengerQualifierResults || []) {
     const season = q.season ?? state.season;
+    if (archivedSeasons.has(Number(season))) continue;
     for (const qMatch of q.matchLog || []) {
       const result = qMatch.result || qMatch;
       const ps = result.playerStats?.[id];
@@ -250,6 +270,17 @@ export function buildPlayerHistory(state, player) {
     if (th.teamId) row.teams.add(th.teamId);
   }
 
+  for (const row of seasonMap.values()) {
+    for (const event of row.events || []) if (!events.includes(event)) events.push(event);
+  }
+
+  if (!seasonMap.has(Number(state.season)) && (player.teamId || player.challengerTeamId)) {
+    const current = ensureSeason(state.season);
+    if (player.teamId) current.teams.add(player.teamId);
+    if (player.challengerTeamId) current.teams.add(player.challengerTeamId);
+    if (player.primary) current.roles.add(player.primary);
+  }
+
   const seasons = [...seasonMap.values()].sort((a, b) => a.season - b.season);
   const teamIds = new Set();
   seasons.forEach(s => s.teams.forEach(t => teamIds.add(t)));
@@ -264,6 +295,11 @@ export function buildPlayerHistory(state, player) {
     .map(e => ({ text: e.placement, value: placementRankValue(e.placement) }))
     .filter(e => Number.isFinite(e.value));
   const bestMajor = majorPlaces.length ? majorPlaces.sort((a, b) => a.value - b.value)[0].text : "Not tracked yet";
+  const champsPlaces = events
+    .filter(e => e.eventType === "champs" && e.placement && e.placement !== "Not tracked yet")
+    .map(e => ({ text: e.placement, value: placementRankValue(e.placement) }))
+    .filter(e => Number.isFinite(e.value));
+  const bestChamps = champsPlaces.length ? champsPlaces.sort((a, b) => a.value - b.value)[0].text : "Not tracked yet";
   const cqPlaces = events
     .filter(e => e.eventType === "challengerQualifier" && e.placement && e.placement !== "Not tracked yet")
     .map(e => ({ text: e.placement, value: placementRankValue(e.placement) }))
@@ -272,7 +308,7 @@ export function buildPlayerHistory(state, player) {
   return {
     seasons,
     events,
-    summary: { seasonsPlayed: seasons.length, teamsPlayed: teamIds.size, maps, kills, deaths, kd: kd(kills, deaths), majorAppearances, champsAppearances, challengerQualifierAppearances, bestMajor, bestCQ },
+    summary: { seasonsPlayed: seasons.length, teamsPlayed: teamIds.size, maps, kills, deaths, kd: kd(kills, deaths), majorAppearances, champsAppearances, challengerQualifierAppearances, bestMajor, bestChamps, bestCQ },
   };
 }
 
@@ -281,12 +317,32 @@ export function buildTeamHistory(state, teamId) {
   const seasonMap = new Map();
   const ensureSeason = (season) => {
     const s = Number(season || state.season || 1);
-    if (!seasonMap.has(s)) seasonMap.set(s, { season: s, wins: 0, losses: 0, maps: 0, kills: 0, deaths: 0, events: [], rosterIds: new Set() });
+    if (!seasonMap.has(s)) seasonMap.set(s, { season: s, wins: 0, losses: 0, points: 0, maps: 0, kills: 0, deaths: 0, events: [], rosterIds: new Set(), majors: [], champs: null, challengerQualifiers: [] });
     return seasonMap.get(s);
   };
+  const archivedSeasons = new Set();
+  for (const archived of (state.teamCareerHistory || []).filter(h => h.teamId === teamId)) {
+    const row = ensureSeason(archived.season);
+    archivedSeasons.add(row.season);
+    row.wins = archived.record?.wins ?? archived.wins ?? 0;
+    row.losses = archived.record?.losses ?? archived.losses ?? 0;
+    row.points = archived.points ?? 0;
+    row.maps = archived.maps || 0;
+    row.kills = archived.kills || 0;
+    row.deaths = archived.deaths || 0;
+    row.avgKd = archived.avgKd ?? kd(row.kills, row.deaths);
+    row.events = Array.isArray(archived.events) ? [...archived.events] : [];
+    row.majors = archived.majors || [];
+    row.champs = archived.champs || null;
+    row.challengerQualifiers = archived.challengerQualifiers || [];
+    for (const pid of archived.rosterPlayerIds || []) if (pid) row.rosterIds.add(pid);
+    row.roster = archived.roster || [];
+  }
   for (const match of state.schedule?.matchLog || []) {
     if (match.winnerId !== teamId && match.loserId !== teamId && match.teamAId !== teamId && match.teamBId !== teamId) continue;
-    const row = ensureSeason(match.season ?? state.season);
+    const matchSeason = Number(match.season ?? state.season);
+    if (archivedSeasons.has(matchSeason)) continue;
+    const row = ensureSeason(matchSeason);
     if (match.winnerId === teamId) row.wins += 1;
     if (match.loserId === teamId) row.losses += 1;
     row.maps += match.mapResults?.length || 0;
@@ -301,7 +357,9 @@ export function buildTeamHistory(state, teamId) {
   for (const q of state.schedule?.challengerQualifierResults || []) {
     const qr = (q.teams || []).find(r => r.teamId === teamId);
     if (!qr) continue;
-    const row = ensureSeason(q.season);
+    const qSeason = Number(q.season ?? state.season);
+    if (archivedSeasons.has(qSeason)) continue;
+    const row = ensureSeason(qSeason);
     row.events.push({ eventName: `Major ${Number(q.majorIdx ?? 0) + 1} Qualifier`, result: `${placementText(qr.placement)}, ${qr.qualified ? "Qualified" : "Missed"}`, placement: placementText(qr.placement), circuitPoints: qr.circuitPointsAwarded ?? 0 });
   }
   for (const [majorIdx, major] of (state.schedule?.majors || []).entries()) {
@@ -309,12 +367,20 @@ export function buildTeamHistory(state, teamId) {
     const bracketPlace = getMajorPlacementMap(major)[teamId];
     const place = award?.place ?? bracketPlace;
     if (place == null) continue;
+    if (archivedSeasons.has(Number(state.season))) continue;
     const row = ensureSeason(state.season);
     const pointsText = award ? ` · +${award.points || 0} pts` : " · played Major bracket";
     row.events.push({ eventName: major.name || `Major ${majorIdx + 1}`, result: `${placementText(place)}${pointsText}`, placement: placementText(place), cdlPoints: award?.points || 0 });
   }
   const roster = getTeamRoster(state, teamId);
   const currentRec = state.schedule?.standings?.[teamId] ?? { wins: 0, losses: 0, points: 0 };
+  if (!seasonMap.has(Number(state.season))) {
+    const current = ensureSeason(state.season);
+    current.wins = currentRec.wins ?? 0;
+    current.losses = currentRec.losses ?? 0;
+    current.points = currentRec.points ?? 0;
+    for (const p of roster) current.rosterIds.add(p.id);
+  }
   const seasons = [...seasonMap.values()].sort((a, b) => a.season - b.season);
   return { seasons, current: { roster, record: currentRec } };
 }
