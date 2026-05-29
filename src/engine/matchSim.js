@@ -5,14 +5,16 @@
 // -----------------
 // 1. Compute a TARGET K/D per player from a tight formula.
 // 2. Generate KILLS from activity (role + mode + small noise).
-// 3. Compute DEATHS = round(kills / targetKD).
+// 3. Compute DEATHS using sqrt-scaled weights so actual K/D tracks target K/D
+//    without the old 1/k formula's compounding amplification.
 //
-// Expected K/D distribution:
+// Expected K/D distribution (series level):
 //   Typical player, close series:   0.90 – 1.10
 //   Good player, winning series:    1.10 – 1.30
-//   Elite player, dominant win:     1.25 – 1.45  (rare outliers to ~1.60)
-//   Average player, losing series:  0.80 – 1.00
-//   Poor player, bad loss:          0.65 – 0.85
+//   Elite player, hot series:       1.30 – 1.50  (rare outliers to ~1.70)
+//   Average player, losing series:  0.75 – 0.95
+//   Poor player, disaster series:   0.55 – 0.75
+//   2.0+ K/D series: extremely rare (elite + takeover + 3-0 sweep required)
 //
 // TRAIT SYSTEM (per-map, interactive play only)
 // ─────────────────────────────────────────────
@@ -154,13 +156,14 @@ const MODE_KILL_BASE = {
 
 // ── PER-SERIES PERFORMANCE TIERS ─────────────────────────────────────────────
 // Rolled once per player per series; applied as a flat K/D offset on every map.
+// Ranges intentionally compressed so outliers feel like events, not normal rows.
 // Tier  | Offset range  | Base prob
 // -------|---------------|----------
-// Takeover | +0.22..+0.44 | 6%
-// Hot      | +0.08..+0.16 | 17%
-// Normal   | −0.04..+0.04 | ~57%
-// Quiet    | −0.17..−0.08 | 14%
-// Disaster | −0.40..−0.25 | 6%
+// Takeover | +0.14..+0.26 | 6%
+// Hot      | +0.06..+0.12 | 17%
+// Normal   | −0.03..+0.03 | ~57%
+// Quiet    | −0.12..−0.06 | 14%
+// Disaster | −0.26..−0.14 | 6%
 
 function rollSeriesMod(player, rng) {
   const ovr      = player.overall          ?? 75;
@@ -200,11 +203,11 @@ function rollSeriesMod(player, rng) {
   const mag  = rng();
 
   let lo, hi;
-  if      (roll < cumTakeover) { lo =  0.22; hi =  0.44; }
-  else if (roll < cumHot)      { lo =  0.08; hi =  0.16; }
-  else if (roll < cumNormal)   { lo = -0.04; hi =  0.04; }
-  else if (roll < cumQuiet)    { lo = -0.17; hi = -0.08; }
-  else                         { lo = -0.40; hi = -0.25; }
+  if      (roll < cumTakeover) { lo =  0.14; hi =  0.26; }
+  else if (roll < cumHot)      { lo =  0.06; hi =  0.12; }
+  else if (roll < cumNormal)   { lo = -0.03; hi =  0.03; }
+  else if (roll < cumQuiet)    { lo = -0.12; hi = -0.06; }
+  else                         { lo = -0.26; hi = -0.14; }
 
   return lo + mag * (hi - lo);
 }
@@ -226,14 +229,16 @@ function targetKDForMap(player, won, mode, rng, seriesMod) {
   const roleMod    = ROLE_KD_MOD[player.primary] ?? 0;
   const formMod    = ((player.form || 70) - 70) / 900;
 
-  const noiseWidth = mode === "Search & Destroy" ? 0.20
-                   : mode === "Overload"          ? 0.14
-                   :                                0.12;
+  // S&D has higher per-map variance (small round count), but series totals still
+  // regress because the series mod is shared across all maps.
+  const noiseWidth = mode === "Search & Destroy" ? 0.13
+                   : mode === "Overload"          ? 0.10
+                   :                                0.08;
   const noise = (rng() - 0.5) * 2 * noiseWidth;
 
   const sm = seriesMod ?? 0;
   const kd = 1.0 + qualityMod + winMod + roleMod + formMod + noise + sm;
-  return Math.max(0.40, Math.min(2.20, kd));
+  return Math.max(0.43, Math.min(1.80, kd));
 }
 
 function killsForMap(player, won, mode, rng) {
@@ -491,8 +496,12 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
       killsA = _weightedAllocate(ri(range[0], range[1], rng), kTargetsA);
       killsB = _weightedAllocate(ri(range[0], range[1], rng), kTargetsB);
     }
-    deathsA = _weightedAllocate(killsB.reduce((s, v) => s + v, 0), kTargetsA.map(k => 1 / Math.max(0.45, k)));
-    deathsB = _weightedAllocate(killsA.reduce((s, v) => s + v, 0), kTargetsB.map(k => 1 / Math.max(0.45, k)));
+    // Use 1/sqrt(k) instead of 1/k for death weights: this makes actual series
+    // K/D approximately track targetKD rather than squaring the separation.
+    // With 1/k, a player at target 1.8 got proportionally more kills AND
+    // proportionally fewer deaths — compounding to K/D >> 1.8 in practice.
+    deathsA = _weightedAllocate(killsB.reduce((s, v) => s + v, 0), kTargetsA.map(k => 1 / Math.sqrt(Math.max(0.2, k))));
+    deathsB = _weightedAllocate(killsA.reduce((s, v) => s + v, 0), kTargetsB.map(k => 1 / Math.sqrt(Math.max(0.2, k))));
   }
 
   for (let i = 0; i < 4; i++) {
