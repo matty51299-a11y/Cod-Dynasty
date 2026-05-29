@@ -4,9 +4,23 @@
 
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
-import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
+import { getTeamCap, getSigningCost, getChallengerStockLabel } from "../engine/rosterAI.js";
 import { isInactivePlayer } from "../utils/playerIdentity.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
+import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+
+
+function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
+
+function formatRecentKd(player, playerSeasonStats, season) {
+  if (!player?.id || !playerSeasonStats || season == null) return "—";
+  const rows = (playerSeasonStats[player.id] || []).filter(r => Number(r.season) === Number(season) && (r.matches || 0) > 0);
+  if (!rows.length) return "—";
+  const kills = rows.reduce((sum, r) => sum + (r.kills || 0), 0);
+  const deaths = rows.reduce((sum, r) => sum + (r.deaths || 0), 0);
+  const kd = deaths > 0 ? kills / deaths : kills > 0 ? kills : 1;
+  return kd.toFixed(2);
+}
 
 const RATING_KEYS = ["gunny","awareness","objective","searchIQ","clutch","teamwork","composure","adaptability"];
 
@@ -58,7 +72,7 @@ export default function FreeAgency() {
   return (
     <div className="fa-page">
       <h2>Free Agency</h2>
-      {state.offseason?.freeAgencyOpen && <p className="muted">Offseason user window is open: AI teams will not bid until you click Advance Offseason from the hub.</p>}
+      {state.offseason?.freeAgencyOpen && <p className="muted">Offseason user window is open: AI teams will not bid until you click <strong>Run AI Free Agency</strong> from the Offseason Hub.</p>}
       <p className="muted">
         Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub.
       </p>
@@ -100,13 +114,16 @@ export default function FreeAgency() {
               <th>Player</th>
               <th>Age</th>
               <th>Primary Role</th>
+              <th>Previous Team</th>
               <th>OVR</th>
               <th>POT</th>
               <th>Gunny</th>
               <th>Clutch</th>
               <th>S.IQ</th>
               <th>T.Work</th>
-              <th>Salary</th>
+              <th>Recent K/D</th>
+              <th>Stock</th>
+              <th>Salary Demand</th>
               <th>Sign As</th>
               <th>Action</th>
             </tr>
@@ -117,19 +134,28 @@ export default function FreeAgency() {
               const cost        = getSigningCost(p);
               // Subs don't count against the cap — only starters need the check.
               const overBy      = slot === "starter" ? Math.max(0, cost - remaining) : 0;
-              const canAfford   = overBy === 0;
+              const disabledReason = slot === "starter" && starterCount >= 4
+                ? "Roster full"
+                : slot === "sub" && subCount >= 1
+                  ? "Sub slot full"
+                  : overBy > 0
+                    ? `Over cap by ${fmtMoney(overBy)}`
+                    : null;
               return (
                 <tr key={p.id}>
                   <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></td>
                   <td>{p.age}</td>
                   <td><span className="role-pill">{p.primary}</span></td>
+                  <td>{p.previousTeamId ? (resolveTeamDisplay(p.previousTeamId, state.schedule)?.tag || p.previousTeamId) : "Unsigned"}</td>
                   <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
                   <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
                   <td style={{ color: ratingColor(p.gunny) }}>{p.gunny}</td>
                   <td style={{ color: ratingColor(p.clutch) }}>{p.clutch}</td>
                   <td style={{ color: ratingColor(p.searchIQ) }}>{p.searchIQ}</td>
                   <td style={{ color: ratingColor(p.teamwork) }}>{p.teamwork}</td>
-                  <td className="salary">${(cost / 1000).toFixed(0)}k</td>
+                  <td>{formatRecentKd(p, state.playerSeasonStats, state.offseason?.outgoingSeason ?? state.season)}</td>
+                  <td>{getChallengerStockLabel(p, state)}</td>
+                  <td className="salary">{fmtMoney(cost)}</td>
                   <td>
                     <select
                       value={slot}
@@ -141,13 +167,12 @@ export default function FreeAgency() {
                     </select>
                   </td>
                   <td>
-                    {canAfford ? (
-                      <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>Sign</button>
-                    ) : (
-                      <span style={{ color: "#ef5350", fontSize: "0.78rem", fontWeight: "bold" }}
-                        title={`Exceeds cap by $${(overBy / 1000).toFixed(0)}k`}>
-                        Over Budget
+                    {disabledReason ? (
+                      <span style={{ color: "#ef5350", fontSize: "0.78rem", fontWeight: "bold" }} title={disabledReason}>
+                        {disabledReason}
                       </span>
+                    ) : (
+                      <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>Sign</button>
                     )}
                   </td>
                 </tr>

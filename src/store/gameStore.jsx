@@ -511,6 +511,9 @@ function reducer(state, action) {
       if (targetForDuplicateCheck.teamId === userTeam) {
         return addNotif(state, `${targetForDuplicateCheck.name} is already on your roster.`);
       }
+      if (targetForDuplicateCheck.teamId && targetForDuplicateCheck.teamId !== userTeam) {
+        return addNotif(state, `${targetForDuplicateCheck.name} is not available to sign.`);
+      }
       if (cdlRosterHasName(state.players, targetForDuplicateCheck.name, targetForDuplicateCheck.id)) {
         return addNotif(state, `${targetForDuplicateCheck.name} is already active on a CDL roster.`);
       }
@@ -522,9 +525,10 @@ function reducer(state, action) {
         const historyUpdated  = existingHistory.some(e => e.season === state.season)
           ? existingHistory
           : [...existingHistory, { season: state.season, teamId: userTeam }];
+        const demand = getSigningCost(prospect);
         const signed = {
           ...prospect, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: slotType === "sub",
-          scouted: true, contractYears: 2, teamHistory: historyUpdated,
+          scouted: true, contractYears: 2, salary: demand, teamHistory: historyUpdated,
         };
         return pushFeed(
           addNotif({
@@ -545,6 +549,8 @@ function reducer(state, action) {
       const target = state.players.find(p => p.id === playerId);
       if (!target) return addNotif(state, "Player not found.");
 
+      const demand = getSigningCost(target);
+
       return pushFeed(
         addNotif({
           ...state,
@@ -556,7 +562,7 @@ function reducer(state, action) {
               : [...existingHistory, { season: state.season, teamId: userTeam }];
             return {
               ...p, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: slotType === "sub",
-              scouted: true, contractYears: 2, teamHistory: historyUpdated,
+              scouted: true, contractYears: 2, salary: demand, teamHistory: historyUpdated,
             };
           }),
           challengerTeams: (state.challengerTeams || []).map(t => t.id === target.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) } : t),

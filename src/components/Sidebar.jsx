@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { id: "schedule",  icon: "◫",  label: "Schedule" },
   { id: "kdleaders", icon: "↑",  label: "K/D Leaders" },
   { id: "roster",    icon: "♟",  label: "Roster" },
+  { id: "fa",        icon: "$",  label: "Free Agency", offseasonOnly: true },
   { id: "prospects", icon: "◉",  label: "Challengers" },
   { id: "devreport", icon: "⬡",  label: "Dev Report" },
   { id: "log",       icon: "▤",  label: "Match Log" },
@@ -48,6 +49,8 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
 
   const hasDevData  = state.progressionLog?.length > 0;
   const unreadFeed  = (state.feed ?? []).filter(f => !f.read).length;
+  const showFreeAgency = phase === "offseason" || phase === "contracts" || !!state.offseason?.freeAgencyOpen;
+  const visibleNavItems = NAV_ITEMS.filter(item => !item.offseasonOnly || showFreeAgency);
 
   return (
     <aside className="sidebar">
@@ -62,7 +65,7 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
 
       {/* Nav items */}
       <nav className="sb-nav">
-        {NAV_ITEMS.map(item => (
+        {visibleNavItems.map(item => (
           <button
             key={item.id}
             className={`sb-item ${screen === item.id ? "active" : ""}`}
