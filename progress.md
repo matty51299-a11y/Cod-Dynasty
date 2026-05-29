@@ -440,3 +440,11 @@ Player shape (key fields):
 - Validation: `findPhaseInvariantViolations` now also reports any CDL team with fewer than 4 starters, so the ErrorBoundary panel and `window.__phaseProblems` will surface the condition next time it appears (the user is still allowed to play with a thin roster — only the AI is force-filled).
 - Verified by `scripts/reproThinRoster.mjs` (Season 1 → offseason → Season 2 Stage 1 matchday, previously crashed, now passes) and `scripts/stressSeason.mjs` (120 randomized runs across every CDL team — 0 crashes).
 
+
+## Update 2026-05-29 (Season 3 CDL roster integrity hardening)
+- Added `ensureCdlRosterIntegrity()` as the single CDL active-roster repair pass. It validates the player-array roster source used by UI/match sim, removes invalid/inactive/duplicate active CDL references, normalizes signed CDL fields, fills teams back to 4, removes promoted players from Challenger rosters, and logs repairs.
+- Emergency CDL roster fill is now absolute: affordable signings are preferred, then the cheapest eligible player can be signed with an emergency budget exception, and a generated minimum-salary emergency replacement is created if the market is exhausted.
+- Roster-affecting transitions now re-run integrity at new game, load migration, contract phase entry, offseason completion, post-major transition, pre-Champs generation, and immediately before stage/major match simulation.
+- AI roster-window cuts are transaction-like: release transaction logs are deferred until a replacement signing succeeds, and failed replacement attempts roll back the release candidate instead of leaving the roster thin.
+- User active-starter releases are blocked when they would drop a CDL team below 4 active players.
+- Added `scripts/stressRosterIntegrity.mjs`, which validates 24 multi-season simulations through Season 4 plus an exhausted-market emergency replacement regression.

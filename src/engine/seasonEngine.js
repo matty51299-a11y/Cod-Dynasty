@@ -51,7 +51,7 @@ const CHALLENGER_TEAM_POOL = [
   { id: "for_fun_black", name: "For Fun Black", tag: "FFB", color: "#334155" },
 ];
 import { runProgression } from "./progression.js";
-import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand } from "./rosterAI.js";
+import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, getResignDemand, ensureCdlRosterIntegrity } from "./rosterAI.js";
 import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
@@ -78,6 +78,10 @@ function buildRoundRobin(teamIds) {
     for (let j = i + 1; j < teamIds.length; j++)
       pairs.push([teamIds[i], teamIds[j]]);
   return pairs;
+}
+
+function withCdlRosterIntegrity(gameState, windowType) {
+  return ensureCdlRosterIntegrity(gameState, { windowType });
 }
 
 // Deterministic seed for a specific major match (no seed collisions)
@@ -1264,11 +1268,12 @@ function _advanceMajorPhase(schedule, gameState) {
   // schedule has safely left the Major phase.
   if (majorIdx <= 3) nextState = runAIMajorRosterWindow(nextState, majorIdx);
 
-  return nextState;
+  return withCdlRosterIntegrity(nextState, majorIdx <= 3 ? "post_major_transition" : "post_champs_transition");
 }
 
 // ── PUBLIC: Begin Championship (triggered by user from preChamps window) ───────
 export function beginChamps(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_champs_generation");
   const schedule = gameState.schedule;
   if (schedule.phase !== "preChamps") return gameState;
 
@@ -1325,6 +1330,7 @@ function _dispatchOneMajorMatch(schedule, gameState) {
 
 // ── PUBLIC: Simulate one major match ──────────────────────────────────────────
 export function simNextMajorMatch(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_sim_major_match");
   const schedule = gameState.schedule;
   if (schedule.phase !== "major") return gameState;
 
@@ -1344,6 +1350,7 @@ export function simNextMajorMatch(gameState) {
 
 // ── PUBLIC: Simulate all remaining matches in the current round ───────────────
 export function simMajorRound(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_sim_major_round");
   const schedule = gameState.schedule;
   if (schedule.phase !== "major") return gameState;
 
@@ -1383,6 +1390,7 @@ export function simMajorRound(gameState) {
 
 // ── PUBLIC: Simulate the entire remaining bracket ─────────────────────────────
 export function simMajor(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_sim_major");
   const schedule  = gameState.schedule;
   if (schedule.phase !== "major") return gameState;
 
@@ -1418,6 +1426,7 @@ export function simMajor(gameState) {
 
 // ── Stage simulation ───────────────────────────────────────────────────────────
 export function simNextMatch(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_sim_next_match");
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "stage") return gameState;
 
@@ -1455,6 +1464,7 @@ export function simNextMatch(gameState) {
 }
 
 export function simMatchday(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_sim_matchday");
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "stage") return gameState;
 
@@ -1522,6 +1532,7 @@ export function simStage(gameState) {
 // Used by the "Play Matchday" overlay so the user's result is guaranteed.
 // Fills remaining slots with non-overlapping league matches.
 export function simUserMatchday(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_sim_user_matchday");
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "stage") return gameState;
 
@@ -1678,11 +1689,11 @@ export function enterContractPhase(gameState) {
     return { ...p, contractYears: (h % 3) + 1 };
   });
 
-  return {
+  return withCdlRosterIntegrity({
     ...gameState,
     players,
     schedule: { ...schedule, phase: "contracts" },
-  };
+  }, "enter_contract_phase");
 }
 
 // ── Offseason ─────────────────────────────────────────────────────────────────
@@ -1820,7 +1831,7 @@ export function advanceOffseason(gameState) {
     season:           newSeason,
   };
 
-  return runAIOffseasonRosterWindow(withProgression);
+  return withCdlRosterIntegrity(runAIOffseasonRosterWindow(withProgression), "post_offseason");
 }
 
 // ── Prospect Pool Refresh ─────────────────────────────────────────────────────

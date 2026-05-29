@@ -8,7 +8,7 @@ import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
-import { getSigningCost, getTeamCap } from "../engine/rosterAI.js";
+import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 
@@ -277,7 +277,7 @@ function createInitialGameState(userTeamId) {
     challengerTransactions: [],
   };
   ensureChallengerTeams(state);
-  return cleanupDuplicateActiveAssignments(state);
+  return ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -302,7 +302,7 @@ function reducer(state, action) {
         currentMajorEventTeams: loaded.schedule?.currentMajorEventTeams ?? null,
       };
       ensureChallengerTeams(loaded);
-      const cleaned = cleanupDuplicateActiveAssignments(loaded);
+      const cleaned = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(loaded), { windowType: "load_migration" });
       cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
       return isValidGameState(cleaned) ? cleaned : null;
     }
@@ -599,6 +599,11 @@ function reducer(state, action) {
       if (!player) return state;
       const wasOnCdlRoster = !!player.teamId && isCdlTeamId(player.teamId) && !isInactivePlayer(player);
       if (!wasOnCdlRoster) return addNotif(state, `${player.name || "Player"} is not on an active CDL roster.`);
+
+      const activeStarters = state.players.filter(p => p.teamId === player.teamId && !p.isSub && !isInactivePlayer(p));
+      if (!player.isSub && activeStarters.length <= 4) {
+        return addNotif(state, `Cannot release ${player.name}; CDL rosters must keep at least 4 active players.`);
+      }
 
       const tag   = CDL_TEAMS.find(t => t.id === player.teamId)?.tag ?? player.teamId ?? "FA";
       const phase = state.schedule?.phase ?? "stage";
