@@ -83,9 +83,9 @@ export default function PlayerProfileOverlay() {
               <ProfileStat label="Major Apps" value={summary.majorAppearances || "Not tracked yet"} />
               <ProfileStat label="Champs Apps" value={summary.champsAppearances || "Not tracked yet"} />
               <ProfileStat label="CQ Apps" value={summary.challengerQualifierAppearances || "Not tracked yet"} />
-              <ProfileStat label="Best Major" value="Not tracked yet" />
+              <ProfileStat label="Best Major" value={summary.bestMajor || "Not tracked yet"} />
               <ProfileStat label="Best Champs" value="Not tracked yet" />
-              <ProfileStat label="Best CQ" value="Not tracked yet" />
+              <ProfileStat label="Best CQ" value={summary.bestCQ || "Not tracked yet"} />
             </div>
           </div>
 
@@ -114,7 +114,7 @@ export default function PlayerProfileOverlay() {
                 <thead><tr><th>Event</th><th>Team</th><th>Maps</th><th>K</th><th>D</th><th>K/D</th><th>Result</th></tr></thead>
                 <tbody>{season.events.map((e, i) => {
                   const team = e.teamId ? resolveTeamDisplay(e.teamId, state.schedule) : null;
-                  return <tr key={`${e.eventName}_${i}`}><td>{e.eventName}</td><td>{team?.tag ?? e.teamName ?? "—"}</td><td>{statText(e.maps, "—")}</td><td>{statText(e.kills, "—")}</td><td>{statText(e.deaths, "—")}</td><td>{e.kd != null ? e.kd.toFixed(2) : e.kills != null ? kdText(e.kills, e.deaths) : "—"}</td><td>{e.placement ?? "Not tracked yet"}</td></tr>;
+                  return <tr key={`${e.eventName}_${i}`}><td>{e.eventName}</td><td>{team?.tag ?? e.teamName ?? "—"}</td><td>{statText(e.maps, "—")}</td><td>{statText(e.kills, "—")}</td><td>{statText(e.deaths, "—")}</td><td>{e.kd != null ? e.kd.toFixed(2) : e.kills != null ? kdText(e.kills, e.deaths) : "—"}</td><td>{e.result ?? e.placement ?? "Not tracked yet"}</td></tr>;
                 })}</tbody>
               </table>
             )}
