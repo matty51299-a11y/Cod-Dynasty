@@ -1,4 +1,5 @@
 import { CDL_TEAMS } from "../data/teams.js";
+import { isCdlTeamId } from "./playerIdentity.js";
 import { resolveTeamDisplay } from "./teamDisplay.js";
 
 function kd(kills, deaths) {
@@ -124,7 +125,8 @@ function aggregateCdlPlayerStats(state) {
           maps: 0,
           majorWins: 0,
           overall: player?.overall ?? null,
-          isCdlRookie: !!player?.isProspect,
+          potential: player?.potential ?? null,
+          isCdlRookie: false,
         });
       }
       const row = rows.get(id);
@@ -144,6 +146,7 @@ function aggregateCdlPlayerStats(state) {
     row.teamPoints = teamPoints.get(row.teamId) || 0;
     row.champsWin = champsWinner && row.teamId === champsWinner ? 1 : 0;
     row.sample = row.maps || row.matches;
+    row.isCdlRookie = isRookieEligible(findPlayer(state, row.playerId), state?.schedule?.season ?? state?.season ?? 1, state, row);
     row.score = mvpScore(row);
   }
   return [...rows.values()].filter(r => r.matches >= 3 && r.kd != null);
@@ -200,6 +203,7 @@ function bestBy(rows, predicate, score = row => row.score ?? row.kd ?? 0) {
 }
 
 const ROLE_MIN_MAPS = 25;
+const ROOKIE_MIN_CDL_MAPS = 10;
 const ROLE_STRONG_KD = 1.03;
 const ROLE_POSITIVE_KD = 1.0;
 
@@ -248,8 +252,102 @@ function pickRoleAward(rows, rolePredicate, label) {
   return { winner: ranked[0] || null, diagnostics, label, usedFallback: !strongPool.length && !positivePool.length };
 }
 
+
+function playerIdOf(playerOrId) {
+  return String(typeof playerOrId === "object" ? playerOrId?.id : playerOrId);
+}
+
+function awardIsRookieOfYear(award) {
+  return award?.key === "rookie_of_year" || String(award?.awardName || "").toLowerCase() === "rookie of the year";
+}
+
+function hasWonRookieOfYear(playerId, season, state) {
+  const id = String(playerId);
+  const awardRows = [
+    ...(state?.awards || []),
+    ...(state?.seasonHistory || []).flatMap(s => s?.awards || []),
+    ...(state?.playerCareerHistory || []).flatMap(s => s?.awards || []),
+  ];
+  return awardRows.some(award => (
+    awardIsRookieOfYear(award)
+    && String(award.playerId) === id
+    && Number(award.season ?? season) <= Number(season)
+  ));
+}
+
+function currentSeasonCdlStats(playerId, season, state) {
+  const id = String(playerId);
+  const out = { maps: 0, kills: 0, deaths: 0, matches: 0, teamIds: new Set() };
+  for (const match of state?.schedule?.matchLog || []) {
+    const matchSeason = Number(match.season ?? state?.schedule?.season ?? state?.season ?? season);
+    if (Number(matchSeason) !== Number(season)) continue;
+    const stat = match.playerStats?.[id];
+    if (!stat || !isCdlTeamId(stat.teamId)) continue;
+    out.maps += match.mapResults?.length || 0;
+    out.kills += stat.kills || 0;
+    out.deaths += stat.deaths || 0;
+    out.matches += 1;
+    out.teamIds.add(stat.teamId);
+  }
+  out.kd = kd(out.kills, out.deaths);
+  return out;
+}
+
+function priorCdlMapsBySeason(playerId, season, state) {
+  const id = String(playerId);
+  const mapsBySeason = new Map();
+  const add = (rowSeason, teamId, maps) => {
+    const s = Number(rowSeason);
+    if (!Number.isFinite(s) || s >= Number(season) || !isCdlTeamId(teamId)) return;
+    mapsBySeason.set(s, (mapsBySeason.get(s) || 0) + (Number(maps) || 0));
+  };
+
+  for (const snapshot of state?.playerCareerHistory || []) {
+    if (String(snapshot?.playerId) !== id) continue;
+    for (const event of snapshot.events || []) add(event.season ?? snapshot.season, event.teamId, event.maps);
+    if (isCdlTeamId(snapshot.teamId)) add(snapshot.season, snapshot.teamId, snapshot.maps);
+    if (!(snapshot.events || []).length) {
+      const cdlTeam = (snapshot.teams || []).find(isCdlTeamId);
+      if (cdlTeam) add(snapshot.season, cdlTeam, snapshot.maps);
+    }
+  }
+
+  for (const match of state?.schedule?.matchLog || []) {
+    const matchSeason = Number(match.season ?? state?.schedule?.season ?? state?.season ?? season);
+    const stat = match.playerStats?.[id];
+    if (!stat) continue;
+    add(matchSeason, stat.teamId, match.mapResults?.length || 0);
+  }
+
+  return mapsBySeason;
+}
+
+export function isRookieEligible(player, season, state, currentStats = null) {
+  const id = playerIdOf(player);
+  if (!id || id === "undefined" || id === "null") return false;
+  if (hasWonRookieOfYear(id, season, state)) return false;
+
+  const current = currentStats && String(currentStats.playerId) === id
+    ? currentStats
+    : currentSeasonCdlStats(id, season, state);
+  const currentMaps = Number(current?.cdlMaps ?? current?.maps ?? 0);
+  const currentTeamIsCdl = isCdlTeamId(player?.teamId);
+  const hasCurrentCdlTeamMaps = currentMaps >= ROOKIE_MIN_CDL_MAPS;
+  if (!hasCurrentCdlTeamMaps || (!currentTeamIsCdl && !current?.teamIds?.size && !isCdlTeamId(current?.teamId))) return false;
+
+  const priorMaps = priorCdlMapsBySeason(id, season, state);
+  for (const maps of priorMaps.values()) {
+    if (maps >= ROOKIE_MIN_CDL_MAPS) return false;
+  }
+  return true;
+}
+
 function rookieScore(row) {
-  return (row?.kd ?? 0) * 120 + Math.min(sampleFor(row), 60) * 0.3 + teamRankBonus(row, 8) + (row?.majorWins || 0) * 4 + (row?.isProspect ? 8 : 0);
+  const kdValue = row?.kd ?? 0;
+  const sampleBonus = Math.min(sampleFor(row), 60) * 0.3;
+  const successBonus = teamRankBonus(row, 8) + (row?.majorWins || 0) * 4 + (row?.champsWin ? 4 : 0);
+  const upsideTiebreak = Math.max(0, ((row?.potential || row?.overall || 70) - 70) * 0.08);
+  return kdValue * 120 + sampleBonus + successBonus + upsideTiebreak;
 }
 
 function logRoleDiagnostics(season, roleResults) {
@@ -296,10 +394,8 @@ export function calculateSeasonAwards(gameState) {
 
   const mvpPool = cdl.filter(r => sampleFor(r) >= ROLE_MIN_MAPS && (r.kd ?? 0) >= 1.03);
   const mvp = bestBy(mvpPool.length ? mvpPool : cdl, () => true, mvpScore);
-  const rookiePool = cdl.filter(r => sampleFor(r) >= ROLE_MIN_MAPS && (r.isCdlRookie || r.isProspect || (r.age != null && r.age <= 21)));
-  const rookie = bestBy(rookiePool, r => r.isCdlRookie || r.isProspect || (r.age != null && r.age <= 21), rookieScore)
-    || bestBy(cdl.filter(r => sampleFor(r) >= ROLE_MIN_MAPS), r => r.age != null && r.age <= 21, rookieScore)
-    || null;
+  const rookiePool = cdl.filter(r => r.isCdlRookie && sampleFor(r) >= ROOKIE_MIN_CDL_MAPS);
+  const rookie = bestBy(rookiePool, () => true, rookieScore);
   const mainArResult = pickRoleAward(cdl, r => normalizeRole(r.role).includes("mainar") || normalizeRole(r.role) === "ar", "Best Main AR");
   const flexResult = pickRoleAward(cdl, r => normalizeRole(r.role).includes("flex"), "Best Flex");
   const entryResult = pickRoleAward(cdl, r => normalizeRole(r.role).includes("entry"), "Best Entry SMG");
@@ -315,9 +411,10 @@ export function calculateSeasonAwards(gameState) {
   const champsMvp = majorMvpAward(gameState, season, gameState?.schedule?.majors?.[4], 4, "champs");
 
   const playerContext = r => [kdText(r?.kd), r?.maps ? `${r.maps} maps` : null, r?.teamRank ? `team rank #${r.teamRank}` : null, r?.majorWins ? `${r.majorWins} Major win${r.majorWins === 1 ? "" : "s"}` : null];
+  const rookieContext = r => [kdText(r?.kd), r?.maps ? `${r.maps} CDL maps` : null, "first CDL-team season", r?.teamRank ? `team rank #${r.teamRank}` : null, r?.majorWins ? `${r.majorWins} Major win${r.majorWins === 1 ? "" : "s"}` : null];
   const roleContext = r => [kdText(r?.kd), r?.maps ? `${r.maps} maps` : null, r?.eligibilityNote, r?.teamRank ? `team rank #${r.teamRank}` : null, r?.majorWins ? `${r.majorWins} Major win${r.majorWins === 1 ? "" : "s"}` : null];
   awards.push(buildPlayerAward(gameState, season, "season_mvp", "Season MVP", mvp, playerContext(mvp)));
-  awards.push(buildPlayerAward(gameState, season, "rookie_of_year", "Rookie of the Year", rookie, playerContext(rookie)));
+  awards.push(buildPlayerAward(gameState, season, "rookie_of_year", "Rookie of the Year", rookie, rookieContext(rookie)));
   awards.push(buildPlayerAward(gameState, season, "best_main_ar", "Best Main AR", mainAr, roleContext(mainAr)));
   awards.push(buildPlayerAward(gameState, season, "best_flex", "Best Flex", flex, roleContext(flex)));
   awards.push(buildPlayerAward(gameState, season, "best_entry_smg", "Best Entry SMG", entry, roleContext(entry)));
