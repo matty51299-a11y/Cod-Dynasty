@@ -40,7 +40,8 @@ export default function FreeAgency() {
   // Free agents = no team from the pro roster
   const freeAgents = players
     .filter(p => !p.teamId && !p.isProspect && !isInactivePlayer(p))
-    .sort((a, b) => b[sortKey] - a[sortKey]);
+    .filter(p => !p.status || p.status === "freeAgent")
+    .sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0));
 
   const roles = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];
   const filtered = roleFilter === "All" ? freeAgents : freeAgents.filter(p => p.primary === roleFilter);
@@ -57,6 +58,7 @@ export default function FreeAgency() {
   return (
     <div className="fa-page">
       <h2>Free Agency</h2>
+      {state.offseason?.freeAgencyOpen && <p className="muted">Offseason user window is open: AI teams will not bid until you click Advance Offseason from the hub.</p>}
       <p className="muted">
         Your roster: <strong>{starterCount}/4</strong> starters, <strong>{subCount}/1</strong> sub.
       </p>

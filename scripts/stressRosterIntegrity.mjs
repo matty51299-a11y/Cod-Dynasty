@@ -114,7 +114,9 @@ function runSimulation(teamId, seed) {
     } else if (phase === "preChamps") {
       state = runAction(state, `${teamId}/${seed}:beginChamps:${state.season}:${steps}`, beginChamps);
     } else if (phase === "offseason") {
-      state = runAction(state, `${teamId}/${seed}:contracts:${state.season}:${steps}`, enterContractPhase);
+      state = state.offseason?.freeAgencyOpen
+        ? runAction(state, `${teamId}/${seed}:aiFreeAgency:${state.season}:${steps}`, advanceOffseason)
+        : runAction(state, `${teamId}/${seed}:contracts:${state.season}:${steps}`, enterContractPhase);
     } else if (phase === "contracts") {
       state = runAction(state, `${teamId}/${seed}:advanceOffseason:${state.season}:${steps}`, advanceOffseason);
     } else {
