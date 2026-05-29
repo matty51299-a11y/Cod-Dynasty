@@ -6,7 +6,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
 import { calcTeamOvr } from "../engine/teamOvr.js";
-import { getSigningCost, getResignDemand, getTeamCap } from "../engine/rosterAI.js";
+import { getSigningCost, getResignDemand, getTeamCap, getChallengerStockLabel } from "../engine/rosterAI.js";
 import { getContractReviewBudget } from "../utils/contractBudget.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
@@ -39,6 +39,22 @@ function readableMoveType(type) {
   if (t === "INACTIVE") return "Inactive";
   return t.replaceAll("_", " ").toLowerCase().replace(/^./, c => c.toUpperCase());
 }
+
+function formatRecentKd(player, playerSeasonStats, season) {
+  if (!player?.id || !playerSeasonStats || season == null) return "—";
+  const rows = (playerSeasonStats[player.id] || []).filter(r => Number(r.season) === Number(season) && (r.matches || 0) > 0);
+  if (!rows.length) return "—";
+  const kills = rows.reduce((sum, r) => sum + (r.kills || 0), 0);
+  const deaths = rows.reduce((sum, r) => sum + (r.deaths || 0), 0);
+  const kd = deaths > 0 ? kills / deaths : kills > 0 ? kills : 1;
+  return kd.toFixed(2);
+}
+
+function previousTeamLabel(teamId, schedule) {
+  if (!teamId) return "Unsigned";
+  return resolveTeamDisplay(teamId, schedule)?.tag || teamId;
+}
+
 function stockLabel(player) {
   const ovr = player?.overall || 0;
   const pot = player?.potential || ovr;
@@ -761,13 +777,21 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
     .slice(-8)
     .reverse();
   const graduates = recentMoves.filter(tx => tx.type === "CDL_SIGNING" && tx.fromTeamId && tx.toTeamId).slice(0, 5);
-  const available = [
-    ...(players || []).filter(ply => !ply.teamId),
-    ...(state.prospects || []),
-  ]
-    .filter((ply, idx, arr) => arr.findIndex(x => x.id === ply.id) === idx)
-    .sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0))
-    .slice(0, 6);
+  const [marketSearch, setMarketSearch] = useState("");
+  const [marketRole, setMarketRole] = useState("All");
+  const freeAgentPool = (players || [])
+    .filter(ply => !ply.teamId && !ply.isProspect && !isInactivePlayer(ply))
+    .filter(ply => !ply.status || ply.status === "freeAgent")
+    .sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0));
+  const marketRoles = ["All", ...Array.from(new Set(freeAgentPool.map(ply => ply.primary).filter(Boolean))).sort()];
+  const searchNeedle = marketSearch.trim().toLowerCase();
+  const filteredFreeAgents = freeAgentPool.filter(ply => {
+    const roleOk = marketRole === "All" || ply.primary === marketRole;
+    const searchOk = !searchNeedle || [ply.name, ply.primary, previousTeamLabel(ply.previousTeamId, schedule)]
+      .some(value => String(value || "").toLowerCase().includes(searchNeedle));
+    return roleOk && searchOk;
+  });
+  const marketPreview = filteredFreeAgents.slice(0, 25);
   const powerRankings = CDL_TEAMS.map(t => {
     const starters = (players || []).filter(ply => ply.teamId === t.id && !ply.isSub && !isInactivePlayer(ply));
     const keyPlayer = starters.sort((a, b) => (b.overall || 0) - (a.overall || 0))[0];
@@ -832,6 +856,112 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
               <button className="btn-primary" onClick={() => dispatch({ type: primaryAction.type })}>{primaryAction.label}</button>
             </div>
           </section>
+
+          {freeAgencyOpen && (
+            <section className="oh-card oh-market-card">
+              <div className="oh-card-header oh-market-header">
+                <div>
+                  <h3>Free Agency Market</h3>
+                  <p>AI teams are paused. Sign players now before running AI free agency.</p>
+                </div>
+                <button className="btn-secondary" onClick={() => setScreen?.("fa")}>Open Full Free Agency</button>
+              </div>
+              <div className="oh-market-toolbar">
+                <strong>Free Agency Open</strong>
+                <span>AI teams will not sign players until you click Run AI Free Agency.</span>
+                <input
+                  type="search"
+                  value={marketSearch}
+                  onChange={(e) => setMarketSearch(e.target.value)}
+                  placeholder="Search player, role, previous team…"
+                  aria-label="Search free agents"
+                />
+                <select value={marketRole} onChange={(e) => setMarketRole(e.target.value)} aria-label="Filter free agents by role">
+                  {marketRoles.map(role => <option key={role} value={role}>{role}</option>)}
+                </select>
+              </div>
+              {marketPreview.length ? (
+                <>
+                  <div className="oh-market-table-wrap">
+                    <table className="oh-market-table">
+                      <thead>
+                        <tr>
+                          <th>Player</th>
+                          <th>Age</th>
+                          <th>Role</th>
+                          <th>Previous Team</th>
+                          <th>OVR</th>
+                          <th>POT</th>
+                          <th>Recent K/D</th>
+                          <th>Stock</th>
+                          <th>Salary Demand</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {marketPreview.map(ply => {
+                          const roster = players.filter(p => p.teamId === userTeamId && !isInactivePlayer(p));
+                          const starters = roster.filter(p => !p.isSub);
+                          const subCount = roster.filter(p => p.isSub).length;
+                          const committed = starters.reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
+                          const demand = getSigningCost(ply);
+                          const cap = getTeamCap(userTeamId);
+                          const starterOverBy = Math.max(0, committed + demand - cap);
+                          const starterDisabledReason = starters.length >= 4
+                            ? "Roster full"
+                            : starterOverBy > 0
+                              ? `Over cap by ${fmtMoney(starterOverBy)}`
+                              : null;
+                          const subDisabledReason = subCount >= 1 ? "Sub slot full" : null;
+                          return (
+                            <tr key={ply.id}>
+                              <td><button className="link-button player-link" onClick={() => openPlayerProfile(ply.id)}>{ply.name}</button></td>
+                              <td>{ply.age ?? "—"}</td>
+                              <td><span className="role-pill">{ply.primary || "Role TBD"}</span></td>
+                              <td>{previousTeamLabel(ply.previousTeamId, schedule)}</td>
+                              <td><strong style={{ color: ratingColor(ply.overall || 0) }}>{ply.overall || "—"}</strong></td>
+                              <td><span style={{ color: ratingColor(ply.potential || 0) }}>{ply.potential || "—"}</span></td>
+                              <td>{formatRecentKd(ply, state.playerSeasonStats, completedSeason)}</td>
+                              <td>{getChallengerStockLabel(ply, state)}</td>
+                              <td>{fmtMoney(demand)}</td>
+                              <td>
+                                <div className="oh-market-actions">
+                                  <button
+                                    className="btn-primary-sm"
+                                    disabled={!!starterDisabledReason}
+                                    title={starterDisabledReason || `Sign ${ply.name} as a starter`}
+                                    onClick={() => dispatch({ type: "SIGN_PLAYER", playerId: ply.id, slotType: "starter" })}
+                                  >
+                                    {starterDisabledReason || "Sign as Starter"}
+                                  </button>
+                                  <button
+                                    className="btn-secondary-sm"
+                                    disabled={!!subDisabledReason}
+                                    title={subDisabledReason || `Sign ${ply.name} as a sub`}
+                                    onClick={() => dispatch({ type: "SIGN_PLAYER", playerId: ply.id, slotType: "sub" })}
+                                  >
+                                    {subDisabledReason || "Sign as Sub"}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filteredFreeAgents.length > marketPreview.length && (
+                    <div className="oh-market-footer">
+                      <span>Showing top {marketPreview.length} of {filteredFreeAgents.length} free agents.</span>
+                      <button className="db-rp-link" onClick={() => setScreen?.("fa")}>View Full Free Agency</button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="oh-empty">No free agents available yet.</p>
+              )}
+            </section>
+          )}
 
           <section className="oh-card">
             <div className="oh-card-header"><h3>Roster Needs / Team Outlook</h3></div>
@@ -908,8 +1038,8 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
           <section className="oh-card">
             <div className="oh-card-header"><h3>{freeAgencyOpen ? "Free Agents — User Window" : "Top Available Players"}</h3><button className="db-rp-link" onClick={() => setScreen?.("fa")}>Free Agency →</button></div>
             {freeAgencyOpen && <p className="oh-empty">AI signings are paused until you advance. Normal cap and roster limits apply.</p>}
-            {available.length ? <div className="oh-list compact">
-              {available.map(ply => {
+            {freeAgentPool.length ? <div className="oh-list compact">
+              {freeAgentPool.slice(0, 6).map(ply => {
                 const roster = players.filter(p => p.teamId === userTeamId);
                 const starters = roster.filter(p => !p.isSub);
                 const committed = starters.reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
@@ -922,7 +1052,7 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
                   {freeAgencyOpen && (canSign ? <button className="btn-primary-sm" onClick={() => dispatch({ type: "SIGN_PLAYER", playerId: ply.id, slotType: "starter" })}>Sign</button> : <small className="muted">Full/over cap</small>)}
                 </div>
               );})}
-            </div> : <p className="oh-empty">No available players found.</p>}
+            </div> : <p className="oh-empty">No available free agents found.</p>}
           </section>
         </aside>
       </div>
