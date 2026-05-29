@@ -52,7 +52,9 @@ export default function SeasonAwardsOverlay() {
   const awards = useMemo(() => pending?.awards || [], [pending]);
   const majorMvps = useMemo(() => pending?.majorMvps || [], [pending]);
 
-  if (!state || !pending) return null;
+  const enteredMajor = state?.enteredMajorIdx != null ? state?.schedule?.majors?.[state.enteredMajorIdx] : null;
+
+  if (!state || !pending || enteredMajor?.completed) return null;
 
   return (
     <div className="sao-backdrop" role="dialog" aria-modal="true" aria-labelledby="season-awards-title">
