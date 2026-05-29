@@ -5810,7 +5810,7 @@ body { margin: 0; }
   top: 0;
   right: 0;
   bottom: 0;
-  width: 300px;
+  width: 340px;
   background: #182235;
   border-left: 1px solid #2a3a57;
   z-index: 401;
@@ -5864,6 +5864,36 @@ body { margin: 0; }
   transition: color 0.12s;
 }
 .nf-close:hover { color: #f0f4ff; }
+
+/* Filter tabs */
+.nf-filters {
+  display: flex;
+  gap: 5px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #2a3a57;
+  flex-shrink: 0;
+}
+
+.nf-filter {
+  background: none;
+  border: 1px solid #2a3a57;
+  border-radius: 12px;
+  color: #6a80a0;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  white-space: nowrap;
+}
+.nf-filter:hover { color: #e8eefc; border-color: #60a5fa; }
+.nf-filter--active {
+  background: rgba(96, 165, 250, 0.14);
+  border-color: #60a5fa;
+  color: #60a5fa;
+}
 
 /* Empty state */
 .nf-empty {
@@ -5926,6 +5956,27 @@ body { margin: 0; }
   color: #4a5c7a;
   margin-top: 2px;
   letter-spacing: 0.02em;
+}
+
+/* High-importance items get a subtle left accent */
+.nf-item--high { border-left: 2px solid rgba(96, 165, 250, 0.35); padding-left: 12px; }
+.nf-item--high.nf-item--unread { background: rgba(96, 165, 250, 0.08); }
+
+/* Title + detail two-line layout (new items) */
+.nf-item-title {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e8eefc;
+  line-height: 1.3;
+}
+
+.nf-item-detail {
+  display: block;
+  font-size: 0.73rem;
+  color: #7a90b0;
+  line-height: 1.35;
+  margin-top: 2px;
 }
 
 /* Unread blue dot on the right */
