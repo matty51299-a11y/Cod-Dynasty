@@ -20,6 +20,73 @@ export function placementText(place) {
   return `T${place}`;
 }
 
+
+export function getSeriesResultText(match, teamId) {
+  if (!match || !teamId) return "Not tracked yet";
+  const won = match.winnerId === teamId;
+  const lost = match.loserId === teamId;
+  if (!won && !lost) return "Not tracked yet";
+  const prefix = won ? "W" : "L";
+  const score = typeof match.score === "string" && match.score.trim() ? match.score.trim() : null;
+  const perspectiveScore = score && lost ? score.split("-").reverse().join("-") : score;
+  const opponentId = won ? match.loserId : match.winnerId;
+  const opponentName = won ? match.loserName : match.winnerName;
+  const opponent = opponentName || opponentId;
+  return `${prefix}${perspectiveScore ? ` ${perspectiveScore}` : ""}${opponent ? ` vs ${opponent}` : ""}`;
+}
+
+export function getMajorPlacementMap(major) {
+  const bracket = major?.bracket;
+  if (!bracket?.rounds?.length) return {};
+  const placements = {};
+  const claimed = new Set();
+  const place = (teamId, p) => {
+    if (!teamId || claimed.has(teamId)) return;
+    placements[teamId] = p;
+    claimed.add(teamId);
+  };
+  const gfRound = bracket.rounds.find(r => r.type === "GF") ?? bracket.rounds[bracket.rounds.length - 1];
+  const gfMatch = gfRound?.matches?.[0];
+  if (gfMatch?.played && gfMatch.result) {
+    place(gfMatch.result.winnerId, 1);
+    place(gfMatch.result.loserId, 2);
+  } else if (bracket.champion) {
+    place(bracket.champion, 1);
+  }
+  const lbFinalMatch = bracket.rounds.find(r => r.name === "LB Final")?.matches?.[0];
+  if (lbFinalMatch?.played && lbFinalMatch.result) place(lbFinalMatch.result.loserId, 3);
+  const lbR5Match = bracket.rounds.find(r => r.name === "LB Round 5")?.matches?.[0];
+  if (lbR5Match?.played && lbR5Match.result) place(lbR5Match.result.loserId, 4);
+  const bucketize = (roundName, places) => {
+    const round = bracket.rounds.find(r => r.name === roundName);
+    const losers = (round?.matches ?? [])
+      .filter(m => m.played && m.result?.loserId)
+      .map(m => m.result.loserId);
+    losers.forEach((tid, i) => place(tid, places[Math.min(i, places.length - 1)]));
+  };
+  bucketize("LB Round 4", [5, 6]);
+  bucketize("LB Round 3", [7, 8]);
+  bucketize("LB Round 2", [9, 10, 11, 12]);
+  bucketize("LB Round 1", [13, 14, 15, 16]);
+  return placements;
+}
+
+function majorIndexFromName(name) {
+  const m = String(name || "").match(/Major\s+(\d+)/i);
+  return m ? Number(m[1]) - 1 : null;
+}
+
+
+function getMajorPlacementForTeam(state, season, majorIdx, teamId) {
+  if (!teamId || majorIdx == null) return null;
+  const major = state?.schedule?.majors?.[majorIdx];
+  if (!major) return null;
+  const award = (major.pointsAwards || []).find(a => a.teamId === teamId);
+  if (award?.place != null) return award.place;
+  const placements = getMajorPlacementMap(major);
+  return placements[teamId] ?? null;
+}
+
 export function findPlayerEverywhere(state, ref) {
   if (!ref) return null;
   if (typeof ref === "object" && ref.id) return ref;
@@ -132,10 +199,50 @@ export function buildPlayerHistory(state, player) {
       hpKd: null,
       sndKd: null,
       overloadKd: null,
+      result: getSeriesResultText(match, ps.teamId),
       placement: "Not tracked yet",
     };
+    if (event.eventType === "major") {
+      const majorIdx = majorIndexFromName(match.stage);
+      const place = getMajorPlacementForTeam(state, season, majorIdx, ps.teamId);
+      if (place != null) event.placement = placementText(place);
+    }
     row.events.push(event);
     events.push(event);
+  }
+
+  for (const q of state.schedule?.challengerQualifierResults || []) {
+    const season = q.season ?? state.season;
+    for (const qMatch of q.matchLog || []) {
+      const result = qMatch.result || qMatch;
+      const ps = result.playerStats?.[id];
+      if (!ps) continue;
+      const teamId = ps.teamId || (result.winnerId === qMatch.winnerId ? qMatch.winnerId : null);
+      const qr = (q.teams || []).find(r => r.teamId === teamId || r.rosterIds?.map(String).includes(id));
+      const row = ensureSeason(season);
+      if (teamId || qr?.teamId) row.teams.add(teamId || qr.teamId);
+      const maps = result.mapResults?.length || 0;
+      row.kills += ps.kills || 0;
+      row.deaths += ps.deaths || 0;
+      row.matches += 1;
+      row.maps += maps;
+      const event = {
+        season,
+        eventName: `Major ${Number(q.majorIdx ?? 0) + 1} Qualifier — ${qMatch.roundName || "Match"}`,
+        eventType: "challengerQualifier",
+        teamId: teamId || qr?.teamId,
+        teamName: qr?.teamName || findTeamEverywhere(state, teamId || qr?.teamId)?.name,
+        role: player.primary,
+        maps,
+        kills: ps.kills || 0,
+        deaths: ps.deaths || 0,
+        kd: kd(ps.kills || 0, ps.deaths || 0),
+        result: getSeriesResultText(result, teamId || qr?.teamId),
+        placement: placementText(qr?.placement),
+      };
+      row.events.push(event);
+      events.push(event);
+    }
   }
 
   for (const tx of state.challengerTransactions || []) {
@@ -159,11 +266,21 @@ export function buildPlayerHistory(state, player) {
   const maps = seasons.reduce((sum, s) => sum + s.maps, 0);
   const majorAppearances = events.filter(e => e.eventType === "major").length;
   const champsAppearances = events.filter(e => e.eventType === "champs").length;
-  const challengerQualifierAppearances = (state.challengerTransactions || []).filter(tx => String(tx.playerId) === id && String(tx.type || "").includes("CHALLENGER")).length;
+  const challengerQualifierAppearances = events.filter(e => e.eventType === "challengerQualifier").length;
+  const majorPlaces = events
+    .filter(e => e.eventType === "major" && e.placement && e.placement !== "Not tracked yet")
+    .map(e => ({ text: e.placement, value: e.placement.startsWith("T") ? Number(e.placement.slice(1)) : Number.parseInt(e.placement, 10) }))
+    .filter(e => Number.isFinite(e.value));
+  const bestMajor = majorPlaces.length ? majorPlaces.sort((a, b) => a.value - b.value)[0].text : "Not tracked yet";
+  const cqPlaces = events
+    .filter(e => e.eventType === "challengerQualifier" && e.placement && e.placement !== "Not tracked yet")
+    .map(e => ({ text: e.placement, value: e.placement.startsWith("T") ? Number(e.placement.slice(1)) : Number.parseInt(e.placement, 10) }))
+    .filter(e => Number.isFinite(e.value));
+  const bestCQ = cqPlaces.length ? cqPlaces.sort((a, b) => a.value - b.value)[0].text : "Not tracked yet";
   return {
     seasons,
     events,
-    summary: { seasonsPlayed: seasons.length, teamsPlayed: teamIds.size, maps, kills, deaths, kd: kd(kills, deaths), majorAppearances, champsAppearances, challengerQualifierAppearances },
+    summary: { seasonsPlayed: seasons.length, teamsPlayed: teamIds.size, maps, kills, deaths, kd: kd(kills, deaths), majorAppearances, champsAppearances, challengerQualifierAppearances, bestMajor, bestCQ },
   };
 }
 
@@ -187,19 +304,22 @@ export function buildTeamHistory(state, teamId) {
       row.deaths += ps.deaths || 0;
       row.rosterIds.add(pid);
     }
-    row.events.push({ eventName: match.stage || "Match", result: match.winnerId === teamId ? "Win" : "Loss", score: match.score, maps: match.mapResults?.length || 0 });
+    row.events.push({ eventName: match.stage || "Match", result: getSeriesResultText(match, teamId), score: match.score, maps: match.mapResults?.length || 0 });
   }
   for (const q of state.schedule?.challengerQualifierResults || []) {
     const qr = (q.teams || []).find(r => r.teamId === teamId);
     if (!qr) continue;
     const row = ensureSeason(q.season);
-    row.events.push({ eventName: `Major ${Number(q.majorIdx ?? 0) + 1} Qualifier`, result: qr.qualified ? "Qualified" : "Missed", placement: placementText(qr.placement), circuitPoints: qr.circuitPointsAwarded ?? 0 });
+    row.events.push({ eventName: `Major ${Number(q.majorIdx ?? 0) + 1} Qualifier`, result: `${placementText(qr.placement)}, ${qr.qualified ? "Qualified" : "Missed"}`, placement: placementText(qr.placement), circuitPoints: qr.circuitPointsAwarded ?? 0 });
   }
-  for (const major of state.schedule?.majors || []) {
+  for (const [majorIdx, major] of (state.schedule?.majors || []).entries()) {
     const award = (major.pointsAwards || []).find(a => a.teamId === teamId);
-    if (!award) continue;
+    const bracketPlace = getMajorPlacementMap(major)[teamId];
+    const place = award?.place ?? bracketPlace;
+    if (place == null) continue;
     const row = ensureSeason(state.season);
-    row.events.push({ eventName: major.name, result: `${placementText(award.place)} · +${award.points || 0} pts`, placement: placementText(award.place), cdlPoints: award.points || 0 });
+    const pointsText = award ? ` · +${award.points || 0} pts` : " · played Major bracket";
+    row.events.push({ eventName: major.name || `Major ${majorIdx + 1}`, result: `${placementText(place)}${pointsText}`, placement: placementText(place), cdlPoints: award?.points || 0 });
   }
   const roster = getTeamRoster(state, teamId);
   const currentRec = state.schedule?.standings?.[teamId] ?? { wins: 0, losses: 0, points: 0 };
