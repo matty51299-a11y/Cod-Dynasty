@@ -1,6 +1,7 @@
 import { CDL_TEAMS } from "../data/teams.js";
 import { buildCdlRosterNameSet, isCdlTeamId, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
 import { calcChemistry } from "./chemistry.js";
+import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 
 const PHILOSOPHIES = ["win_now", "youth_upside", "chemistry_stability", "balanced_value", "high_risk_gamble"];
 
@@ -130,6 +131,178 @@ function hashString(str) {
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
+}
+
+
+function safeKd(kills, deaths, fallback = 1) {
+  if (!kills && !deaths) return fallback;
+  return deaths > 0 ? kills / deaths : kills > 0 ? kills : fallback;
+}
+
+function majorIndexFromStageName(stageName) {
+  const match = String(stageName || "").match(/Major\s+(\d+)/i);
+  return match ? Number(match[1]) - 1 : null;
+}
+
+function isChallengerEventTeamId(teamId) {
+  return typeof teamId === "string" && /(?:^|_)qual_/.test(teamId);
+}
+
+function addStatLine(target, ps, maps = 0) {
+  if (!ps) return;
+  target.kills += ps.kills || 0;
+  target.deaths += ps.deaths || 0;
+  target.matches += 1;
+  target.maps += maps || 0;
+}
+
+function getChallengerTeamContext(player, state) {
+  const teamId = player?.challengerTeamId;
+  if (!teamId) return null;
+  return (state?.challengerTeams || []).find(t => t.id === teamId) || null;
+}
+
+function getMajorPlacementForEventTeam(state, match, teamId) {
+  const majorIdx = majorIndexFromStageName(match?.stage);
+  if (majorIdx == null) return null;
+  const major = state?.schedule?.majors?.[majorIdx];
+  if (!major?.bracket) return null;
+  return getMajorPlacementMap(major)[teamId] ?? null;
+}
+
+function collectChallengerPerformanceResume(player, state) {
+  const id = String(player?.id ?? "");
+  const resume = {
+    qualifier: { kills: 0, deaths: 0, matches: 0, maps: 0 },
+    major: { kills: 0, deaths: 0, matches: 0, maps: 0 },
+    recent: [],
+    qualifierPlacements: [],
+    majorPlacements: [],
+    qualifierAppearances: 0,
+    qualifiedMajors: 0,
+    cdlSeriesPlayed: 0,
+    cdlSeriesWins: 0,
+    cdlTeamsBeat: new Set(),
+  };
+  if (!id) return resume;
+  const seenQualifierEvents = new Set();
+
+  for (const q of state?.schedule?.challengerQualifierResults || []) {
+    const row = (q.teams || []).find(r => (r.rosterIds || []).map(String).includes(id));
+    if (row) {
+      const key = `${q.season ?? ""}_${q.majorIdx ?? ""}_${row.teamId}`;
+      if (!seenQualifierEvents.has(key)) {
+        seenQualifierEvents.add(key);
+        resume.qualifierAppearances += 1;
+        if (Number.isFinite(row.placement)) resume.qualifierPlacements.push(row.placement);
+        if (row.qualified) resume.qualifiedMajors += 1;
+      }
+    }
+    for (const qMatch of q.matchLog || []) {
+      const result = qMatch.result || qMatch;
+      const ps = result.playerStats?.[id];
+      if (!ps) continue;
+      const maps = result.mapResults?.length || 0;
+      addStatLine(resume.qualifier, ps, maps);
+      resume.recent.push({ kills: ps.kills || 0, deaths: ps.deaths || 0, maps, eventType: "qualifier" });
+      if (!row) {
+        const teamId = ps.teamId;
+        const statRow = (q.teams || []).find(r => r.teamId === teamId);
+        const key = `${q.season ?? ""}_${q.majorIdx ?? ""}_${statRow?.teamId ?? teamId}`;
+        if (statRow && !seenQualifierEvents.has(key)) {
+          seenQualifierEvents.add(key);
+          resume.qualifierAppearances += 1;
+          if (statRow.placement != null) resume.qualifierPlacements.push(statRow.placement);
+          if (statRow.qualified) resume.qualifiedMajors += 1;
+        }
+      }
+    }
+  }
+
+  for (const match of state?.schedule?.matchLog || []) {
+    const ps = match.playerStats?.[id];
+    if (!ps) continue;
+    const stage = String(match.stage || "");
+    const isMajorStage = /Major|Champs/i.test(stage);
+    const teamId = ps.teamId;
+    const fromQualifierTeam = isChallengerEventTeamId(teamId) || !!state?.schedule?.currentMajorEventTeams?.[teamId];
+    if (!isMajorStage || !fromQualifierTeam) continue;
+
+    const maps = match.mapResults?.length || 0;
+    addStatLine(resume.major, ps, maps);
+    resume.recent.push({ kills: ps.kills || 0, deaths: ps.deaths || 0, maps, eventType: "major" });
+
+    const place = getMajorPlacementForEventTeam(state, match, teamId);
+    if (place != null) resume.majorPlacements.push(place);
+
+    const opponentId = match.winnerId === teamId ? match.loserId : match.loserId === teamId ? match.winnerId : null;
+    if (opponentId && isCdlTeamId(opponentId)) {
+      resume.cdlSeriesPlayed += 1;
+      if (match.winnerId === teamId) {
+        resume.cdlSeriesWins += 1;
+        resume.cdlTeamsBeat.add(opponentId);
+      }
+    }
+  }
+
+  return resume;
+}
+
+export function getChallengerPerformanceScore(player, state) {
+  const resume = collectChallengerPerformanceResume(player, state);
+  const qualifierKd = safeKd(resume.qualifier.kills, resume.qualifier.deaths);
+  const majorKd = safeKd(resume.major.kills, resume.major.deaths);
+  const recentLines = resume.recent.slice(-8);
+  const recentKills = recentLines.reduce((sum, row) => sum + (row.kills || 0), 0);
+  const recentDeaths = recentLines.reduce((sum, row) => sum + (row.deaths || 0), 0);
+  const recentKd = safeKd(recentKills, recentDeaths);
+  const totalMaps = resume.qualifier.maps + resume.major.maps;
+  const bestMajor = resume.majorPlacements.length ? Math.min(...resume.majorPlacements) : null;
+  const bestQualifier = resume.qualifierPlacements.length ? Math.min(...resume.qualifierPlacements) : null;
+  const team = getChallengerTeamContext(player, state);
+
+  let score = 0;
+  score += clamp((qualifierKd - 1) * 24, -10, 16) * clamp(resume.qualifier.maps / 8, 0.35, 1);
+  score += clamp((majorKd - 1) * 34, -12, 22) * clamp(resume.major.maps / 6, 0.35, 1);
+  score += clamp((recentKd - 1) * 18, -8, 12) * clamp(recentLines.length / 4, 0.25, 1);
+  score += Math.min(12, resume.qualifiedMajors * 4);
+  score += Math.min(5, Math.max(0, resume.qualifierAppearances - 1) * 1.5);
+
+  if (bestMajor != null) score += bestMajor <= 4 ? 14 : bestMajor <= 8 ? 9 : bestMajor <= 12 ? 5 : 2;
+  if (bestQualifier != null) score += bestQualifier === 1 ? 10 : bestQualifier <= 2 ? 8 : bestQualifier <= 4 ? 6 : bestQualifier <= 8 ? 3 : -2;
+  if (resume.qualifierAppearances > 0 && resume.qualifiedMajors === 0) score -= 6;
+
+  score += Math.min(12, resume.cdlSeriesWins * 6 + Math.max(0, resume.cdlSeriesPlayed - resume.cdlSeriesWins) * 1.5);
+  if (resume.cdlSeriesPlayed > 0 && majorKd >= 1.05) score += 5;
+
+  if (team) {
+    score += clamp((team.circuitPoints ?? 0) / 12, 0, 5);
+    score += clamp((team.form ?? 0) * 1.2, -3, 5);
+    if ((team.lastQualifierPlacement ?? 99) <= 4) score += 3;
+  }
+
+  if (totalMaps >= 18) score += 5;
+  else if (totalMaps >= 9) score += 3;
+  else if (totalMaps >= 3) score += 1;
+  else if (resume.qualifierAppearances === 0 && resume.major.matches === 0) score -= 10;
+
+  if (totalMaps > 0 && qualifierKd < 0.9 && majorKd < 0.9) score -= 5;
+
+  return {
+    score: Number(clamp(score, -18, 65).toFixed(2)),
+    qualifierKd,
+    majorKd,
+    recentKd,
+    qualifierMaps: resume.qualifier.maps,
+    majorMaps: resume.major.maps,
+    qualifierAppearances: resume.qualifierAppearances,
+    qualifiedMajors: resume.qualifiedMajors,
+    bestMajorPlacement: bestMajor,
+    bestQualifierPlacement: bestQualifier,
+    cdlSeriesPlayed: resume.cdlSeriesPlayed,
+    cdlSeriesWins: resume.cdlSeriesWins,
+    cdlTeamsBeat: resume.cdlTeamsBeat.size,
+  };
 }
 
 // ── Per-save world nonce ───────────────────────────────────────────────────────
@@ -589,19 +762,22 @@ function candidateScore(candidate, teamPlayers, context, evaluation, neededRole,
   return score;
 }
 
-function getChallengerStockLabel(candidate) {
+function getChallengerStockLabel(candidate, gameState = null) {
   const ovr = candidate.overall ?? 70;
   const pot = candidate.potential ?? ovr;
   const age = candidate.age ?? 22;
   const form = candidate.form ?? 0;
   const showcase = candidate.challengerShowcase?.slice(-1)[0];
+  const performance = gameState ? getChallengerPerformanceScore(candidate, gameState) : null;
   if ((candidate.ego ?? 50) >= 80 && (candidate.composure ?? 70) <= 60) return "High Risk";
+  if ((performance?.majorMaps ?? 0) >= 6 && ((performance?.majorKd ?? 1) >= 1.08 || (performance?.cdlSeriesWins ?? 0) > 0)) return "Pro-Am Standout";
   if (showcase && (showcase.kd ?? 0) >= 1.12) return "Pro-Am Standout";
+  if ((performance?.score ?? 0) >= 32 && (performance?.qualifiedMajors ?? 0) >= 1) return "CDL Ready";
   if (ovr >= 80 && pot >= 88) return "Blue Chip";
   if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "CDL Ready";
   if (age >= 28 && !candidate.teamId) return "Veteran";
-  if (form >= 2 || (candidate.lastQualifierPlacement ?? 99) <= 4) return "Rising";
-  if (form <= -2) return "Falling";
+  if (form >= 2 || (candidate.lastQualifierPlacement ?? 99) <= 4 || (performance?.bestQualifierPlacement ?? 99) <= 4) return "Rising";
+  if (form <= -2 || (performance?.score ?? 0) <= -10) return "Falling";
   return "Stable";
 }
 
@@ -613,7 +789,8 @@ function scoreChallengerPickupCandidate(candidate, teamPlayers, evaluation, need
   const slot = teamPlayers.filter(p => p.primary === neededRole).sort((a, b) => (a.overall ?? 0) - (b.overall ?? 0))[0];
   const slotKd = getCurrentKD(slot || {}, gameState.playerSeasonStats, gameState.season);
   const showcase = candidate.challengerShowcase?.slice(-1)[0];
-  const stock = getChallengerStockLabel(candidate);
+  const performance = getChallengerPerformanceScore(candidate, gameState);
+  const stock = getChallengerStockLabel(candidate, gameState);
   let score = ovr * 0.65 + (pot - ovr) * 1.25 + fit;
   score += age <= 23 ? 7 : age <= 26 ? 3 : -2;
   score += (candidate.form ?? 0) * 2.4;
@@ -621,7 +798,10 @@ function scoreChallengerPickupCandidate(candidate, teamPlayers, evaluation, need
   if (slot) score += Math.max(0, ovr - (slot.overall ?? 70)) * 1.2;
   if (showcase) score += (showcase.kd ?? 1) >= 1.05 ? 6 : -2;
   if (showcase) score += (showcase.placement ?? 16) <= 8 ? 3 : 0;
-  score += stock === "Blue Chip" ? 8 : stock === "CDL Ready" ? 5 : stock === "Pro-Am Standout" ? 6 : stock === "Falling" ? -4 : 0;
+  score += performance.score;
+  if ((performance.qualifierMaps + performance.majorMaps) < 3 && performance.qualifierAppearances === 0) score -= 5;
+  if (performance.qualifiedMajors === 0 && performance.qualifierAppearances > 0) score -= 4;
+  score += stock === "Blue Chip" ? 8 : stock === "CDL Ready" ? 7 : stock === "Pro-Am Standout" ? 9 : stock === "Falling" ? -5 : 0;
   score += evaluation.standingRank >= 9 ? 6 : evaluation.standingRank <= 3 ? -6 : 0;
   return score;
 }
