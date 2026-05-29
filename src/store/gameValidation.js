@@ -1,4 +1,5 @@
 import { CDL_TEAMS } from "../data/teams.js";
+import { isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 
 const VALID_PHASES = new Set(["stage", "challengerQualifier", "major", "preChamps", "offseason", "contracts"]);
 
@@ -89,15 +90,24 @@ export function findPhaseInvariantViolations(state) {
     if (majorIdx != null) problems.push(`preChamps phase but majorIdx is ${majorIdx}`);
   }
 
-  // Roster integrity — every CDL team needs 4 starters for match sim to work.
-  // simMap now pads thin rosters so this is no longer fatal, but report it so
-  // the user/AI window can be inspected if it ever shows up.
+  // Roster integrity — every CDL team needs 4 valid active starters for match sim.
   if (Array.isArray(state.players)) {
+    const activeIds = new Set();
+    const activeNames = new Set();
     for (const team of CDL_TEAMS) {
-      const starters = state.players.filter(p => p.teamId === team.id && !p.isSub);
-      if (starters.length < 4) {
-        problems.push(`team ${team.id} has only ${starters.length} starter(s)`);
+      const starters = state.players.filter(p => p.teamId === team.id && !p.isSub && !isInactivePlayer(p));
+      if (starters.length < 4) problems.push(`team ${team.id} has only ${starters.length} valid active starter(s)`);
+      for (const player of starters) {
+        const key = normalizePlayerName(player.name);
+        if (activeIds.has(player.id)) problems.push(`duplicate active CDL player id: ${player.id}`);
+        if (key && activeNames.has(key)) problems.push(`duplicate active CDL player name: ${player.name}`);
+        if (player.challengerTeamId) problems.push(`${player.name} is listed on CDL team ${team.id} and Challenger team ${player.challengerTeamId}`);
+        if (player.teamId !== team.id) problems.push(`${player.name} has mismatched teamId ${player.teamId} for roster ${team.id}`);
+        activeIds.add(player.id);
+        if (key) activeNames.add(key);
       }
+      const invalid = state.players.filter(p => p.teamId === team.id && !p.isSub && isInactivePlayer(p));
+      for (const player of invalid) problems.push(`${player.name} is inactive/retired on active CDL roster ${team.id}`);
     }
   }
 

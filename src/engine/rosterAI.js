@@ -631,7 +631,7 @@ function signCandidate(candidate, teamId, players, prospects) {
   const duplicateCdlName = key && players.some(p => p.id !== candidate.id && p.teamId && isCdlTeamId(p.teamId) && !isInactivePlayer(p) && normalizePlayerName(p.name) === key);
   if (!candidate || isInactivePlayer(candidate) || duplicateCdlName) return { players, prospects, rejected: true };
   if (candidate.isProspect) {
-    const signed = { ...candidate, teamId, scouted: true, isSub: false };
+    const signed = normalizeSignedCdlPlayer(candidate, teamId);
     return {
       players: [...players, signed],
       prospects: prospects.filter(p => p.id !== candidate.id),
@@ -639,7 +639,7 @@ function signCandidate(candidate, teamId, players, prospects) {
   }
 
   return {
-    players: players.map(p => p.id === candidate.id ? { ...p, teamId, isSub: false, scouted: true } : p),
+    players: players.map(p => p.id === candidate.id ? normalizeSignedCdlPlayer(p, teamId) : p),
     prospects,
   };
 }
@@ -824,6 +824,164 @@ function fillMinimumRoster(teamId, players, prospects, rosterMovesLog, season, w
   return cur;
 }
 
+
+function getActiveCdlRoster(players, teamId) {
+  return (players || []).filter(p => p.teamId === teamId && !p.isSub && !isInactivePlayer(p));
+}
+
+function normalizeSignedCdlPlayer(player, teamId, salary = null) {
+  return {
+    ...player,
+    teamId,
+    challengerTeamId: null,
+    status: "cdl",
+    circuit: "cdl",
+    isSub: false,
+    scouted: true,
+    contractYears: Math.max(1, player.contractYears ?? 2),
+    salary: salary ?? player.salary ?? getSigningCost(player),
+  };
+}
+
+function makeEmergencyReplacement(teamId, slot, season) {
+  const seed = hashString(`${teamId}_${season}_${slot}_emergency_replacement`);
+  const first = ["Ace", "Blaze", "Dash", "Kilo", "Nero", "Rook", "Sage", "Vex"][seed % 8];
+  const last = ["Mercer", "Cross", "Vale", "Stone", "Reed", "Wolfe", "Price", "Knox"][(seed >>> 3) % 8];
+  const overall = 64 + (seed % 8);
+  return {
+    id: `emergency_${teamId}_${season}_${slot}_${seed.toString(36)}`,
+    name: `${first} ${last}`,
+    age: 20 + (seed % 5),
+    region: CDL_TEAMS.find(t => t.id === teamId)?.region ?? "NA",
+    primary: ["SMG", "AR", "Flex", "OBJ"][slot % 4],
+    overall,
+    potential: Math.max(overall + 4, 72 + (seed % 10)),
+    teamwork: 60 + (seed % 25),
+    leadership: 45 + (seed % 20),
+    workEthic: 60 + ((seed >>> 4) % 25),
+    ego: 35 + ((seed >>> 6) % 25),
+    clutch: 45 + ((seed >>> 8) % 30),
+    form: 65,
+    isEmergencyReplacement: true,
+    isProspect: true,
+  };
+}
+
+function candidatePoolForIntegrity(players, prospects, teamId, usedIds, usedNames) {
+  const team = CDL_TEAMS.find(t => t.id === teamId);
+  return [
+    ...players.filter(p => !p.teamId),
+    ...prospects.filter(p => !p.teamId),
+  ].filter(c => c && !isInactivePlayer(c))
+    .filter(c => !usedIds.has(c.id))
+    .filter(c => {
+      const key = normalizePlayerName(c.name);
+      return key && !usedNames.has(key);
+    })
+    .map(c => {
+      const sameRegion = team?.region && c.region === team.region ? 1 : 0;
+      const roleFit = c.primary ? 1 : 0;
+      return { c, sameRegion, roleFit, cost: getSigningCost(c) };
+    });
+}
+
+function appendIntegrityTx(transactions, state, team, player, source, overCap) {
+  const fromTeamId = player.challengerTeamId ?? null;
+  const note = source === "generated"
+    ? `${team.name} signed emergency replacement ${player.name} to complete roster.`
+    : `${team.name} promoted ${player.name}${fromTeamId ? " from Challengers" : ""} to complete roster.`;
+  return pushTx(transactions || [], state, {
+    type: source === "generated" ? "EMERGENCY_ROSTER_FILL" : "CDL_SIGNING",
+    playerId: player.id,
+    playerName: player.name,
+    fromTeamId,
+    toTeamId: team.id,
+    note: overCap ? `${note} Emergency budget exception used.` : note,
+  });
+}
+
+export function ensureCdlRosterIntegrity(gameState, options = {}) {
+  const state = gameState || {};
+  let players = [...(state.players || [])];
+  let prospects = [...(state.prospects || [])];
+  let challengerTeams = (state.challengerTeams || []).map(t => ({ ...t, playerIds: [...(t.playerIds || [])] }));
+  let challengerTransactions = [...(state.challengerTransactions || [])];
+  const rosterMovesLog = [...(state.rosterMovesLog || [])];
+  const repairs = [];
+  const season = state.season ?? state.schedule?.season ?? 1;
+  const windowType = options.windowType ?? "integrity";
+
+  const seenIds = new Set();
+  const seenNames = new Set();
+  players = players.map(player => {
+    if (!player?.teamId || !isCdlTeamId(player.teamId) || player.isSub) return player;
+    const key = normalizePlayerName(player.name);
+    const invalid = isInactivePlayer(player) || !key || seenIds.has(player.id) || seenNames.has(key);
+    if (invalid) {
+      repairs.push({ type: "removed_invalid_cdl_reference", teamId: player.teamId, playerId: player.id, playerName: player.name });
+      return { ...player, teamId: null, challengerTeamId: null, isSub: false, status: isInactivePlayer(player) ? player.status : "free_agent" };
+    }
+    seenIds.add(player.id);
+    seenNames.add(key);
+    if (player.status !== "cdl" || player.circuit !== "cdl" || player.challengerTeamId) {
+      repairs.push({ type: "normalized_cdl_player", teamId: player.teamId, playerId: player.id, playerName: player.name });
+      return normalizeSignedCdlPlayer(player, player.teamId, player.salary ?? getSigningCost(player));
+    }
+    return player;
+  });
+
+  for (const team of CDL_TEAMS) {
+    let roster = getActiveCdlRoster(players, team.id);
+    let fillSlot = 0;
+    while (roster.length < 4 && fillSlot++ < 8) {
+      const committed = roster.reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
+      const budgetLeft = getTeamCap(team.id) - committed;
+      const usedIds = new Set(players.filter(p => p.teamId && isCdlTeamId(p.teamId) && !p.isSub && !isInactivePlayer(p)).map(p => p.id));
+      const usedNames = buildCdlRosterNameSet(players);
+      let source = "pool";
+      let overCap = false;
+      const pool = candidatePoolForIntegrity(players, prospects, team.id, usedIds, usedNames);
+      let pick = pool
+        .filter(x => x.cost <= budgetLeft)
+        .sort((a, b) => (b.sameRegion - a.sameRegion) || (b.roleFit - a.roleFit) || ((b.c.overall ?? 70) - (a.c.overall ?? 70)))[0]?.c;
+      if (!pick) {
+        pick = pool.slice().sort((a, b) => (a.cost - b.cost) || (b.sameRegion - a.sameRegion) || ((b.c.overall ?? 70) - (a.c.overall ?? 70)))[0]?.c;
+        if (pick) overCap = getSigningCost(pick) > budgetLeft;
+      }
+      if (!pick) {
+        pick = makeEmergencyReplacement(team.id, roster.length, season);
+        source = "generated";
+        overCap = true;
+      }
+
+      const salary = source === "generated" ? 15_000 : (pick.salary ?? getSigningCost(pick));
+      const signed = normalizeSignedCdlPlayer(pick, team.id, salary);
+      if (players.some(p => p.id === signed.id)) {
+        players = players.map(p => p.id === signed.id ? signed : p);
+      } else {
+        players.push(signed);
+      }
+      prospects = prospects.filter(p => p.id !== signed.id);
+      challengerTeams = challengerTeams.map(t => ({ ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) }));
+      challengerTransactions = appendIntegrityTx(challengerTransactions, state, team, pick, source, overCap);
+      repairs.push({ type: source === "generated" ? "generated_emergency_replacement" : "filled_cdl_roster", teamId: team.id, playerId: signed.id, playerName: signed.name, overCap });
+      roster = getActiveCdlRoster(players, team.id);
+    }
+
+    if (roster.length < 4) {
+      repairs.push({ type: "unrepairable_thin_cdl_roster", teamId: team.id, count: roster.length });
+    }
+  }
+
+  if (repairs.length) {
+    rosterMovesLog.push({ season, windowType, moveCount: repairs.filter(r => r.type === "filled_cdl_roster" || r.type === "generated_emergency_replacement").length, philosophy: "integrity_repair", repairs });
+  }
+
+  const repairedState = { ...state, players, prospects, challengerTeams, challengerTransactions, rosterMovesLog };
+  if (options.returnRepairs) return { state: repairedState, repairs };
+  return repairedState;
+}
+
 function runRosterWindow(gameState, { windowType, majorIdx }) {
   const teamContexts = ensureContexts(gameState);
   let players = [...(gameState.players || [])];
@@ -919,11 +1077,14 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
 
     const additions = [];
     for (const cut of eligibleToCut) {
+      const beforePlayers = players;
+      const beforeProspects = prospects;
+      const pendingReleaseTransactions = [];
       const afterRelease = releasePlayer(cut, players, prospects);
       players = afterRelease.players;
       prospects = afterRelease.prospects;
       if (afterRelease.movedToChallengers) {
-        challengerTransactions = pushTx(challengerTransactions, gameState, {
+        pendingReleaseTransactions.push({
           type: "CDL_RELEASE_TO_CHALLENGERS",
           playerId: cut.id,
           playerName: cut.name,
@@ -933,7 +1094,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
         });
       }
       if (afterRelease.retired) {
-        challengerTransactions = pushTx(challengerTransactions, gameState, {
+        pendingReleaseTransactions.push({
           type: "RETIREMENT",
           playerId: cut.id,
           playerName: cut.name,
@@ -943,7 +1104,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
         });
       }
       if (afterRelease.inactive) {
-        challengerTransactions = pushTx(challengerTransactions, gameState, {
+        pendingReleaseTransactions.push({
           type: "INACTIVE",
           playerId: cut.id,
           playerName: cut.name,
@@ -971,7 +1132,11 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
         .filter(c => !players.some(p => p.id !== c.id && p.teamId && isCdlTeamId(p.teamId) && normalizePlayerName(p.name) === normalizePlayerName(c.name)))
         .filter(c => getSigningCost(c) <= budgetLeft);
 
-      if (!candidates.length) continue;
+      if (!candidates.length) {
+        players = beforePlayers;
+        prospects = beforeProspects;
+        continue;
+      }
 
       const neededRole = cut.primary;
       const ranked = candidates
@@ -985,15 +1150,24 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
 
       const pickPool = ranked.slice(0, Math.min(6, ranked.length));
       const pick = pickPool[Math.floor(rng() * pickPool.length)]?.c;
-      if (!pick) continue;
+      if (!pick) {
+        players = beforePlayers;
+        prospects = beforeProspects;
+        continue;
+      }
 
       const afterSign = signCandidate(pick, team.id, players, prospects);
-      if (afterSign.rejected) continue;
+      if (afterSign.rejected) {
+        players = beforePlayers;
+        prospects = beforeProspects;
+        continue;
+      }
       players = afterSign.players;
       prospects = afterSign.prospects;
       if (pick.challengerTeamId) {
         challengerTeams = challengerTeams.map(t => t.id === pick.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(pid => pid !== pick.id) } : t);
       }
+      for (const tx of pendingReleaseTransactions) challengerTransactions = pushTx(challengerTransactions, gameState, tx);
       challengerTransactions = pushTx(challengerTransactions, gameState, {
         type: "CDL_SIGNING",
         playerId: pick.id,
@@ -1032,7 +1206,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
   }
   challengerTeams = refillAllChallengerRosters(challengerTeams, players, prospects);
 
-  return {
+  return ensureCdlRosterIntegrity({
     ...gameState,
     players,
     prospects,
@@ -1040,7 +1214,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
     rosterMovesLog,
     challengerTeams,
     challengerTransactions,
-  };
+  }, { windowType: `${windowType}_post_window` });
 }
 
 export function runAIMajorRosterWindow(gameState, majorIdx) {

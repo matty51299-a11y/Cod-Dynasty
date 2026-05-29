@@ -6,7 +6,8 @@ import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { calcChemistry, chemLabel } from "../engine/chemistry.js";
 import { calcTeamOvr } from "../engine/teamOvr.js";
-import { getTeamCap, getSigningCost, getResignDemand } from "../engine/rosterAI.js";
+import { getSigningCost, getResignDemand } from "../engine/rosterAI.js";
+import { getContractReviewBudget } from "../utils/contractBudget.js";
 import SeriesDetail from "./SeriesDetail.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import TeamLogo from "./TeamLogo.jsx";
@@ -678,9 +679,7 @@ function ContractReviewPanel({ players, dispatch, season, userTeamId, playerSeas
   const expiring = starters.filter(p => (p.contractYears ?? 2) === 1);
   const locked   = starters.filter(p => (p.contractYears ?? 2) > 1);
 
-  const cap        = getTeamCap(userTeamId);
-  const lockedCost = locked.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
-  const space      = cap - lockedCost;
+  const { cap, lockedCost, space } = getContractReviewBudget(players, userTeamId);
 
   function fmt(n) { return `$${Math.round(n / 1000)}k`; }
 
