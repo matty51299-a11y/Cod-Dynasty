@@ -34,6 +34,10 @@ const CHALLENGER_REGIONS = {
   death_by_cabal: "EU", huntsmen: "NA", stallions: "NA", telluride_bush: "NA",
   next_threat_black: "NA", stallions_x_bush: "NA", omnia_ggs: "EU", five_fears: "EU",
   faze_falcons: "MENA", for_fun_esports: "EU", high_treason: "NA", for_fun_black: "EU",
+  // New teams (Season 2 expansion)
+  carolina_reapers: "NA", torn_esports: "NA", confide_esports: "NA",
+  falcons_academy_white: "MENA", death_penalty: "NA", treaty1_gaming: "EU",
+  dark_horse_esports: "NA", belfast_storm: "EU",
 };
 const CHALLENGER_TEAM_POOL = [
   { id: "omit_brooklyn", name: "Omit Brooklyn", tag: "OBK", color: "#c084fc", logo: omitBrooklynLogo },
@@ -52,6 +56,15 @@ const CHALLENGER_TEAM_POOL = [
   { id: "for_fun_esports", name: "For Fun Esports", tag: "FFE", color: "#38bdf8", logo: forFunEsportsLogo },
   { id: "high_treason", name: "High Treason", tag: "HT", color: "#7f1d1d" },
   { id: "for_fun_black", name: "For Fun Black", tag: "FFB", color: "#334155" },
+  // 8 new teams expanding to 24
+  { id: "carolina_reapers", name: "Carolina Reapers", tag: "CAR", color: "#dc2626" },
+  { id: "torn_esports", name: "Torn Esports", tag: "TORN", color: "#f97316" },
+  { id: "confide_esports", name: "Confide Esports", tag: "CNFD", color: "#0891b2" },
+  { id: "falcons_academy_white", name: "Falcons Academy White", tag: "FAW", color: "#65a30d" },
+  { id: "death_penalty", name: "Death Penalty", tag: "DP", color: "#1e1e2e" },
+  { id: "treaty1_gaming", name: "Treaty1 Gaming", tag: "T1G", color: "#7e22ce" },
+  { id: "dark_horse_esports", name: "Dark Horse Esports", tag: "DH", color: "#374151" },
+  { id: "belfast_storm", name: "Belfast Storm", tag: "BFS", color: "#1d4ed8" },
 ];
 import { runProgression } from "./progression.js";
 import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, runAIFreeAgencyMarket, getResignDemand, ensureCdlRosterIntegrity } from "./rosterAI.js";
@@ -367,8 +380,169 @@ function getExistingQualifierForMajor(schedule, majorIdx = schedule?.majorIdx) {
   );
 }
 
+// Build a 24-team qualifier bracket: seeds 1–8 get byes; seeds 9–24 play a
+// play-in round (8 matches). The 8 play-in winners then join seeds 1–8 for a
+// standard DE16 main bracket. Play-in losers are eliminated (placements 17–24).
+function buildChallengerBracketDE24(seeds) {
+  const playInMatches = [];
+  for (let i = 0; i < 8; i++) {
+    const hiIdx = 8 + i;       // seeds 9–16 (indices 8–15)
+    const loIdx = 23 - i;      // seeds 24–17 (indices 23–16)
+    playInMatches.push({ a: seeds[hiIdx], b: seeds[loIdx], seedA: 9 + i, seedB: 24 - i, played: false, result: null });
+  }
+  return {
+    seeds,
+    type: "DE24",
+    rounds: [
+      { name: "Play-In Round", type: "PLAYIN", matches: playInMatches },
+      { name: "WB Round 1", type: "WB", matches: [] },
+      { name: "LB Round 1", type: "LB", matches: [] },
+      { name: "WB Round 2", type: "WB", matches: [] },
+      { name: "LB Round 2", type: "LB", matches: [] },
+      { name: "LB Round 3", type: "LB", matches: [] },
+      { name: "WB Semifinals", type: "WB", matches: [] },
+      { name: "LB Round 4", type: "LB", matches: [] },
+      { name: "WB Final", type: "WB", matches: [] },
+      { name: "LB Round 5", type: "LB", matches: [] },
+      { name: "LB Final", type: "LB", matches: [] },
+      { name: "Grand Final", type: "GF", matches: [] },
+    ],
+    completed: false,
+    champion: null,
+    _wbChampion: null,
+    _wbFLoser: null,
+    _lbr3Winners: null,
+  };
+}
+
+function _tryPopulateLBFinalDE24(bracket) {
+  const lbR5 = bracket.rounds[9]; // LB Round 5
+  if (!lbR5.matches.length || !lbR5.matches[0]?.played) return;
+  if (!bracket._wbFLoser) return;
+  bracket.rounds[10].matches = [
+    { a: bracket._wbFLoser, b: lbR5.matches[0].result.winnerId, played: false, result: null },
+  ];
+}
+
+function _advanceQualifierBracketDE24(bracket, roundIdx) {
+  const round = bracket.rounds[roundIdx];
+  if (!round.matches.every(m => m.played)) return false;
+  const winners = round.matches.map(m => m.result.winnerId);
+  const losers  = round.matches.map(m => m.result.loserId);
+
+  switch (roundIdx) {
+    case 0: { // Play-In → build WB Round 1 (top-8 seeds + 8 play-in winners)
+      const s = [...bracket.seeds.slice(0, 8), ...winners];
+      bracket.rounds[1].matches = [
+        { a: s[0], b: s[15], seedA: 1, seedB: 16, played: false, result: null },
+        { a: s[7], b: s[8],  seedA: 8, seedB: 9,  played: false, result: null },
+        { a: s[3], b: s[12], seedA: 4, seedB: 13, played: false, result: null },
+        { a: s[4], b: s[11], seedA: 5, seedB: 12, played: false, result: null },
+        { a: s[1], b: s[14], seedA: 2, seedB: 15, played: false, result: null },
+        { a: s[6], b: s[9],  seedA: 7, seedB: 10, played: false, result: null },
+        { a: s[2], b: s[13], seedA: 3, seedB: 14, played: false, result: null },
+        { a: s[5], b: s[10], seedA: 6, seedB: 11, played: false, result: null },
+      ];
+      break;
+    }
+    case 1: { // WB Round 1 → LB Round 1 + WB Round 2
+      bracket.rounds[2].matches = [
+        { a: losers[0], b: losers[1], played: false, result: null },
+        { a: losers[2], b: losers[3], played: false, result: null },
+        { a: losers[4], b: losers[5], played: false, result: null },
+        { a: losers[6], b: losers[7], played: false, result: null },
+      ];
+      bracket.rounds[3].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+        { a: winners[2], b: winners[3], played: false, result: null },
+        { a: winners[4], b: winners[5], played: false, result: null },
+        { a: winners[6], b: winners[7], played: false, result: null },
+      ];
+      break;
+    }
+    case 2: break; // LB Round 1 — LB Round 2 populated when WB Round 2 finishes
+    case 3: { // WB Round 2 → WB Semis + LB Round 2
+      bracket.rounds[6].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+        { a: winners[2], b: winners[3], played: false, result: null },
+      ];
+      const lb1w = bracket.rounds[2].matches.map(m => m.result.winnerId);
+      bracket.rounds[4].matches = [
+        { a: lb1w[0], b: losers[0], played: false, result: null },
+        { a: lb1w[1], b: losers[1], played: false, result: null },
+        { a: lb1w[2], b: losers[2], played: false, result: null },
+        { a: lb1w[3], b: losers[3], played: false, result: null },
+      ];
+      break;
+    }
+    case 4: bracket.rounds[5].matches = [{ a: winners[0], b: winners[1], played: false, result: null }, { a: winners[2], b: winners[3], played: false, result: null }]; break;
+    case 5: bracket._lbr3Winners = winners; break;
+    case 6: { // WB Semis → WB Final + LB Round 4
+      bracket.rounds[8].matches = [{ a: winners[0], b: winners[1], played: false, result: null }];
+      bracket.rounds[7].matches = [
+        { a: bracket._lbr3Winners[0], b: losers[0], played: false, result: null },
+        { a: bracket._lbr3Winners[1], b: losers[1], played: false, result: null },
+      ];
+      break;
+    }
+    case 7: bracket.rounds[9].matches = [{ a: winners[0], b: winners[1], played: false, result: null }]; break;
+    case 8: bracket._wbChampion = winners[0]; bracket._wbFLoser = losers[0]; _tryPopulateLBFinalDE24(bracket); break;
+    case 9: _tryPopulateLBFinalDE24(bracket); break;
+    case 10: bracket.rounds[11].matches = [{ a: bracket._wbChampion, b: winners[0], played: false, result: null }]; break;
+    case 11: bracket.champion = winners[0]; return true;
+  }
+  return false;
+}
+
+function computeDE24Placements(bracket) {
+  const placements = {};
+  const claimed = new Set();
+  const place = (teamId, p) => {
+    if (!teamId || claimed.has(teamId)) return;
+    placements[teamId] = p;
+    claimed.add(teamId);
+  };
+
+  const gfRound = bracket.rounds.find(r => r.type === "GF") ?? bracket.rounds[bracket.rounds.length - 1];
+  const gfMatch = gfRound?.matches?.[0];
+  if (gfMatch?.played && gfMatch.result) {
+    place(gfMatch.result.winnerId, 1);
+    place(gfMatch.result.loserId, 2);
+  } else if (bracket.champion) {
+    place(bracket.champion, 1);
+  }
+
+  const lbFinalRound = bracket.rounds.find(r => r.name === "LB Final");
+  const lbFinalMatch = lbFinalRound?.matches?.[0];
+  if (lbFinalMatch?.played && lbFinalMatch.result) place(lbFinalMatch.result.loserId, 3);
+
+  const lbR5Round = bracket.rounds.find(r => r.name === "LB Round 5");
+  const lbR5Match = lbR5Round?.matches?.[0];
+  if (lbR5Match?.played && lbR5Match.result) place(lbR5Match.result.loserId, 4);
+
+  const bucketize = (roundName, places) => {
+    const round = bracket.rounds.find(r => r.name === roundName);
+    const losers = (round?.matches ?? []).filter(m => m.played && m.result?.loserId).map(m => m.result.loserId);
+    losers.forEach((id, i) => place(id, places[Math.min(i, places.length - 1)]));
+  };
+
+  bucketize("LB Round 4", [5, 6]);
+  bucketize("LB Round 3", [7, 8]);
+  bucketize("LB Round 2", [9, 10, 11, 12]);
+  bucketize("LB Round 1", [13, 14, 15, 16]);
+
+  // Play-in losers are eliminated immediately: placements 17–24
+  const playInRound = bracket.rounds.find(r => r.name === "Play-In Round");
+  (playInRound?.matches ?? []).filter(m => m.played && m.result?.loserId)
+    .forEach((m, i) => place(m.result.loserId, 17 + i));
+
+  return placements;
+}
+
 function buildChallengerQualifierBracket(field) {
-  return buildMajorBracketDE16((field || []).slice().sort((a, b) => a.seed - b.seed).map(row => row.teamId));
+  const sorted = (field || []).slice().sort((a, b) => a.seed - b.seed).map(row => row.teamId);
+  if (sorted.length >= 24) return buildChallengerBracketDE24(sorted.slice(0, 24));
+  return buildMajorBracketDE16(sorted.slice(0, 16));
 }
 
 function createChallengerQualifierEvent(gameState, schedule) {
@@ -420,6 +594,7 @@ function findNextBracketMatch(bracket) {
 }
 
 function _advanceQualifierBracket(bracket, roundIdx) {
+  if (bracket.type === "DE24") return _advanceQualifierBracketDE24(bracket, roundIdx);
   const round = bracket.rounds[roundIdx];
   if (!round.matches.every(m => m.played)) return false;
   const winners = round.matches.map(m => m.result.winnerId);
@@ -488,7 +663,9 @@ function _simOneChallengerQualifierMatch(current, gameState, schedule) {
 function finalizeChallengerQualifier(gameState, schedule, current) {
   if (current.completed && current.results?.length) return current;
   const majorIdx = current.majorIdx ?? schedule.majorIdx ?? schedule.stageIdx ?? 0;
-  const placements = computeDE16Placements(current.bracket);
+  const placements = current.bracket?.type === "DE24"
+    ? computeDE24Placements(current.bracket)
+    : computeDE16Placements(current.bracket);
   const records = {};
   for (const match of current.matchLog || []) {
     records[match.winnerId] = records[match.winnerId] || { wins: 0, losses: 0 };
@@ -497,7 +674,7 @@ function finalizeChallengerQualifier(gameState, schedule, current) {
     records[match.loserId].losses += 1;
   }
   const results = (current.field || []).map(row => {
-    const placement = placements[row.teamId] ?? 16;
+    const placement = placements[row.teamId] ?? (current.field?.length || 16);
     const circuitPointsAwarded = challengerPointsForPlacement(placement);
     const qualified = placement <= CHALLENGER_QUALIFIER_TEAMS;
     const rec = records[row.teamId] || { wins: 0, losses: 0 };
@@ -582,7 +759,7 @@ export function simChallengerQualifierRound(gameState) {
   if (!next) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: finalizeChallengerQualifier(gameState, schedule, current) } };
   const startRound = next.roundIdx;
   let safety = 0;
-  while (safety++ < 20) {
+  while (safety++ < 30) {
     const still = findNextBracketMatch(current.bracket);
     if (!still || still.roundIdx !== startRound) break;
     const { allComplete } = _simOneChallengerQualifierMatch(current, gameState, schedule);
@@ -599,7 +776,7 @@ export function simChallengerQualifier(gameState) {
   if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
   current = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
   let safety = 0;
-  while (!current.bracket?.champion && safety++ < 80) _simOneChallengerQualifierMatch(current, gameState, schedule);
+  while (!current.bracket?.champion && safety++ < 120) _simOneChallengerQualifierMatch(current, gameState, schedule);
   schedule.currentChallengerQualifier = finalizeChallengerQualifier(gameState, schedule, current);
   return { ...gameState, schedule: { ...schedule } };
 }
@@ -651,9 +828,10 @@ function simulateChallengerQualifier(gameState, schedule, eventKey = "major") {
   ensureChallengerTeams(gameState);
   const rng = seededRng(schedule.season * 9991 + ((schedule.majorIdx ?? 0) + 1) * 71 + (eventKey === "champs" ? 17 : 0));
   const field = buildChallengerQualifierField(gameState, schedule);
+  const fieldSize = field.length;
   const results = field.map((row) => ({
     ...row,
-    performanceScore: Number(((row.teamOvr ?? 65) + (row.formBefore ?? 0) * 0.9 + (17 - row.seed) * 0.25 + (rng() * 10 - 5)).toFixed(2)),
+    performanceScore: Number(((row.teamOvr ?? 65) + (row.formBefore ?? 0) * 0.9 + (fieldSize + 1 - row.seed) * 0.25 + (rng() * 10 - 5)).toFixed(2)),
   })).sort((a, b) => b.performanceScore - a.performanceScore || a.seed - b.seed)
     .map((r, i) => ({ ...r, placement: i + 1, qualified: i < CHALLENGER_QUALIFIER_TEAMS, circuitPointsAwarded: challengerPointsForPlacement(i + 1), formAfter: Math.max(-10, Math.min(10, (r.formBefore ?? 0) + (i < 4 ? 2 : i < 8 ? 0 : -1))) }));
 
@@ -673,6 +851,9 @@ const CHALLENGER_ORG_TIER = {
   telluride_bush: 3, faze_falcons: 3, five_fears: 2, for_fun_esports: 2,
   huntsmen: 2, stallions: 2, death_by_cabal: 2, next_threat_black: 1,
   stallions_x_bush: 1, omnia_ggs: 1, high_treason: 1, for_fun_black: 1,
+  // New teams start at developing tier
+  carolina_reapers: 1, torn_esports: 1, confide_esports: 1, falcons_academy_white: 1,
+  death_penalty: 1, treaty1_gaming: 1, dark_horse_esports: 1, belfast_storm: 1,
 };
 
 function _buildMergedChallengerTeams(gameState) {
@@ -693,7 +874,7 @@ function _buildMergedChallengerTeams(gameState) {
   });
 }
 
-// Used for new-game only: randomized snake draft across all 16 teams.
+// Used for new-game only: randomized snake draft across all 24 teams.
 // seed must be a non-zero integer unique to this save creation.
 export function buildChallengerRostersForNewGame(gameState, seed) {
   const merged = _buildMergedChallengerTeams(gameState);

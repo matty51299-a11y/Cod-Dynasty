@@ -37,6 +37,9 @@ const CHALLENGER_REGIONS = {
   death_by_cabal: "EU", huntsmen: "NA", stallions: "NA", telluride_bush: "NA",
   next_threat_black: "NA", stallions_x_bush: "NA", omnia_ggs: "EU", five_fears: "EU",
   faze_falcons: "MENA", for_fun_esports: "EU", high_treason: "NA", for_fun_black: "EU",
+  carolina_reapers: "NA", torn_esports: "NA", confide_esports: "NA",
+  falcons_academy_white: "MENA", death_penalty: "NA", treaty1_gaming: "EU",
+  dark_horse_esports: "NA", belfast_storm: "EU",
 };
 
 const CHALLENGER_TEAM_POOL = [
@@ -56,6 +59,14 @@ const CHALLENGER_TEAM_POOL = [
   { id: "for_fun_esports", name: "For Fun Esports", tag: "FFE" },
   { id: "high_treason", name: "High Treason", tag: "HT" },
   { id: "for_fun_black", name: "For Fun Black", tag: "FFB" },
+  { id: "carolina_reapers", name: "Carolina Reapers", tag: "CAR" },
+  { id: "torn_esports", name: "Torn Esports", tag: "TORN" },
+  { id: "confide_esports", name: "Confide Esports", tag: "CNFD" },
+  { id: "falcons_academy_white", name: "Falcons Academy White", tag: "FAW" },
+  { id: "death_penalty", name: "Death Penalty", tag: "DP" },
+  { id: "treaty1_gaming", name: "Treaty1 Gaming", tag: "T1G" },
+  { id: "dark_horse_esports", name: "Dark Horse Esports", tag: "DH" },
+  { id: "belfast_storm", name: "Belfast Storm", tag: "BFS" },
 ];
 
 const CHALLENGER_ORG_TIER = {
@@ -63,6 +74,8 @@ const CHALLENGER_ORG_TIER = {
   telluride_bush: 3, faze_falcons: 3, five_fears: 2, for_fun_esports: 2,
   huntsmen: 2, stallions: 2, death_by_cabal: 2, next_threat_black: 1,
   stallions_x_bush: 1, omnia_ggs: 1, high_treason: 1, for_fun_black: 1,
+  carolina_reapers: 1, torn_esports: 1, confide_esports: 1, falcons_academy_white: 1,
+  death_penalty: 1, treaty1_gaming: 1, dark_horse_esports: 1, belfast_storm: 1,
 };
 
 function buildChallengerRostersForNewGame(gameState, seed) {
@@ -199,7 +212,7 @@ for (let g = 0; g < results.length; g++) {
     if (t.playerIds.length !== 4) { console.log(`  FAIL G${g+1} ${t.name}: ${t.playerIds.length} players`); p1 = false; pass = false; }
   }
 }
-console.log("1. All 16 teams have 4 players: " + (p1 ? "PASS" : "FAIL"));
+console.log("1. All 24 teams have 4 players: " + (p1 ? "PASS" : "FAIL"));
 
 // 2. No duplicates
 let p2 = true;

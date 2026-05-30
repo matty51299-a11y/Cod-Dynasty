@@ -885,7 +885,9 @@ function refillAllChallengerRosters(challengerTeams, players, prospects) {
 
 function releasePlayer(player, players, prospects) {
   const shouldRetire = (player.age ?? 25) >= 33 || ((player.age ?? 25) >= 30 && (player.overall ?? 70) < 70);
-  const shouldGoChall = (player.overall ?? 70) >= 76 || ((player.overall ?? 70) >= 73 && (player.age ?? 25) < 29);
+  // With 24 Challenger teams more viable CDL vets can land on Challenger rosters.
+  // Lower primary threshold from 76 to 73, and widen secondary (OVR 70+ under 30).
+  const shouldGoChall = (player.overall ?? 70) >= 73 || ((player.overall ?? 70) >= 70 && (player.age ?? 25) < 30);
   const shouldGoInactive = !shouldRetire && !shouldGoChall;
   if (player.isProspect) {
     if (shouldRetire) return { players: players.filter(p => p.id !== player.id), prospects };
@@ -1524,7 +1526,10 @@ export function runAIFreeAgencyMarket(gameState, options = {}) {
       challengerTransactions = pushTx(challengerTransactions, gameState, { type: "FREE_AGENT_RETIRED", playerId: p.id, playerName: p.name, fromTeamId: p.previousTeamId ?? null, toTeamId: null, note: `${p.name} retired after going unsigned.` });
       return { ...p, status: "retired", teamId: null, challengerTeamId: null };
     }
-    if (overall < 76 && age <= 30) {
+    // With 24 Challenger teams there are more slots. Players below elite CDL threshold
+    // (OVR < 84) who went unsigned should land on a Challenger team rather than
+    // sitting as inactive free agents with no realistic CDL offers coming.
+    if (overall < 84 && age <= 31) {
       diagnostics.marketExits.push({ playerId: p.id, playerName: p.name, status: "challengers" });
       challengerTransactions = pushTx(challengerTransactions, gameState, { type: "FREE_AGENT_TO_CHALLENGERS", playerId: p.id, playerName: p.name, fromTeamId: p.previousTeamId ?? null, toTeamId: null, note: `${p.name} joined Challengers after going unsigned.` });
       prospects.push({ ...p, teamId: null, challengerTeamId: null, contractYears: 0, status: "challengers" });
@@ -1533,6 +1538,10 @@ export function runAIFreeAgencyMarket(gameState, options = {}) {
     diagnostics.leftUnsigned.push({ playerId: p.id, playerName: p.name, overall: p.overall });
     return p;
   }).filter(Boolean);
+
+  // Immediately fill any open Challenger slots with newly-added Challengers prospects
+  // so released CDL players get team assignments without waiting for the next qualifier.
+  challengerTeams = refillAllChallengerRosters(challengerTeams, players, prospects);
 
   diagnostics.rosterSizes = CDL_TEAMS.map(t => ({ teamId: t.id, count: players.filter(p => p.teamId === t.id && !p.isSub && !isInactivePlayer(p)).length }));
   rosterMovesLog.push({ season, windowType: "freeAgency", moveCount: diagnostics.signings.length, philosophy: "open_market", diagnostics });
