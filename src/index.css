@@ -7956,3 +7956,339 @@ body { background: #111317; }
   .fm-club-strip { grid-template-columns: 42px 1fr; }
   .fm-strip-stats, .fm-strip-action { grid-column: 1 / -1; }
 }
+
+/* ── Staff & Coaching Panel ──────────────────────────────────────────────────── */
+.staff-panel {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.staff-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.staff-title {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text-head);
+  margin: 0 0 3px;
+}
+
+.staff-subtitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin: 0;
+}
+
+.staff-payroll-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 12px;
+}
+
+.staff-payroll-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.staff-payroll-val {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text-head);
+}
+
+/* ── Bonuses card ── */
+.staff-bonuses-card {
+  background: linear-gradient(180deg,#242830,#1d2128);
+  border: 1px solid var(--border);
+  border-top: 3px solid #60a5fa;
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.staff-card-label {
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.staff-bonus-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.staff-bonus-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.staff-bonus-icon { font-size: 11px; }
+.staff-bonus-label { color: var(--text-dim); font-size: 10px; font-weight: 700; }
+.staff-bonus-val { font-weight: 900; font-size: 12px; min-width: 20px; text-align: right; }
+
+.staff-bonus-note {
+  color: var(--text-dim);
+  font-size: 9px;
+  font-style: italic;
+  margin-left: auto;
+}
+
+/* ── Section headers ── */
+.staff-section {
+  background: linear-gradient(180deg,#242830,#1d2128);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.staff-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.03);
+}
+
+.staff-section-header h3 {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text-head);
+  margin: 0;
+}
+
+.staff-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: rgba(255,255,255,.07);
+  border-radius: 10px;
+  padding: 2px 7px;
+}
+
+.staff-role-filters {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.staff-filter-btn {
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+
+.staff-filter-btn:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.staff-filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Table ── */
+.staff-table-wrap { overflow-x: auto; }
+
+.staff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.staff-table th {
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-dim);
+  background: rgba(255,255,255,.025);
+  white-space: nowrap;
+}
+
+.staff-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  vertical-align: middle;
+}
+
+.staff-table tbody tr:hover td { background: rgba(255,255,255,.04); }
+
+.staff-role-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 2px 5px;
+  white-space: nowrap;
+}
+
+.staff-name-cell { min-width: 100px; }
+.staff-name { font-weight: 700; color: var(--text-head); }
+.staff-age-dim { display: block; font-size: 10px; color: var(--text-dim); }
+
+.staff-salary-cell, .staff-contract-cell {
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.staff-expiring { color: var(--red); font-weight: 700; }
+
+/* ── Attribute bars ── */
+.staff-attrs { display: flex; flex-direction: column; gap: 3px; min-width: 140px; }
+
+.staff-attr-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+}
+
+.staff-attr-label {
+  width: 44px;
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.staff-attr-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.staff-attr-bar {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  transition: width .2s;
+}
+
+.staff-attr-val {
+  width: 24px;
+  text-align: right;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.staff-stat { font-size: 12px; font-weight: 700; color: var(--text); }
+
+/* ── Traits ── */
+.staff-traits { display: flex; flex-wrap: wrap; gap: 3px; }
+.staff-trait-pill {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 3px;
+  padding: 2px 5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.staff-no-traits { color: var(--text-dim); font-size: 11px; }
+
+/* ── Action buttons ── */
+.staff-hire-btn {
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 3px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity .12s;
+}
+.staff-hire-btn:hover { opacity: .85; }
+
+.staff-fire-btn {
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  border: 1px solid rgba(248,113,113,.4);
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s;
+}
+.staff-fire-btn:hover { background: rgba(248,113,113,.12); }
+
+.staff-empty {
+  padding: 18px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── Team Hub staff section ── */
+.th-staff-section { padding: 8px 12px; }
+
+.th-staff-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+
+.th-staff-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 30px;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+
+.th-staff-row:last-child { border-bottom: none; }
+
+.th-staff-role {
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-dim);
+}
+
+.th-staff-name { font-weight: 700; color: var(--text-head); }
+
+.th-staff-rep { font-weight: 900; text-align: right; font-size: 12px; }
