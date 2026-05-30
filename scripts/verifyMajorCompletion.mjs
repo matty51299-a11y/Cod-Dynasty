@@ -5,8 +5,11 @@ import { applyChallengerRatingOverride, normalizePlayerName } from "../src/data/
 import { CDL_TEAMS } from "../src/data/teams.js";
 import {
   buildSeason,
+  buildChallengerRostersForNewGame,
   debugMajorBracketState,
   ensureChallengerTeams,
+  simChallengerQualifier,
+  continueFromChallengerQualifier,
   simMajor,
   simStage,
 } from "../src/engine/seasonEngine.js";
@@ -36,7 +39,16 @@ function newGame(seed = 12345) {
     challengersLog: [],
     challengerTransactions: [],
   };
-  ensureChallengerTeams(state);
+  buildChallengerRostersForNewGame(state, seed);
+  return state;
+}
+
+// Advance through challengerQualifier phase if needed, then into major phase.
+function simThroughQualifier(state) {
+  if (state.schedule.phase === "challengerQualifier") {
+    state = simChallengerQualifier(state);
+    state = continueFromChallengerQualifier(state);
+  }
   return state;
 }
 
@@ -84,6 +96,8 @@ let state = newGame();
 const summaries = [];
 
 state = simStage(state);
+// Stage completes → challengerQualifier phase, then → major
+state = simThroughQualifier(state);
 assert.equal(state.schedule.phase, "major", "Stage 1 should feed Major 1");
 assert.equal(debugMajorBracketState(state.schedule.majors[0], state).bracketType, "DE16", "Major 1 should use DE16");
 let beforePoints = cdlPoints(state.schedule.standings);
@@ -91,6 +105,7 @@ state = simMajor(state);
 summaries.push(assertFinishedMajor(state, 0, beforePoints));
 
 state = simStage(state);
+state = simThroughQualifier(state);
 assert.equal(state.schedule.phase, "major", "Stage 2 should feed Major 2");
 assert.equal(debugMajorBracketState(state.schedule.majors[1], state).bracketType, "DE16", "Major 2 should use DE16");
 assert.ok(state.schedule.majors[1].bracket.seeds.some(id => !CDL_TEAMS.some(team => team.id === id)), "Major 2 should include Challenger qualifier IDs");

@@ -175,9 +175,16 @@ export default function ChallengerQualifierOverlay() {
     }
   }
 
+  const bracketType = bracket?.type ?? "DE16";
+  const playInLostIds = bracketType === "DE24"
+    ? new Set((bracket?.rounds?.find(r => r.name === "Play-In Round")?.matches ?? [])
+        .filter(m => m.played && m.result?.loserId).map(m => m.result.loserId))
+    : new Set();
   const alive = fieldRows.filter(row => {
+    if (completed) return false;
+    if (playInLostIds.has(row.teamId)) return false;
     const losses = (qualifier.matchLog || []).filter(m => m.loserId === row.teamId).length;
-    return !completed && losses < 2;
+    return losses < 2;
   });
 
   const matchByKey = (key) => {
@@ -196,7 +203,7 @@ export default function ChallengerQualifierOverlay() {
           <div>
             <div className="cqo-kicker">CHALLENGERS EVENT</div>
             <h1>Challenger Qualifier</h1>
-            <p>Season {schedule.season} · {majorName} Qualifier · 16-team double elimination · Top 4 qualify (Major seeds 13–16)</p>
+            <p>Season {schedule.season} · {majorName} Qualifier · {fieldRows.length}-team {bracketType === "DE24" ? "play-in + double elimination" : "double elimination"} · Top 4 qualify (Major seeds 13–16)</p>
           </div>
           <div className={`cqo-status ${completed ? "complete" : "pending"}`}>
             {completed ? "Complete" : nextMatch ? nextMatch.roundName : "Ready"}
