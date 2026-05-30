@@ -9,6 +9,7 @@ import { CDL_TEAMS }  from "../data/teams.js";
 import { calcTeamOvr } from "../engine/teamOvr.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { buildTeamHistory, findTeamEverywhere, getTeamRoster, kdText } from "../utils/historyProfiles.js";
+import { getStaffForTeam, roleLabel } from "../engine/staffEngine.js";
 
 function kdColor(kd) {
   if (kd >= 1.4) return "var(--green)";
@@ -229,6 +230,33 @@ export default function TeamHubOverlay() {
             <span className="th-tp-label">Team Leader</span>
           </div>
         )}
+
+        {/* ── Staff panel (CDL teams only) ── */}
+        {isCdl && (() => {
+          const teamStaff = getStaffForTeam(state.staff || [], openTeamId);
+          if (!teamStaff.length) return null;
+          const hc = teamStaff.find(s => s.role === "head_coach");
+          const gm = teamStaff.find(s => s.role === "gm");
+          const an = teamStaff.find(s => s.role === "analyst");
+          const pc = teamStaff.find(s => s.role === "performance_coach");
+          const shown = [hc, gm, an, pc].filter(Boolean);
+          return (
+            <div className="th-section th-staff-section">
+              <div className="th-section-label">STAFF</div>
+              <div className="th-staff-list">
+                {shown.map(s => (
+                  <div key={s.id} className="th-staff-row">
+                    <span className="th-staff-role">{roleLabel(s.role)}</span>
+                    <span className="th-staff-name">{s.name}</span>
+                    <span className="th-staff-rep" style={{ color: s.reputation >= 85 ? "var(--green)" : s.reputation >= 75 ? "var(--accent)" : "var(--text-dim)" }}>
+                      {s.reputation}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
     </div>

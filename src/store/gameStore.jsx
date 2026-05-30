@@ -14,6 +14,7 @@ import { canAffordStarterResign } from "../utils/contractBudget.js";
 import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/rosterValidation.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
+import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "../engine/staffEngine.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
@@ -237,6 +238,7 @@ function createInitialGameState(userTeamId) {
     pendingSeasonAwards: null,
     seenAwardsSeasons: [],
     challengerDraftSeed,      // stored for reference; roster is already built — do not re-use
+    staff: ensureTeamStaff(migrateStaff([])),
   };
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
@@ -276,6 +278,8 @@ function reducer(state, action) {
       ensureChallengerTeams(loaded);
       const cleaned = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(loaded), { windowType: "load_migration" });
       cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
+      // Migrate staff: old saves without staff get the full starting pool
+      cleaned.staff = ensureTeamStaff(migrateStaff(cleaned.staff));
       return isValidGameState(cleaned) ? cleaned : null;
     }
 
@@ -628,6 +632,36 @@ function reducer(state, action) {
           ? `${player.name} released. ${getRosterIncompleteMessage({ ...state, players: state.players.filter(p => p.id !== action.playerId) }) ?? ""}`.trim()
           : `${player.name} released.`),
         [feedItem]
+      );
+    }
+
+    // ── HIRE STAFF ────────────────────────────────────────────────────────────
+    case "HIRE_STAFF": {
+      const { staffId, teamId } = action;
+      if (!staffId || !teamId) return state;
+      const target = (state.staff || []).find(s => s.id === staffId);
+      if (!target) return addNotif(state, "Staff member not found.");
+      const newStaff = hireStaff(state.staff, staffId, teamId);
+      const teamTag  = CDL_TEAMS.find(t => t.id === teamId)?.tag ?? teamId;
+      const role     = roleLabel(target.role);
+      return pushFeed(
+        addNotif({ ...state, staff: newStaff }, `${target.name} hired as ${role}!`),
+        [mkFeed("staff_hire", `${teamTag} hire ${target.name} as ${role}`, state.season, state.schedule?.phase ?? "stage")]
+      );
+    }
+
+    // ── FIRE STAFF ────────────────────────────────────────────────────────────
+    case "FIRE_STAFF": {
+      const { staffId } = action;
+      if (!staffId) return state;
+      const target = (state.staff || []).find(s => s.id === staffId);
+      if (!target || target.currentTeamId !== state.userTeamId) return state;
+      const newStaff = fireStaff(state.staff, staffId);
+      const teamTag  = CDL_TEAMS.find(t => t.id === state.userTeamId)?.tag ?? state.userTeamId;
+      const role     = roleLabel(target.role);
+      return pushFeed(
+        addNotif({ ...state, staff: newStaff }, `${target.name} released.`),
+        [mkFeed("staff_fire", `${teamTag} part ways with ${target.name} (${role})`, state.season, state.schedule?.phase ?? "stage")]
       );
     }
 

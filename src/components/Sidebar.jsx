@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { id: "fa",        icon: "$",  label: "Free Agency", offseasonOnly: true },
   { id: "prospects", icon: "◉",  label: "Challengers" },
   { id: "devreport", icon: "⬡",  label: "Dev Report" },
+  { id: "staff",     icon: "✦",  label: "Staff" },
   { id: "log",       icon: "▤",  label: "Match Log" },
 ];
 

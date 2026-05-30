@@ -23,6 +23,7 @@ import Roster            from "./components/Roster.jsx";
 import FreeAgency        from "./components/FreeAgency.jsx";
 import Prospects         from "./components/Prospects.jsx";
 import MatchLog          from "./components/MatchLog.jsx";
+import StaffPanel        from "./components/StaffPanel.jsx";
 import MajorEntryOverlay    from "./components/MajorEntryOverlay.jsx";
 import ChallengerQualifierOverlay from "./components/ChallengerQualifierOverlay.jsx";
 import MajorTournamentOverlay from "./components/MajorTournamentOverlay.jsx";
@@ -153,6 +154,7 @@ export default function App() {
           {screen === "fa"        && <FreeAgency />}
           {screen === "prospects" && <Prospects />}
           {screen === "devreport" && <OffseasonReport />}
+          {screen === "staff"     && <StaffPanel />}
           {screen === "log"       && <MatchLog />}
         </main>
       </div>
