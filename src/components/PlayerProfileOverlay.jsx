@@ -42,6 +42,30 @@ export default function PlayerProfileOverlay() {
   const activeSeason = tab ?? seasons[seasons.length - 1]?.season;
   const season = seasons.find(s => s.season === activeSeason) ?? seasons[0];
   const summary = history.summary || {};
+
+  const careerRows = seasons.map(s => {
+    const teams = [...(s.teams || [])].map(tid => resolveTeamDisplay(tid, state.schedule)).filter(Boolean);
+    return {
+      season: s.season,
+      teams,
+      roles: [...(s.roles || [])].join(", ") || player?.primary || "—",
+      matches: s.matches || 0,
+      maps: s.maps || 0,
+      kills: s.kills || 0,
+      deaths: s.deaths || 0,
+      kd: kdText(s.kills, s.deaths),
+      events: s.events?.length || 0,
+      awards: s.awards?.length || 0,
+    };
+  }).sort((a, b) => Number(b.season) - Number(a.season));
+  const totals = careerRows.reduce((acc, row) => ({
+    matches: acc.matches + row.matches,
+    maps: acc.maps + row.maps,
+    kills: acc.kills + row.kills,
+    deaths: acc.deaths + row.deaths,
+    events: acc.events + row.events,
+    awards: acc.awards + row.awards,
+  }), { matches: 0, maps: 0, kills: 0, deaths: 0, events: 0, awards: 0 });
   const ovr = player?.overall ?? player?.scoutedOverall;
   const pot = player?.potential ?? player?.scoutedPotential;
 
@@ -71,26 +95,42 @@ export default function PlayerProfileOverlay() {
         </div>
 
         <div className="pm-body">
-          <div className="pm-section">
+          <div className="pm-history-shell">
+            <div className="pm-history-title">
+              <span>Career Stats</span>
+              <div className="profile-tabs pm-history-tabs">
+                {seasons.map(s => <button key={s.season} className={s.season === season.season ? "active" : ""} onClick={() => setTab(s.season)}>S{s.season}</button>)}
+              </div>
+            </div>
+            <div className="pm-history-table-wrap">
+              <table className="pm-career-table">
+                <thead><tr><th>Year</th><th>Team</th><th>Info</th><th>Role</th><th>Matches</th><th>Maps</th><th>K</th><th>D</th><th>K/D</th><th>Events</th><th>Awards</th></tr></thead>
+                <tbody>
+                  {careerRows.map(row => (
+                    <tr key={row.season} className={row.season === season.season ? "is-active" : ""} onClick={() => setTab(row.season)}>
+                      <td><span className="pm-season-dot" />S{row.season}</td>
+                      <td>{row.teams.length ? row.teams.map((t, idx) => <span key={`${row.season}_${t.id}_${idx}`} className="pm-career-team"><TeamLogo team={t} size={16} />{t.tag}</span>) : status.label}</td>
+                      <td>{row.teams.map(t => t.name).join(" / ") || "Unsigned"}</td>
+                      <td>{row.roles}</td>
+                      <td>{row.matches}</td><td>{row.maps || "—"}</td><td>{row.kills}</td><td>{row.deaths}</td><td>{row.kd}</td><td>{row.events}</td><td>{row.awards || "—"}</td>
+                    </tr>
+                  ))}
+                  <tr className="pm-career-total"><td>Total</td><td colSpan="3">Career tracked totals</td><td>{totals.matches}</td><td>{totals.maps || "—"}</td><td>{totals.kills}</td><td>{totals.deaths}</td><td>{summary.kd == null ? "—" : summary.kd.toFixed(2)}</td><td>{totals.events}</td><td>{totals.awards || "—"}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="pm-section pm-summary-compact">
             <div className="pm-section-title">Career Summary</div>
             <div className="profile-summary-grid">
               <ProfileStat label="Seasons" value={summary.seasonsPlayed ?? 0} />
               <ProfileStat label="Teams" value={summary.teamsPlayed ?? 0} />
-              <ProfileStat label="Maps" value={summary.maps || "Not tracked yet"} />
-              <ProfileStat label="Kills" value={summary.kills ?? 0} />
-              <ProfileStat label="Deaths" value={summary.deaths ?? 0} />
               <ProfileStat label="Career K/D" value={summary.kd == null ? "—" : summary.kd.toFixed(2)} />
-              <ProfileStat label="Major Apps" value={summary.majorAppearances || "Not tracked yet"} />
-              <ProfileStat label="Champs Apps" value={summary.champsAppearances || "Not tracked yet"} />
-              <ProfileStat label="CQ Apps" value={summary.challengerQualifierAppearances || "Not tracked yet"} />
-              <ProfileStat label="Best Major" value={summary.bestMajor || "Not tracked yet"} />
-              <ProfileStat label="Best Champs" value={summary.bestChamps || "Not tracked yet"} />
-              <ProfileStat label="Best CQ" value={summary.bestCQ || "Not tracked yet"} />
+              <ProfileStat label="Best Major" value={summary.bestMajor || "Not tracked"} />
+              <ProfileStat label="Best Champs" value={summary.bestChamps || "Not tracked"} />
+              <ProfileStat label="Best CQ" value={summary.bestCQ || "Not tracked"} />
             </div>
-          </div>
-
-          <div className="profile-tabs">
-            {seasons.map(s => <button key={s.season} className={s.season === season.season ? "active" : ""} onClick={() => setTab(s.season)}>Season {s.season}</button>)}
           </div>
 
           <div className="pm-section">
