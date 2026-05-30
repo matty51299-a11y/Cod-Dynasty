@@ -3,7 +3,7 @@
 // Shows scouted values (with noise) until a prospect is signed.
 // Signing a prospect reveals their true ratings and hidden traits.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { getTeamCap, getSigningCost } from "../engine/rosterAI.js";
 import PoolHealth from "./PoolHealth.jsx";
@@ -13,13 +13,14 @@ import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
+import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 
 function ratingColor(v) {
-  if (v >= 90) return "#166534";
-  if (v >= 80) return "#15803d";
-  if (v >= 70) return "#1d4ed8";
-  if (v >= 60) return "#9a3412";
-  return "#dc2626";
+  if (v >= 90) return "#fbbf24";
+  if (v >= 80) return "#34d399";
+  if (v >= 70) return "#60a5fa";
+  if (v >= 60) return "#fb923c";
+  return "#f87171";
 }
 
 const ROLES = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];
@@ -95,14 +96,14 @@ export default function Prospects() {
   const cdlNames = buildCdlRosterNameSet(players);
   const available = (prospects || []).filter(p => !p.teamId && !isInactivePlayer(p) && !cdlNames.has(normalizePlayerName(p.name)));
 
-  const stats = useMemo(() => {
+  const stats = (() => {
     const vets = available.filter(p => !p.isProspect).length;
     const prospectsCount = available.filter(p => p.isProspect).length;
     const proAmEligible = available.filter(p => (p.overall ?? p.scoutedOverall ?? 0) >= 75).length;
     const top = [...available].sort((a,b)=>(b.scoutedOverall??b.overall)-(a.scoutedOverall??a.overall))[0] ?? null;
     const topPot = [...available].sort((a,b)=>(b.scoutedPotential??b.potential)-(a.scoutedPotential??a.potential))[0] ?? null;
     return { vets, prospectsCount, proAmEligible, top, topPot };
-  }, [available]);
+  })();
 
   const filtered = available
     .filter(p => {
@@ -137,21 +138,33 @@ export default function Prospects() {
 
   return (
     <div className="prospects-page">
-      <h2>Challengers Circuit</h2>
-      <div className="cm-hero">
+      <PageHeader
+        eyebrow="Challengers Circuit"
+        title="Scouting & Pro-Am Market"
+        subtitle="Track challenger teams, qualifier history, latest moves and available player pool."
+        meta={(
+          <div className="ui-stat-grid compact">
+            <StatCard label="Available" value={available.length} />
+            <StatCard label="Veterans" value={stats.vets} />
+            <StatCard label="Prospects" value={stats.prospectsCount} />
+            <StatCard label="Pro-Am Ready" value={stats.proAmEligible} tone="success" />
+          </div>
+        )}
+      />
+      <div className="cm-hero ui-budget-panel">
         <div className="cm-chip-row">
-          <span className="cm-chip">Available: <strong>{available.length}</strong></span>
-          <span className="cm-chip">CDL Veterans: <strong>{stats.vets}</strong></span>
-          <span className="cm-chip">Prospects: <strong>{stats.prospectsCount}</strong></span>
-          <span className="cm-chip">Pro-Am Eligible: <strong>{stats.proAmEligible}</strong></span>
-          <span className="cm-chip">Roster: <strong>{starterCount}/4</strong> + <strong>{subCount}/1</strong></span>
+          <Pill>Available <strong>{available.length}</strong></Pill>
+          <Pill>CDL Veterans <strong>{stats.vets}</strong></Pill>
+          <Pill>Prospects <strong>{stats.prospectsCount}</strong></Pill>
+          <Pill tone="success">Pro-Am Eligible <strong>{stats.proAmEligible}</strong></Pill>
+          <Pill>Roster <strong>{starterCount}/4</strong> + <strong>{subCount}/1</strong></Pill>
         </div>
         <div className="cm-chip-row">
-          <span className="cm-chip">Cap: <strong>${(teamCap / 1000).toFixed(0)}k</strong></span>
-          <span className="cm-chip">Committed: <strong>${(committed / 1000).toFixed(0)}k</strong></span>
-          <span className="cm-chip">Remaining: <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong></span>
-          {stats.top && <span className="cm-chip">Top Available: <button className="link-button player-link" onClick={() => openPlayerProfile(stats.top)}>{stats.top.name}</button></span>}
-          {stats.topPot && <span className="cm-chip">Highest Potential: <button className="link-button player-link" onClick={() => openPlayerProfile(stats.topPot)}>{stats.topPot.name}</button></span>}
+          <Pill>Cap <strong>${(teamCap / 1000).toFixed(0)}k</strong></Pill>
+          <Pill>Committed <strong>${(committed / 1000).toFixed(0)}k</strong></Pill>
+          <Pill tone={remaining < 0 ? "danger" : "success"}>Remaining <strong style={{ color: budgetColor }}>${(remaining / 1000).toFixed(0)}k</strong></Pill>
+          {stats.top && <Pill tone="accent">Top Available <button className="link-button player-link" onClick={() => openPlayerProfile(stats.top)}>{stats.top.name}</button></Pill>}
+          {stats.topPot && <Pill tone="gold">Highest Potential <button className="link-button player-link" onClick={() => openPlayerProfile(stats.topPot)}>{stats.topPot.name}</button></Pill>}
         </div>
         <div className="cm-budget-bar"><div style={{ width: `${budgetPct}%`, background: budgetColor }} /></div>
       </div>
@@ -159,25 +172,23 @@ export default function Prospects() {
         ⚠ Ratings shown are <em>scouted estimates</em> – true values revealed on signing.
       </p>
       {!!challengerTeams?.length && (
-        <div className="card" style={{ marginBottom: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Challenger Teams</h3>
-          <table className="roster-table">
+        <SectionCard title="Challenger Teams" subtitle="Circuit organizations, active rosters, form and latest qualifier placement.">
+          <div className="ui-table-wrap"><table className="roster-table data-table">
             <thead><tr><th>Team</th><th>Region</th><th>OVR</th><th>Roster</th><th>Circuit</th><th>Form</th><th>Last Qual</th></tr></thead>
             <tbody>{challengerTeams.map(t => {
               const roster = t.playerIds.map(pid => prospects.find(p => p.id===pid) || players.find(p=>p.id===pid)).filter(Boolean);
               const ovr = roster.length ? Math.round(roster.reduce((s,p)=>s+(p.overall??65),0)/roster.length) : 0;
-              return <tr key={t.id}><td><button className="link-button team-link" onClick={() => openTeamHub(t.id)}>{t.tag} · {t.name}</button></td><td>{t.region}</td><td>{ovr}</td><td>{roster.map((p, idx)=><span key={p.id}>{idx > 0 ? ", " : ""}<button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></span>)}</td><td>{t.circuitPoints ?? 0}</td><td>{t.form ?? 0}</td><td>{t.lastQualifierPlacement != null ? placementText(t.lastQualifierPlacement) : "-"}</td></tr>;
+              return <tr key={t.id}><td><button className="link-button team-link" onClick={() => openTeamHub(t.id)}>{t.tag} · {t.name}</button></td><td>{t.region}</td><td>{ovr}</td><td>{roster.map((p, idx)=><span key={p.id}>{idx > 0 ? ", " : ""}<button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></span>)}</td><td><Pill tone="accent">{t.circuitPoints ?? 0} pts</Pill></td><td>{t.form ?? 0}</td><td>{t.lastQualifierPlacement != null ? placementText(t.lastQualifierPlacement) : "-"}</td></tr>;
             })}</tbody>
-          </table>
-        </div>
+          </table></div>
+        </SectionCard>
       )}
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Challenger Qualifier</h3>
+      <SectionCard title="Challenger Qualifier" subtitle="Recent qualifier placements, circuit points and qualification status.">
         <h4 style={{ marginBottom: 8 }}>Latest Qualifier Results</h4>
         {!latestQualifier ? (
-          <p className="muted">No Challenger qualifier has been played yet.</p>
+          <EmptyState title="No qualifier played yet" detail="Qualifier results will appear here after the circuit event runs." />
         ) : (
-          <table className="roster-table">
+          <div className="ui-table-wrap"><table className="roster-table data-table">
             <thead><tr><th>Place</th><th>Team</th><th>Region</th><th>OVR</th><th>Score</th><th>Circuit Pts</th><th>Form Δ</th><th>Status</th></tr></thead>
             <tbody>{latestQualifier.teams.slice().sort((a,b)=>a.placement-b.placement).map(row => {
               const team = teamMap[row.teamId] || { id: row.teamId, name: row.teamId, tag: row.teamId, region: "-" };
@@ -194,10 +205,10 @@ export default function Prospects() {
                 <td>{row.qualified ? "Qualified for Major" : "Missed qualification"}</td>
               </tr>;
             })}</tbody>
-          </table>
+          </table></div>
         )}
         <h4 style={{ margin: "14px 0 8px" }}>Qualifier History</h4>
-        {!qualifierResults.length ? <p className="muted">No qualifier history yet.</p> : qualifierResults.slice().reverse().map((q, idx) => {
+        {!qualifierResults.length ? <EmptyState title="No qualifier history yet" /> : qualifierResults.slice().reverse().map((q, idx) => {
           const top4 = q.teams.slice().sort((a,b)=>a.placement-b.placement).slice(0,4);
           const winner = top4[0];
           return <details key={`${q.season}_${q.majorIdx}_${idx}`} style={{ marginBottom: 8 }}>
@@ -207,10 +218,9 @@ export default function Prospects() {
             </ol>
           </details>;
         })}
-      </div>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Latest Moves</h3>
-        {!(challengerTransactions || []).length ? <p className="muted">No recent challenger/CDL moves yet.</p> : (
+      </SectionCard>
+      <SectionCard title="Latest Moves" subtitle="Recent CDL releases, signings and challenger-pool changes.">
+        {!(challengerTransactions || []).length ? <EmptyState title="No recent challenger/CDL moves yet" /> : (
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {(challengerTransactions || []).slice(-10).reverse().map((tx, i) => (
               <li key={`${tx.playerId}_${tx.season}_${i}`} style={{ marginBottom: 4 }}>
@@ -219,8 +229,8 @@ export default function Prospects() {
             ))}
           </ul>
         )}
-      </div>
-      <div className="cm-tabs">
+      </SectionCard>
+      <div className="cm-tabs ui-tabs">
         {TAB_KEYS.map(k => <button key={k} className={`filter-btn ${tab===k?"active":""}`} onClick={()=>setTab(k)}>{k==="all"?"All Players":k==="veterans"?"CDL Veterans":k==="prospects"?"Prospects":k==="proam"?"Pro-Am Eligible":"Shortlist"}</button>)}
       </div>
 
@@ -245,10 +255,11 @@ export default function Prospects() {
         </div>
       </div>
 
+      <SectionCard title="Player Pool" subtitle="Scouted estimates are intentionally marked until signing reveals true ratings.">
       {filtered.length === 0 ? (
-        <p className="muted">No prospects match filters.</p>
+        <EmptyState title="No prospects match filters" detail="Try another role, archetype, tab or search term." />
       ) : (
-        <table className="roster-table">
+        <div className="ui-table-wrap"><table className="roster-table data-table">
           <thead>
             <tr>
               <th>Name</th>
@@ -281,8 +292,8 @@ export default function Prospects() {
                   </td>
                   <td>{p.age}</td>
                   <td>{p.region}</td>
-                  <td><span className="role-pill">{p.primary}</span></td>
-                  <td><span className="arch-pill">{ARCH_LABELS[p.archetype] ?? p.archetype}</span></td>
+                  <td><span className="role-pill ui-pill ui-pill-neutral">{p.primary}</span></td>
+                  <td><span className="arch-pill ui-pill ui-pill-accent">{ARCH_LABELS[p.archetype] ?? p.archetype}</span></td>
                   <td>{p.developmentCurve}</td>
                   <td>
                     <span style={{ color: ratingColor(ovr), fontWeight: "bold" }}>
@@ -316,13 +327,14 @@ export default function Prospects() {
                       </span>
                     )}
                   </td>
-                  <td>{challengerStockLabel(p)}</td>
+                  <td><Pill tone="accent">{challengerStockLabel(p)}</Pill></td>
                 </tr>
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       )}
+      </SectionCard>
       <details style={{ marginTop: 18 }}>
         <summary className="muted">Advanced / Debug: Pool Health</summary>
         <PoolHealth prospects={prospects} challengersLog={challengersLog} />
