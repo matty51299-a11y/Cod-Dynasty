@@ -4,7 +4,7 @@
 
 export const STAFF_ROLES = {
   head_coach:        "Head Coach",
-  gm:                "General Manager",
+  assistant_gm:      "Assistant GM",
   analyst:           "Analyst",
   performance_coach: "Performance Coach",
 };
@@ -54,7 +54,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_scump",
     name: "Scump",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "optic",
     age: 32,
     salary: 200000,
@@ -98,7 +98,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_formal",
     name: "FormaL",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "lat",
     age: 32,
     salary: 180000,
@@ -142,7 +142,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_attach",
     name: "Attach",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "boston",
     age: 30,
     salary: 130000,
@@ -186,7 +186,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_zer0",
     name: "Zer0",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "cloud9",
     age: 30,
     salary: 120000,
@@ -230,7 +230,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_crimsix",
     name: "Crimsix",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "faze",
     age: 35,
     salary: 185000,
@@ -274,7 +274,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_octane",
     name: "Octane",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "g2",
     age: 30,
     salary: 135000,
@@ -318,7 +318,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_enable",
     name: "Enable",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "riyadh",
     age: 33,
     salary: 160000,
@@ -362,7 +362,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_zoomaa",
     name: "ZooMaa",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "toronto",
     age: 30,
     salary: 130000,
@@ -406,7 +406,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_methodz",
     name: "Methodz",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "miami",
     age: 31,
     salary: 145000,
@@ -450,7 +450,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_bance",
     name: "Bance",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "paris",
     age: 30,
     salary: 100000,
@@ -494,7 +494,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_revan",
     name: "Revan",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "vancouver",
     age: 28,
     salary: 95000,
@@ -538,7 +538,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_jkap",
     name: "JKap",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: "carolina",
     age: 35,
     salary: 110000,
@@ -557,11 +557,11 @@ export const STARTING_STAFF = [
     status: "active",
   },
 
-  // ── Free Agent GMs ───────────────────────────────────────────────────────────
+  // ── Free Agent Assistant GMs ─────────────────────────────────────────────────
   {
     id: "staff_aches",
     name: "ACHES",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: null,
     age: 34,
     salary: 140000,
@@ -582,7 +582,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_parasite",
     name: "Parasite",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: null,
     age: 33,
     salary: 130000,
@@ -603,7 +603,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_slasher",
     name: "SlasheR",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: null,
     age: 31,
     salary: 135000,
@@ -624,7 +624,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_accuracy",
     name: "Accuracy",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: null,
     age: 32,
     salary: 110000,
@@ -645,7 +645,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_teepee",
     name: "TeePee",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: null,
     age: 34,
     salary: 110000,
@@ -666,7 +666,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_merk",
     name: "Merk",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: null,
     age: 32,
     salary: 100000,
@@ -687,7 +687,7 @@ export const STARTING_STAFF = [
   {
     id: "staff_rambo",
     name: "Rambo",
-    role: "gm",
+    role: "assistant_gm",
     currentTeamId: null,
     age: 36,
     salary: 140000,

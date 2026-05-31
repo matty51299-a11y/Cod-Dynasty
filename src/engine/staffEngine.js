@@ -6,9 +6,13 @@ import { CDL_TEAMS } from "../data/teams.js";
 
 // ── Migration ──────────────────────────────────────────────────────────────────
 // Returns initialized staff pool. If an existing staff array is passed (from a
-// loaded save), it is returned as-is. Missing saves get a fresh STARTING_STAFF.
+// loaded save), it is returned with any legacy role renames applied.
+// Missing saves get a fresh STARTING_STAFF.
 export function migrateStaff(existingStaff) {
-  if (Array.isArray(existingStaff) && existingStaff.length > 0) return existingStaff;
+  if (Array.isArray(existingStaff) && existingStaff.length > 0) {
+    // Rename legacy "gm" role to "assistant_gm" for old saves.
+    return existingStaff.map(s => s.role === "gm" ? { ...s, role: "assistant_gm" } : s);
+  }
   return STARTING_STAFF.map(s => ({ ...s }));
 }
 
@@ -18,7 +22,7 @@ export function migrateStaff(existingStaff) {
 export function calcStaffBonuses(staff, teamId) {
   const teamStaff = (staff || []).filter(s => s.currentTeamId === teamId);
   const hc = teamStaff.find(s => s.role === "head_coach");
-  const gm = teamStaff.find(s => s.role === "gm");
+  const gm = teamStaff.find(s => s.role === "assistant_gm");
   const an = teamStaff.find(s => s.role === "analyst");
   const pc = teamStaff.find(s => s.role === "performance_coach");
 
@@ -59,7 +63,7 @@ export function fireStaff(staff, staffId) {
   );
 }
 
-// ── Ensure CDL teams have at least HC + GM ─────────────────────────────────────
+// ── Ensure CDL teams have at least HC + Assistant GM ──────────────────────────
 // Safe fill: assigns best free agent if a CDL team is missing a role.
 // Called during migration / new-game creation.
 export function ensureTeamStaff(staff) {
@@ -67,8 +71,8 @@ export function ensureTeamStaff(staff) {
 
   for (const team of CDL_TEAMS) {
     const teamStaff = result.filter(s => s.currentTeamId === team.id);
-    const hasHC = teamStaff.some(s => s.role === "head_coach");
-    const hasGM = teamStaff.some(s => s.role === "gm");
+    const hasHC        = teamStaff.some(s => s.role === "head_coach");
+    const hasAssistGM  = teamStaff.some(s => s.role === "assistant_gm");
 
     if (!hasHC) {
       const free = result.filter(s => !s.currentTeamId && s.role === "head_coach")
@@ -81,8 +85,8 @@ export function ensureTeamStaff(staff) {
       }
     }
 
-    if (!hasGM) {
-      const free = result.filter(s => !s.currentTeamId && s.role === "gm")
+    if (!hasAssistGM) {
+      const free = result.filter(s => !s.currentTeamId && s.role === "assistant_gm")
         .sort((a, b) => b.reputation - a.reputation);
       if (free.length) {
         const pick = free[0];
@@ -121,7 +125,7 @@ export function getKeyAttributes(staffMember) {
         { key: "Dev",      value: staffMember.development },
         { key: "Disc",     value: staffMember.discipline },
       ];
-    case "gm":
+    case "assistant_gm":
       return [
         { key: "Negot",    value: staffMember.negotiation },
         { key: "Scout",    value: staffMember.scouting },

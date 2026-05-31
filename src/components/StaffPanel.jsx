@@ -15,10 +15,10 @@ import {
   staffPayroll,
 } from "../engine/staffEngine.js";
 
-const ROLE_ORDER  = ["head_coach", "gm", "analyst", "performance_coach"];
+const ROLE_ORDER  = ["head_coach", "assistant_gm", "analyst", "performance_coach"];
 const ROLE_COLORS = {
   head_coach:        "#60a5fa",
-  gm:                "#fbbf24",
+  assistant_gm:      "#fbbf24",
   analyst:           "#a78bfa",
   performance_coach: "#34d399",
 };
