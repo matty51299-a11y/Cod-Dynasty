@@ -240,10 +240,27 @@ function createInitialGameState(userTeamId) {
     seenAwardsSeasons: [],
     challengerDraftSeed,      // stored for reference; roster is already built — do not re-use
     staff: ensureTeamStaff(migrateStaff([])),
+    boardState: migrateBoardState(null),
+    pendingBoardReview: null,
   };
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
-  return ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
+  const finalState = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
+  finalState.boardState = { ...finalState.boardState, objectives: generateObjectives(finalState) };
+  return finalState;
+}
+
+// ── Board nudge helper — applies after a Major completes ──────────────────────
+function withMajorBoardNudge(beforeState, afterState, majorIdx) {
+  if (majorIdx == null || majorIdx > 3 || majorIdx < 0) return afterState;
+  if (!afterState.boardState) return afterState;
+  const wasCompleted = beforeState.schedule?.majors?.[majorIdx]?.completed ?? true;
+  const nowCompleted = afterState.schedule?.majors?.[majorIdx]?.completed ?? false;
+  if (!wasCompleted && nowCompleted) {
+    const nudged = nudgeConfidenceAfterMajor(afterState.boardState, afterState, majorIdx);
+    return { ...afterState, boardState: nudged };
+  }
+  return afterState;
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -281,6 +298,11 @@ function reducer(state, action) {
       cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
       // Migrate staff: old saves without staff get the full starting pool
       cleaned.staff = ensureTeamStaff(migrateStaff(cleaned.staff));
+      // Migrate board state: old saves without boardState get a fresh one
+      cleaned.boardState = migrateBoardState(cleaned.boardState);
+      if (!cleaned.boardState.objectives.length) {
+        cleaned.boardState = { ...cleaned.boardState, objectives: generateObjectives(cleaned) };
+      }
       return isValidGameState(cleaned) ? cleaned : null;
     }
 
@@ -343,7 +365,8 @@ function reducer(state, action) {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajor({ ...state });
-      return pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
+      const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
+      return withMajorBoardNudge(state, withFeed, majorIdx);
       });
     }
 
@@ -352,7 +375,8 @@ function reducer(state, action) {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simNextMajorMatch({ ...state });
-      return pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
+      const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
+      return withMajorBoardNudge(state, withFeed, majorIdx);
       });
     }
 
@@ -361,7 +385,8 @@ function reducer(state, action) {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajorRound({ ...state });
-      return pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
+      const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
+      return withMajorBoardNudge(state, withFeed, majorIdx);
       });
     }
 
@@ -383,7 +408,8 @@ function reducer(state, action) {
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
         ...(majorIdx != null ? generateMajorFeed(wasCompleted, newState, majorIdx) : []),
       ];
-      return pushFeed(newState, feedItems);
+      const result = pushFeed(newState, feedItems);
+      return withMajorBoardNudge(state, result, majorIdx);
       });
     }
 
@@ -422,7 +448,10 @@ function reducer(state, action) {
       const seenAwardsSeasons = Number.isFinite(season)
         ? [...new Set([...(state.seenAwardsSeasons || []).map(Number), season])]
         : (state.seenAwardsSeasons || []);
-      return { ...state, pendingSeasonAwards: null, seenAwardsSeasons, enteredMajorIdx: null };
+      const baseState = { ...state, pendingSeasonAwards: null, seenAwardsSeasons, enteredMajorIdx: null };
+      const currentBoard = migrateBoardState(baseState.boardState);
+      const { newBoardState, pendingBoardReview } = runBoardReview(currentBoard, baseState);
+      return { ...baseState, boardState: newBoardState, pendingBoardReview };
     }
 
     // ── Offseason — retirements, prospect class, notable AI signings, roster moves ──
@@ -438,11 +467,29 @@ function reducer(state, action) {
       const season       = state.season; // outgoing season
 
       const advanced = advanceOffseason({ ...state });
-      const newState = { ...advanced, enteredMajorIdx: null };
+      const newState = { ...advanced, enteredMajorIdx: null, pendingBoardReview: null };
 
-      return pushFeed(newState, [
-        ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, newState, season),
-        ...generateRosterMoveFeed(newState, prevMovesLen),
+      // Build new objectives for the incoming season
+      const newBoardState = {
+        ...migrateBoardState(newState.boardState),
+        objectives: generateObjectives(newState),
+        verdict: null,
+      };
+      const tag = CDL_TEAMS.find(t => t.id === newState.userTeamId)?.tag ?? "Owner";
+      const primObj = newBoardState.objectives.find(o => o.weight === "primary");
+      const secObjs = newBoardState.objectives.filter(o => o.weight === "secondary");
+      const boardFeed = mkFeed(
+        "board_mandate",
+        `${tag} owner sets Season ${newState.season} mandate — ${primObj?.label ?? ""}${secObjs.length ? "; " + secObjs.map(o => o.label).join(", ") : ""}`,
+        newState.season,
+        "stage"
+      );
+      const stateWithBoard = { ...newState, boardState: newBoardState };
+
+      return pushFeed(stateWithBoard, [
+        boardFeed,
+        ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, stateWithBoard, season),
+        ...generateRosterMoveFeed(stateWithBoard, prevMovesLen),
       ]);
       };
       return state.schedule?.phase === "contracts" ? runAdvance() : runIfUserRosterValid(state, runAdvance);
@@ -665,6 +712,19 @@ function reducer(state, action) {
         [mkFeed("staff_fire", `${teamTag} part ways with ${target.name} (${role})`, state.season, state.schedule?.phase ?? "stage")]
       );
     }
+
+    case "BOARD_REVIEW_CONTINUE":
+      return { ...state, pendingBoardReview: null };
+
+    case "BOARD_ACCEPT_NEW_MANDATE":
+      return {
+        ...state,
+        pendingBoardReview: null,
+        boardState: {
+          ...migrateBoardState(state.boardState),
+          confidence: 60,
+        },
+      };
 
     case "SHOW_ROSTER_INCOMPLETE":
       return blockIfUserRosterInvalid(state) ?? state;

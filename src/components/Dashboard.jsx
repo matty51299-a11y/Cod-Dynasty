@@ -15,6 +15,7 @@ import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 import { isInactivePlayer } from "../utils/playerIdentity.js";
+import { getSecurityBand, bandColor } from "../engine/boardEngine.js";
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
 function placementText(place) {
@@ -103,6 +104,109 @@ function chemColor(chem) {
   if (chem >= 80) return "#15803d";
   if (chem >= 60) return "#d97706";
   return "#dc2626";
+}
+
+// ── Board / Owner Expectations widgets ────────────────────────────────────────
+
+function objStatusColor(status) {
+  switch (status) {
+    case "met":     return "#34d399";
+    case "failed":  return "#f87171";
+    case "onTrack": return "#60a5fa";
+    default:        return "var(--text-dim)";
+  }
+}
+
+function BoardWidget({ boardState }) {
+  if (!boardState || !boardState.objectives?.length) {
+    return <div className="fm-empty">Season objectives pending.</div>;
+  }
+  const { confidence, objectives, verdict } = boardState;
+  const band = getSecurityBand(confidence);
+  const bc = bandColor(band);
+  const primary = objectives.find(o => o.weight === "primary");
+
+  return (
+    <div className="bw-body">
+      <div className="bw-band">
+        <span className="bw-band-dot" style={{ background: bc }} />
+        <span className="bw-band-label" style={{ color: bc }}>{band}</span>
+        <span className="bw-conf-num">{confidence}</span>
+      </div>
+      <div className="bw-bar">
+        <span style={{ width: `${Math.max(0, Math.min(100, confidence))}%`, background: bc }} />
+      </div>
+      {primary && (
+        <div className="bw-obj">
+          <span className="bw-obj-label">{primary.label}</span>
+          <span
+            className="bw-obj-badge"
+            style={{ color: objStatusColor(primary.status), borderColor: objStatusColor(primary.status) }}
+          >
+            {primary.status === "onTrack" ? "On Track" : primary.status === "met" ? "Met" : primary.status === "failed" ? "Failed" : "Pending"}
+          </span>
+        </div>
+      )}
+      {verdict && (
+        <div className="bw-verdict">Last verdict: <strong style={{ color: verdict === "Retained" ? "#34d399" : verdict === "Final Warning" ? "#fbbf24" : "#f87171" }}>{verdict}</strong></div>
+      )}
+    </div>
+  );
+}
+
+function OwnerReviewSummary({ boardState, review, season }) {
+  if (!boardState) return <div className="oh-empty">No board data yet.</div>;
+
+  const confidence = review?.confidenceAfter ?? boardState.confidence;
+  const objectives = review?.objectives ?? boardState.objectives ?? [];
+  const verdict = review?.verdict ?? boardState.verdict;
+  const history = boardState.history ?? [];
+  const band = getSecurityBand(confidence);
+  const bc = bandColor(band);
+  const lastTwo = history.slice(-2).reverse();
+
+  return (
+    <div className="oh-board-body">
+      <div className="oh-board-conf">
+        <span className="oh-board-band" style={{ color: bc }}>{band}</span>
+        <span className="oh-board-conf-num">{confidence}</span>
+      </div>
+      <div className="br-conf-bar" style={{ margin: "4px 0 8px" }}>
+        <span style={{ width: `${Math.max(0, Math.min(100, confidence))}%`, background: bc }} />
+      </div>
+      {verdict && (
+        <div className="oh-board-verdict" style={{ color: verdict === "Retained" ? "#34d399" : verdict === "Final Warning" ? "#fbbf24" : "#f87171" }}>
+          Verdict: <strong>{verdict}</strong>
+        </div>
+      )}
+      {objectives.length > 0 && (
+        <div className="oh-board-objs">
+          {objectives.map(obj => (
+            <div key={obj.id} className="oh-board-obj-row">
+              <span className="oh-board-obj-weight">{obj.weight === "primary" ? "Primary" : "Sec"}</span>
+              <span className="oh-board-obj-label">{obj.label}</span>
+              <span className="oh-board-obj-badge" style={{ color: objStatusColor(obj.status), borderColor: objStatusColor(obj.status) }}>
+                {obj.status === "onTrack" ? "On Track" : obj.status === "met" ? "Met" : obj.status === "failed" ? "Failed" : "Pending"}
+              </span>
+              {obj.progressNote && <span className="oh-board-obj-note">{obj.progressNote}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {lastTwo.length > 0 && (
+        <div className="oh-board-history">
+          <div className="oh-board-history-title">Recent History</div>
+          {lastTwo.map(entry => (
+            <div key={entry.season} className="oh-board-history-row">
+              <span>S{entry.season}</span>
+              <span>{entry.confidenceBefore} → {entry.confidenceAfter}</span>
+              <span style={{ color: entry.verdict === "Retained" ? "#34d399" : entry.verdict === "Final Warning" ? "#fbbf24" : "#f87171" }}>{entry.verdict}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Dashboard({ setScreen }) {
@@ -303,6 +407,11 @@ export default function Dashboard({ setScreen }) {
       </div>
 
       <div className="fm-widget-grid">
+        <section className="fm-panel fm-board-widget">
+          <PanelTitle title="Owner" />
+          <BoardWidget boardState={state.boardState} />
+        </section>
+
         <section className="fm-panel fm-league-table">
           <PanelTitle title={isStage ? `${stageName} Table` : isMajor ? "Stage Table" : "Season Table"} action={<button className="fm-panel-link" onClick={() => setScreen?.("standings")}>Full ›</button>} />
           <div className="fm-table-head"><span>Pos</span><span>Team</span><span>W-L</span><span>Pts</span></div>
@@ -680,6 +789,11 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
         </main>
 
         <aside className="oh-side">
+          <section className="oh-card oh-board-card">
+            <div className="oh-card-header"><h3>Owner Review</h3></div>
+            <OwnerReviewSummary boardState={state.boardState} review={state.pendingBoardReview} season={completedSeason} />
+          </section>
+
           <section className="oh-card">
             <div className="oh-card-header"><h3>Season Recap</h3></div>
             <div className="oh-recap-list">

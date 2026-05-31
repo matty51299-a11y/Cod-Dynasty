@@ -1,6 +1,6 @@
 // src/engine/boardEngine.js
-// Pure analytics layer: Owner Expectations / Job Security system.
-// No side effects, no React imports — reads existing state and produces UI data.
+// Pure analytics engine for Owner Expectations / Job Security system.
+// No side effects, no React imports. Read-only layer over existing state.
 
 import { calcTeamOvr } from "./teamOvr.js";
 import { getTeamCap } from "./rosterAI.js";
