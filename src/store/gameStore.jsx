@@ -15,6 +15,7 @@ import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/roster
 import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "../engine/staffEngine.js";
+import { migrateBoardState, generateObjectives, evalAllObjectives, nudgeConfidenceAfterMajor, runBoardReview } from "../engine/boardEngine.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
