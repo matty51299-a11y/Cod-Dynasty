@@ -52,6 +52,20 @@ export default function SeasonAwardsOverlay() {
   const awards = useMemo(() => pending?.awards || [], [pending]);
   const majorMvps = useMemo(() => pending?.majorMvps || [], [pending]);
 
+  // ESWC recap — champion, runner-up and MVP from the completed ESWC event.
+  const eswcRecap = useMemo(() => {
+    const eswc = state?.schedule?.majors?.[5];
+    if (!eswc?.completed || !eswc?.bracket) return null;
+    const rounds = eswc.bracket.rounds || [];
+    const gf = (rounds.find(r => r.type === "GF") || rounds[rounds.length - 1])?.matches?.[0];
+    const championId = eswc.bracket.champion || gf?.result?.winnerId || null;
+    const runnerUpId = gf?.result?.loserId || null;
+    if (!championId) return null;
+    const teamName = (id) => (id ? (findTeamEverywhere(state, id)?.name || id) : null);
+    const mvp = (awards || []).find(a => a.key === "eswc_mvp");
+    return { championId, runnerUpId, championName: teamName(championId), runnerUpName: teamName(runnerUpId), mvp };
+  }, [state, awards]);
+
   const enteredMajor = state?.enteredMajorIdx != null ? state?.schedule?.majors?.[state.enteredMajorIdx] : null;
 
   if (!state || !pending || enteredMajor?.completed) return null;
@@ -72,6 +86,32 @@ export default function SeasonAwardsOverlay() {
             <AwardCard key={award.id || `${award.awardName}_${award.playerId || award.teamId}`} award={award} state={state} openPlayerProfile={openPlayerProfile} openTeamHub={openTeamHub} />
           ))}
         </div>
+
+        {eswcRecap && (
+          <div className="sao-major-recap">
+            <div className="sao-section-title">ESWC</div>
+            <div className="sao-major-list">
+              <div className="sao-major-row">
+                <span>Champion</span>
+                <button className="link-button team-link" onClick={() => openTeamHub(eswcRecap.championId)}>{eswcRecap.championName}</button>
+              </div>
+              {eswcRecap.runnerUpId && (
+                <div className="sao-major-row">
+                  <span>Runner-up</span>
+                  <button className="link-button team-link" onClick={() => openTeamHub(eswcRecap.runnerUpId)}>{eswcRecap.runnerUpName}</button>
+                </div>
+              )}
+              {eswcRecap.mvp && (
+                <div className="sao-major-row">
+                  <span>MVP</span>
+                  <button className="link-button player-link" onClick={() => openPlayerProfile(eswcRecap.mvp.playerId)}>{eswcRecap.mvp.playerName}</button>
+                  {eswcRecap.mvp.teamName && <em>{eswcRecap.mvp.teamName}</em>}
+                  {eswcRecap.mvp.kd != null && <strong>{Number(eswcRecap.mvp.kd).toFixed(2)} K/D</strong>}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {majorMvps.length > 0 && (
           <div className="sao-major-recap">

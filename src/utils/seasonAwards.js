@@ -409,6 +409,11 @@ export function calculateSeasonAwards(gameState) {
   const challengerPoty = bestBy(challenger.players, () => true);
   const challengerTeam = bestBy(challenger.teams, () => true);
   const champsMvp = majorMvpAward(gameState, season, gameState?.schedule?.majors?.[4], 4, "champs");
+  // ESWC MVP — separate event award, only when ESWC has been completed. Awards
+  // now run after ESWC, so this surfaces alongside Champs MVP without affecting
+  // Season MVP / Rookie / role / Major MVP selection logic.
+  const eswcMajor = gameState?.schedule?.majors?.[5];
+  const eswcMvp = eswcMajor?.completed ? majorMvpAward(gameState, season, eswcMajor, 5, "eswc") : null;
 
   const playerContext = r => [kdText(r?.kd), r?.maps ? `${r.maps} maps` : null, r?.teamRank ? `team rank #${r.teamRank}` : null, r?.majorWins ? `${r.majorWins} Major win${r.majorWins === 1 ? "" : "s"}` : null];
   const rookieContext = r => [kdText(r?.kd), r?.maps ? `${r.maps} CDL maps` : null, "first CDL-team season", r?.teamRank ? `team rank #${r.teamRank}` : null, r?.majorWins ? `${r.majorWins} Major win${r.majorWins === 1 ? "" : "s"}` : null];
@@ -422,6 +427,7 @@ export function calculateSeasonAwards(gameState) {
   awards.push(buildPlayerAward(gameState, season, "challenger_poty", "Challenger Player of the Year", challengerPoty, [kdText(challengerPoty?.kd), challengerPoty?.majorQualifications ? `${challengerPoty.majorQualifications} Major qualification${challengerPoty.majorQualifications === 1 ? "" : "s"}` : null]));
   awards.push(buildTeamAward(gameState, season, "challenger_team_of_year", "Challenger Team of the Year", challengerTeam, [challengerTeam?.qualifierWins ? `${challengerTeam.qualifierWins} qualifier win${challengerTeam.qualifierWins === 1 ? "" : "s"}` : null, challengerTeam?.majorQualifications ? `${challengerTeam.majorQualifications} Major qualification${challengerTeam.majorQualifications === 1 ? "" : "s"}` : null]));
   awards.push(champsMvp ? { ...champsMvp, awardName: "Champs MVP", key: "champs_mvp", id: awardId(season, "champs_mvp") } : null);
+  awards.push(eswcMvp ? { ...eswcMvp, awardName: "ESWC MVP", key: "eswc_mvp", id: awardId(season, "eswc_mvp") } : null);
 
   const majorMvps = (gameState?.schedule?.majors || []).slice(0, 4).map((major, idx) => majorMvpAward(gameState, season, major, idx)).filter(Boolean);
 

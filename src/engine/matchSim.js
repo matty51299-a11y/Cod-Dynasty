@@ -28,10 +28,11 @@ import { calcChemistry } from "./chemistry.js";
 import { autoVeto, mapStrengthMod } from "./mapProfile.js";
 
 // Defensive: every code path in simMap assumes a 4-player starter slate (it
-// does indexed reads like teamA4[i] for i=0..3). Roster windows are supposed
-// to keep all teams at 4, but a stretch of bad budget + cleanups can leave
-// 1–2 holes. Pad to four with a low-rated placeholder so the match still
-// runs (badly, for the thin team) instead of throwing.
+// does indexed reads like teamA4[i] for i=0..3). Roster windows + the Challenger
+// roster repair pipeline are supposed to keep all teams at 4, but if a thin team
+// ever reaches the sim we pad to four so the match runs (badly, for the thin
+// team) instead of throwing. This is the absolute last resort — and even here we
+// use a believable generated gamertag, never a literal "Sub N" label.
 const PLACEHOLDER_BASE = {
   overall: 60, potential: 65, primary: "Flex", secondary: "AR",
   gunny: 50, awareness: 50, objective: 50, searchIQ: 50,
@@ -39,6 +40,15 @@ const PLACEHOLDER_BASE = {
   ego: 50, workEthic: 50, tiltResistance: 3, leadership: 50, metaDependence: 50,
   form: 50, age: 22, experience: 0, region: "NA",
 };
+// Small believable gamertag pool so a last-resort padded starter never shows as
+// "Sub 4" in match stats / player profiles.
+const PAD_NAMES = ["Vex", "Rook", "Nyx", "Dax", "Kairo", "Zane", "Cole", "Riv"];
+function hashStr(str) {
+  let h = 0;
+  const s = String(str);
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
 function padTeamToFour(team) {
   const existing = Array.isArray(team?.players) ? team.players : [];
   const real = existing.filter(Boolean);
@@ -46,11 +56,13 @@ function padTeamToFour(team) {
   const padded = real.slice(0, 4);
   while (padded.length < 4) {
     const slot = padded.length;
+    const h = hashStr(`${team?.id ?? "team"}_${slot}`);
     padded.push({
       ...PLACEHOLDER_BASE,
       id: `__placeholder_${team?.id ?? "team"}_${slot}`,
-      name: `Sub ${slot + 1}`,
+      name: PAD_NAMES[h % PAD_NAMES.length],
       teamId: team?.id ?? null,
+      isEmergencyGenerated: true,
     });
   }
   return { ...team, players: padded };

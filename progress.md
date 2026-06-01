@@ -679,3 +679,40 @@ Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the 
 - Existing saves hydrate safely with an ESWC major slot if missing; saves already past the new event point continue without crashing rather than being rewound.
 - Added diagnostics: `scripts/diagnoseChallengerQualifier24.mjs` and `scripts/diagnosePostSeasonEvents.mjs`.
 - Testing: `npm run build` ✓, offseason diagnostics ✓, DE24 qualifier diagnostic ✓, postseason event diagnostic ✓, roster-integrity stress 24/24 ✓.
+
+## Update 2026-06-01 (Challenger roster integrity + ESWC postseason order)
+
+### Part 1 — Challenger "Sub 4" root cause + repair pipeline
+- **Root cause:** Challenger event rosters resolve from `team.playerIds`; when a team came up short (player promoted to CDL / unsigned pool drained), `padTeamToFour()` in `matchSim.js` invented throwaway `Sub 1..4` players at sim time. The real gap was the offseason free-agency rework: unsigned players now live in the `players` array as `status: "freeAgent"`, but the Challenger fill only drew from `gameState.prospects`. With the prospect pool thin, teams stayed below 4 even though plenty of real free agents existed → `Sub 4`.
+- **New repair pipeline:** `repairChallengerRosters(gameState, { seeds, allowEmergency, includeFreeAgents })` in `seasonEngine.js`:
+  1. `ensureChallengerTeams()` — clean invalid refs + prospect fill (unchanged).
+  2. Build a **real candidate pool** = free-agent players (`players[]` with `status:"freeAgent"` / unattached) **plus** free unsigned prospects; excludes CDL-active, retired/inactive, duplicate-name, already-rostered.
+  3. **Fill** every team to 4 from the pool, highest-priority team first, region-preferred, OVR-sorted.
+  4. **Seed-aware poaching:** any still-short top team takes the best player from the *lowest*-priority team that has one; donors are processed later in the same top-down pass and refill from teams below them, so the shortage cascades to the very bottom/backfill teams only.
+  5. **Emergency generated player** with a believable gamertag from `FRESH_PROSPECT_NAMES` (never `Sub N`), pushed into `prospects` so profile clicks resolve. Logs a `[challenger-repair] LAST RESORT` warning. True last resort.
+- **Priority** = same season-long seeding score the qualifier/finals use (circuit points + OVR + form + prior placement), or explicit `seeds` when supplied.
+- **Where it runs:** `buildChallengerQualifierField()` (covers Challenger qualifier, Challengers Finals, ESWC fallback field) and `beginEswc()` before building ESWC event teams.
+- **Duplicate-ownership prevention:** a single `used` id-set + `usedNames` name-set spans all teams during the fill/poach passes; `resolveEventRoster()` backfills captured-but-short event rosters from the team's current repaired roster so a player promoted to CDL between events can't leave a hole.
+- **Last-resort name fix:** `padTeamToFour()` in `matchSim.js` now uses a small believable gamertag pool + `isEmergencyGenerated`, so even the absolute defensive pad never renders `Sub 4`.
+
+### Part 2 — ESWC moved to after Champs, before Awards/Offseason
+- New competitive calendar: **CDL Champs → ESWC → Season Awards → Offseason/Contract Review → User FA Window → AI FA → New Season.**
+- `_advanceMajorPhase()` (`seasonEngine.js`): when Champs (idx 4) completes it now starts **ESWC immediately** via `beginEswc()` instead of opening the awards gate. When ESWC (idx 5) completes, the new `gateSeasonAwards()` helper archives the season, computes awards (now including ESWC stats), and opens the Season Awards overlay.
+- `gateSeasonAwards()` skips re-showing awards when the season is already in `seenAwardsSeasons` (legacy saves that saw awards before ESWC), preventing duplicate awards popups.
+- ESWC completion tracked by `schedule.majors[5].completed`; `pendingPostChampsEswc` is cleared once ESWC is live (stops `CONTINUE_FROM_SEASON_AWARDS` from restarting it). Board review still runs on `CONTINUE_FROM_SEASON_AWARDS` — now after ESWC, correctly closing the year.
+- **Awards content:** awards compute after ESWC, so Season MVP / role awards naturally include ESWC stats (the preferred "up to and including ESWC" behavior). Added a separate **ESWC MVP** award (`eswc_mvp`, additive, only when ESWC completed) — Season MVP / Rookie / Champs MVP / Major MVP selection logic is unchanged.
+- **Recap:** `SeasonAwardsOverlay` now shows an **ESWC** block (Champion · Runner-up · MVP). League feed already emits the ESWC winner story when ESWC completes (`generateMajorFeed`, idx 5), which now lands before the awards screen — correct order, no extra spam.
+- **Save compatibility:** old saves still hydrate the ESWC major slot on load. Saves already in offseason are not forced back into ESWC. Saves stuck at awards-before-ESWC (old order) still route through `beginEswc` on continue, run ESWC, then land in offseason with no duplicate awards.
+
+### Diagnostics
+- Added `scripts/diagnoseChallengerRosterIntegrity.mjs` — reports team/roster/valid counts, candidate-pool sizes (free-agent vs prospect), fills, poaches, donor repairs, emergencies, duplicate ownership, CDL∩Challenger overlap, and top-8 placeholders; **fails** if any event team has <4 valid players, any top-8 seed has a placeholder, any player is double-owned, or `Sub N` appears while real candidates exist. Includes two stress scenarios (prospect pool drained → free-agent fill; all pools drained → seed-aware poaching + bottom-team emergency).
+- Added `scripts/diagnosePostSeasonFlow.mjs` — asserts Champs → ESWC → Awards → Offseason → Contract Review with no skips/loops/duplicate awards.
+- Updated `scripts/diagnosePostSeasonEvents.mjs` for the new order.
+
+### Testing
+- `npm run build` ✓ · `diagnoseChallengerRosterIntegrity` ✓ (incl. free-agent fill + poaching stress) · `diagnosePostSeasonFlow` ✓ · `diagnosePostSeasonEvents` ✓ · `stressRosterIntegrity` 24/24 ✓ · `diagnoseOffseasonFreeAgency`/`diagnoseOffseasonState` ✓ · `diagnoseChallengerQualifier24`/`testChallengerRosterVariety`/`testProfileHistory`/`testBoardLifecycle`/`testPlacementDisplay`/`verifyMajorCompletion`/`test:rookie-awards` ✓.
+
+### Known limitations
+- Emergency Challenger players are intentionally still possible if *every* real pool is exhausted AND no lower team can be poached (only the bottom/backfill teams), but they now carry realistic gamertags. Literal `Sub N` is gone from normal gameplay.
+- Event-time Challenger repair pulls free agents into Challenger teams; the offseason **user/AI free-agency window** still excludes them to avoid stealing signings mid-window (repair only runs at event entry, after the window).
+- Season MVP/role awards now fold in ESWC match stats (a consequence of awards moving after ESWC). This is intended; ESWC MVP is tracked separately.

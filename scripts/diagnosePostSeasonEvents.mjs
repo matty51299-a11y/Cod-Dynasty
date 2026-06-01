@@ -40,11 +40,14 @@ if (eswcChallengerRows.length !== 4) throw new Error(`Expected 4 ESWC Challenger
 state = continueFromChallengerQualifier(state);
 if (state.schedule.phase !== "preChamps") throw new Error(`Expected preChamps after Finals, got ${state.schedule.phase}`);
 state = beginChamps(state);
-state = simMajor(state);
-if (!state.pendingSeasonAwards || !state.schedule.pendingPostChampsEswc) throw new Error("Expected season awards gate and pending ESWC after Champs.");
-state = { ...state, pendingSeasonAwards: null, seenAwardsSeasons: [...new Set([...(state.seenAwardsSeasons || []), state.season])] };
-state = beginEswc(state);
-if (state.schedule.phase !== "major" || state.schedule.majorIdx !== 5) throw new Error(`Expected ESWC major phase, got ${state.schedule.phase}/${state.schedule.majorIdx}`);
+state = simMajor(state); // CDL Champs
+
+// NEW ORDER: Champs → ESWC → Season Awards → Offseason.
+// ESWC must start immediately after Champs; Season Awards are deferred.
+if (state.schedule.phase !== "major" || state.schedule.majorIdx !== 5) {
+  throw new Error(`Expected ESWC to start right after Champs, got ${state.schedule.phase}/${state.schedule.majorIdx}`);
+}
+if (state.pendingSeasonAwards) throw new Error("Season Awards must NOT appear before ESWC.");
 const eswc = state.schedule.majors[5];
 const seeds = eswc.bracket.seeds || [];
 const cdlIds = new Set(CDL_TEAMS.map(t => t.id));
@@ -52,9 +55,13 @@ const cdlCount = seeds.filter(id => cdlIds.has(id)).length;
 const challengerCount = seeds.length - cdlCount;
 console.log("ESWC field:", { total: seeds.length, cdlCount, challengerCount, type: eswc.bracket.type });
 if (seeds.length !== 16 || cdlCount !== 12 || challengerCount !== 4) throw new Error("ESWC should be 12 CDL + 4 Challengers Finals teams.");
+
 const pointsBefore = JSON.stringify(state.schedule.standings);
-state = simMajor(state);
+state = simMajor(state); // ESWC
 const pointsAfter = JSON.stringify(state.schedule.standings);
 if (pointsBefore !== pointsAfter) throw new Error("ESWC changed CDL standings/points.");
-if (state.schedule.phase !== "offseason") throw new Error(`Expected offseason after ESWC, got ${state.schedule.phase}`);
+
+// Season Awards gate appears only after ESWC completes.
+if (!state.pendingSeasonAwards) throw new Error("Expected Season Awards after ESWC completes.");
+if (state.schedule.phase !== "offseason") throw new Error(`Expected offseason phase after ESWC, got ${state.schedule.phase}`);
 console.log("Postseason event diagnostic passed.");
