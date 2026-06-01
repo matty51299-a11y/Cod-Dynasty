@@ -3,6 +3,7 @@
 
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import { getTeamUiTheme } from "../utils/teamTheme.js";
 
 const NAV_ITEMS = [
   { id: "home",      icon: "⌂",  label: "Home" },
@@ -24,6 +25,7 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
 
   const { schedule, userTeamId } = state;
   const team  = CDL_TEAMS.find(t => t.id === userTeamId);
+  const teamTheme = getTeamUiTheme(team);
   const phase = schedule.phase;
 
   // Phase pill text
@@ -58,8 +60,8 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
     <aside className="sidebar">
       {/* Team identity */}
       <div className="sb-team-block">
-        <span className="sb-team-dot" style={{ background: team?.color ?? "var(--accent)" }} />
-        <span className="sb-team-tag" style={{ color: team?.color ?? "var(--accent)" }}>
+        <span className="sb-team-dot" style={{ background: teamTheme.primaryAccent, boxShadow: `0 0 12px ${teamTheme.borderAccent}` }} />
+        <span className="sb-team-tag" style={{ color: teamTheme.textAccent }}>
           {team?.tag ?? "???"}
         </span>
         <span className="sb-season">S{state.season}</span>
