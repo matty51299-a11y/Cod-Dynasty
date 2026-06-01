@@ -26,6 +26,7 @@ import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
 import { isUserRosterPlayable } from "../utils/rosterValidation.js";
+import MatchPreview from "./MatchPreview.jsx";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamTag(id, schedule)  { return resolveTeamDisplay(id, schedule)?.tag ?? id; }
@@ -259,6 +260,7 @@ function CurrentMatchPanel({ bracket, curRound, userTeamId, schedule, onPlayMatc
       ) : (
         <button className="btn-secondary mto-cm-btn" onClick={() => dispatch({ type: "SIM_NEXT_MAJOR_MATCH" })}>▶ Sim This Match</button>
       )}
+      <MatchPreview teamAId={next.a} teamBId={next.b} compact />
     </div>
   );
 }

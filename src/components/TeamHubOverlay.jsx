@@ -10,6 +10,7 @@ import { calcTeamOvr } from "../engine/teamOvr.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { buildTeamHistory, findTeamEverywhere, getTeamRoster, kdText } from "../utils/historyProfiles.js";
 import { getStaffForTeam, roleLabel } from "../engine/staffEngine.js";
+import MapPoolPanel from "./MapPoolPanel.jsx";
 
 function kdColor(kd) {
   if (kd >= 1.4) return "var(--green)";
@@ -150,6 +151,12 @@ export default function TeamHubOverlay() {
             </div>
           </div>
         )}
+
+        {/* ── Map Pool / Mode Identity ── */}
+        <div className="th-section">
+          <div className="th-section-label">MAP POOL / MODE IDENTITY</div>
+          <MapPoolPanel teamId={openTeamId} />
+        </div>
 
         {/* ── Roster ── */}
         {roster.length > 0 && (

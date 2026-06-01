@@ -15,6 +15,7 @@ import { useMatchCenter } from "../store/matchCenterContext.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { isUserRosterPlayable } from "../utils/rosterValidation.js";
+import MatchPreview from "./MatchPreview.jsx";
 
 function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
@@ -199,6 +200,8 @@ function PreMatchView({ nextMatch, userTeamId, stageStandings, matchLog, matchda
           <div className="nmo-team-ovr">{oppOvr} OVR</div>
         </div>
       </div>
+
+      <MatchPreview teamAId={userTeamId} teamBId={oppId} />
 
       <div className="nmo-actions">
         <button className="btn-primary nmo-play-btn" onClick={onPlay}>

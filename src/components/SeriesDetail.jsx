@@ -135,6 +135,8 @@ export default function SeriesDetail({ result, schedule = null }) {
                 {m.short}
               </span>
 
+              {m.mapName && <span className="map-name-label">{m.mapName}</span>}
+
               <span
                 className={`map-team-tag ${aWon ? "mtag-win" : "mtag-loss"}`}
                 style={{ color: color(teamAId) }}
@@ -158,6 +160,15 @@ export default function SeriesDetail({ result, schedule = null }) {
               <span className="map-winner-label" style={{ color: color(m.winnerId) }}>
                 {tag(m.winnerId)} win
               </span>
+
+              {typeof m.mapEdgeA === "number" && m.mapEdgeA !== 0 && (() => {
+                const edgeTeam = m.mapEdgeA > 0 ? teamAId : teamBId;
+                return (
+                  <span className="map-edge-chip" title="Pre-map map-pool edge">
+                    edge {tag(edgeTeam)} +{Math.abs(m.mapEdgeA)}
+                  </span>
+                );
+              })()}
             </div>
           );
         })}

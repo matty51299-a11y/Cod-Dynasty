@@ -8984,3 +8984,63 @@ body { background: #111317; }
   color: var(--text-dim);
   padding: 2px 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CDL 2026 MAP POOL / MODE STRENGTH / VETO LAYER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Map name + edge inside SeriesDetail map breakdown */
+.map-name-label { font-size: 12px; font-weight: 700; color: var(--text-head); min-width: 64px; }
+.map-edge-chip {
+  font-size: 10px; font-weight: 700; color: var(--text-dim);
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1px 7px; margin-left: auto; white-space: nowrap;
+}
+
+/* ── Match Preview (MatchPreview.jsx) ── */
+.mpv {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; margin: 10px 0; text-align: left;
+}
+.mpv-compact { background: var(--bg3); padding: 9px 10px; margin: 10px 0 0; }
+.mpv-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+.mpv-title { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); }
+.mpv-ovr { font-size: 12px; font-weight: 800; }
+.mpv-ovr-sep { color: var(--text-dim); margin: 0 5px; }
+.mpv-ovr-lbl { color: var(--text-dim); font-weight: 600; font-size: 10px; }
+.mpv-edges { display: flex; gap: 6px; margin-bottom: 9px; flex-wrap: wrap; }
+.mpv-edge-row {
+  display: flex; align-items: center; gap: 6px; flex: 1; min-width: 90px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px;
+}
+.mpv-edge-mode { font-size: 10px; font-weight: 800; color: var(--text-dim); }
+.mpv-edge-val { font-size: 12px; font-weight: 800; margin-left: auto; }
+.mpv-mapset-label { font-size: 9px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 5px; }
+.mpv-map-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; }
+.mpv-map-num { width: 14px; color: var(--text-dim); font-weight: 700; text-align: right; }
+.mpv-map-mode { width: 34px; font-size: 9px; font-weight: 800; color: var(--accent); }
+.mpv-map-name { font-weight: 700; color: var(--text-head); }
+.mpv-map-edge { margin-left: auto; font-size: 10px; font-weight: 700; }
+
+/* ── Map Pool Panel (MapPoolPanel.jsx, in TeamHub) ── */
+.mpp { display: flex; flex-direction: column; gap: 10px; }
+.mpp-identity { display: flex; align-items: baseline; gap: 8px; }
+.mpp-identity-label { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+.mpp-identity-val { font-size: 14px; font-weight: 800; color: var(--text-head); }
+.mpp-modes { display: flex; gap: 8px; }
+.mpp-mode {
+  flex: 1; display: flex; align-items: center; gap: 6px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px;
+}
+.mpp-mode-name { font-size: 11px; font-weight: 800; color: var(--text-dim); }
+.mpp-mode-rating { font-size: 16px; font-weight: 900; margin-left: auto; }
+.mpp-mode-prep { font-size: 9px; font-weight: 700; color: #fbbf24; }
+.mpp-maps { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mpp-maps-label { font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 4px; }
+.mpp-best { color: var(--green); }
+.mpp-weak { color: var(--red); }
+.mpp-map-item { font-size: 12px; color: var(--text); padding: 1px 0; }
+.mpp-prep-note { font-size: 10px; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 6px; }
+
+/* ── Staff map-prep chips ── */
+.staff-mapprep-row { margin-top: 6px; }

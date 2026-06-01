@@ -14,6 +14,7 @@ import {
   calcStaffBonuses,
   staffPayroll,
 } from "../engine/staffEngine.js";
+import { calcStaffPrep } from "../engine/mapProfile.js";
 
 const ROLE_ORDER  = ["head_coach", "assistant_gm", "analyst", "performance_coach"];
 const ROLE_COLORS = {
@@ -221,6 +222,30 @@ function BonusChips({ bonuses }) {
   );
 }
 
+// ── Map-pool prep impact (CDL 2026 map layer) ─────────────────────────────────
+function MapPrepChips({ prep }) {
+  if (!prep) return null;
+  const fmt = (v) => (v > 0 ? `+${v}` : `${v}`);
+  const items = [
+    { key: "HP prep",   val: prep.hardpoint,   color: "#60a5fa" },
+    { key: "S&D prep",  val: prep.snd,         color: "#f87171" },
+    { key: "OVR prep",  val: prep.overload,    color: "#34d399" },
+    { key: "Veto edge", val: prep.vetoQuality, color: "#fbbf24" },
+  ];
+  return (
+    <div className="staff-bonus-row staff-mapprep-row">
+      {items.map(b => (
+        <span key={b.key} className="staff-bonus-chip" title={`${b.key} (map pool)`}>
+          <span className="staff-bonus-label">{b.key}</span>
+          <span className="staff-bonus-val" style={{ color: b.val > 0 ? b.color : "var(--text-dim)" }}>{fmt(round1(b.val))}</span>
+        </span>
+      ))}
+      <span className="staff-bonus-note">Map-pool prep — modest mode-rating & veto impact</span>
+    </div>
+  );
+}
+function round1(n) { return Math.round((n ?? 0) * 10) / 10; }
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function StaffPanel() {
   const { state, dispatch } = useGame();
@@ -233,6 +258,7 @@ export default function StaffPanel() {
   const teamStaff = getStaffForTeam(staff, userTeamId);
   const freeStaff = getFreeStaff(staff);
   const bonuses   = calcStaffBonuses(staff, userTeamId);
+  const mapPrep   = calcStaffPrep(staff, userTeamId);
   const payroll   = staffPayroll(staff, userTeamId);
 
   function handleHire(staffId) {
@@ -263,6 +289,7 @@ export default function StaffPanel() {
       <div className="staff-bonuses-card">
         <div className="staff-card-label">COACHING BONUSES</div>
         <BonusChips bonuses={bonuses} />
+        <MapPrepChips prep={mapPrep} />
       </div>
 
       {/* ── Current staff ── */}

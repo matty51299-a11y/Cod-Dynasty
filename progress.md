@@ -623,3 +623,42 @@ Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the 
 ### Save compatibility / safety
 - No save migration. All new display helpers are pure derivations over existing bracket state with safe fallbacks (missing MVP/K/D, TBD slots, bye teams with no populated match, missing placements). Existing defensive guards (missing bracket → recoverable panel) are preserved.
 - Build ✓ · roster-integrity stress 24/24 ✓.
+
+## Update 2026-06-01 (CDL 2026 Map Pool / Mode Strength / Veto foundation)
+- Added a map/mode identity + veto layer so teams differ beyond raw OVR. Reads existing roster/staff/chemistry/form data only; does not change roster AI, contracts, budgets, free agency, awards, owner/board, brackets, points, ratings, or tournament formats.
+
+### Data (`src/data/mapPool.js`)
+- `CDL_2026_MAP_POOL` (HP: Sake/Colossus/Den/Scar/Gridlock/Hacienda · S&D: Den/Gridlock/Raid/Fringe/Sake/Hacienda · Overload: Den/Exposure/Scar/Gridlock), `SERIES_MODE_ORDER` (HP, S&D, Overload, HP, S&D), `MODE_META`, `MAP_BY_ID`. Overload is the third mode (not renamed to Control).
+
+### Engine (`src/engine/mapProfile.js`, pure + deterministic)
+- `buildTeamMapProfile(teamId, players, staff, season)` → `{ modeRatings, mapRatings, strengths, weaknesses, identity, staffPrep, lastUpdatedSeason }`.
+  - **Mode ratings**: base = avg starter OVR, nudged by the same per-mode attribute weights the sim uses, role lean, chemistry, form, a small capped staff-prep bonus, and a persistent per-franchise mode bias (hash of teamId, ±4) so teams develop HP/S&D/Overload identities. Clamped 50–99.
+  - **Map ratings**: mode rating ± deterministic per-(teamId,mapId) variance; spread is smaller for strong teams (deeper pool), larger for weak teams. Persistent across seasons; base shifts with roster.
+  - **Identity**: Balanced Contender / Fundamentals Team / Hardpoint Heavy / Respawn Heavy / S&D Specialist / Overload Specialists / Weak S&D Side / Shallow Map Pool / Upset Threat.
+- `calcStaffPrep(staff, teamId)`: Head Coach tactical (all modes), respawn (HP+OVR), snd (S&D), discipline (consistency); Analyst scouting (prep) + tactical (veto quality). Capped −1..+3; GM/Owner give nothing.
+- `autoVeto(profileA, profileB)`: deterministic best-of-5 (HP/S&D/OVR/HP/HP→S&D order), alternating fav/dog pick/counter-pick, no repeated map within a mode, favourites prefer strong+edge maps, underdogs prefer comfort (sometimes gamble). Same result in preview and sim.
+- `computeModeEdges`, `mapStrengthMod(edgeA)` (0.2/pt, capped ±3.5 strength).
+- `getTeamMapProfile(state, teamId)` (stored or safe on-the-fly derivation), `ensureTeamMapProfiles`, `buildAllMapProfiles`.
+
+### Match-sim influence (modest, opt-in, backwards-compatible)
+- `simMap` accepts optional `ctx.selectedMap` / `ctx.mapStrModA` / `ctx.mapEdgeA`; adds a capped strength delta (±3.5, mapWinProb÷8) and surfaces `mapId`/`mapName`/`mapEdgeA` on the result. Zero/null by default → unchanged behaviour for legacy callers.
+- `simMatch` derives the veto + per-map mods when both team objects carry `.mapProfile` (attached by `buildTeamObj` / `challengerTeamObj` / the Match Center); otherwise behaves exactly as before. So map names + a small upset-friendly edge apply to stage, Major, Champs and qualifier series, while diagnostic scripts that call `simMatch(a,b,seed)` are unaffected.
+
+### Storage / hydration (`gameStore.jsx`)
+- `state.teamMapProfiles` generated at: new game, load (hydrate if missing/stale-season), offseason→new season (force rebuild), and after roster/staff changes (SIGN/RELEASE/RESIGN/HIRE/FIRE → deterministic rebuild). Never regenerated on render. Old saves hydrate safely; no reset.
+
+### UI
+- **Team Profile (TeamHub)**: `MapPoolPanel.jsx` — identity, HP/S&D/OVR ratings (+staff prep), best/weak maps.
+- **Match preview**: `MatchPreview.jsx` — OVR, per-mode edges, projected map set + per-map edge. Shown in NextMatchOverlay and the bracket Current Match panel.
+- **Match details**: `SeriesDetail.jsx` now shows the map name and a map-edge chip per map; Match Center map-history rows show the map name.
+- **Staff page**: `MapPrepChips` shows HP/S&D/OVR prep + veto edge from the user's staff.
+- League Feed map-pool stories intentionally skipped this pass (avoids feed spam).
+
+### What is display-only / TODO
+- Map-pool sim influence is active (capped). Manual user veto UI is intentionally not added (auto veto only). League-feed stories deferred.
+
+### New files
+- `src/data/mapPool.js`, `src/engine/mapProfile.js`, `src/components/MapPoolPanel.jsx`, `src/components/MatchPreview.jsx`, `scripts/diagnoseMapProfiles.mjs`.
+
+### Testing
+- `npm run build` ✓ · `scripts/stressRosterIntegrity.mjs` 24/24 ✓ · `scripts/diagnoseMapProfiles.mjs` ✓ (range/variety/determinism/veto/named-maps/legacy-compat) · `scripts/testBoardLifecycle.mjs` 12/12 ✓.
