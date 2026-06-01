@@ -15,7 +15,7 @@ import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 import { isInactivePlayer } from "../utils/playerIdentity.js";
-import { getSecurityBand, bandColor } from "../engine/boardEngine.js";
+import { getSecurityBand, bandColor, objStatusColor, objStatusLabel, evalAllObjectives } from "../engine/boardEngine.js";
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
 function placementText(place) {
@@ -108,22 +108,16 @@ function chemColor(chem) {
 
 // ── Board / Owner Expectations widgets ────────────────────────────────────────
 
-function objStatusColor(status) {
-  switch (status) {
-    case "met":     return "#34d399";
-    case "failed":  return "#f87171";
-    case "onTrack": return "#60a5fa";
-    default:        return "var(--text-dim)";
-  }
-}
-
-function BoardWidget({ boardState }) {
+function BoardWidget({ boardState, onOpen }) {
+  const { state } = useGame();
   if (!boardState || !boardState.objectives?.length) {
     return <div className="fm-empty">Season objectives pending.</div>;
   }
-  const { confidence, objectives, verdict } = boardState;
+  const { confidence, verdict } = boardState;
   const band = getSecurityBand(confidence);
   const bc = bandColor(band);
+  // Live-evaluate so the dashboard reflects in-season progress.
+  const objectives = state ? evalAllObjectives(boardState.objectives, state, false) : boardState.objectives;
   const primary = objectives.find(o => o.weight === "primary");
 
   return (
@@ -143,12 +137,15 @@ function BoardWidget({ boardState }) {
             className="bw-obj-badge"
             style={{ color: objStatusColor(primary.status), borderColor: objStatusColor(primary.status) }}
           >
-            {primary.status === "onTrack" ? "On Track" : primary.status === "met" ? "Met" : primary.status === "failed" ? "Failed" : "Pending"}
+            {objStatusLabel(primary.status)}
           </span>
         </div>
       )}
       {verdict && (
         <div className="bw-verdict">Last verdict: <strong style={{ color: verdict === "Retained" ? "#34d399" : verdict === "Final Warning" ? "#fbbf24" : "#f87171" }}>{verdict}</strong></div>
+      )}
+      {onOpen && (
+        <button className="bw-open-btn" onClick={onOpen}>View Board Objectives ›</button>
       )}
     </div>
   );
@@ -183,10 +180,10 @@ function OwnerReviewSummary({ boardState, review, season }) {
         <div className="oh-board-objs">
           {objectives.map(obj => (
             <div key={obj.id} className="oh-board-obj-row">
-              <span className="oh-board-obj-weight">{obj.weight === "primary" ? "Primary" : "Sec"}</span>
+              <span className="oh-board-obj-weight">{obj.weight === "primary" ? "Primary" : obj.weight === "stretch" ? "Stretch" : "Sec"}</span>
               <span className="oh-board-obj-label">{obj.label}</span>
               <span className="oh-board-obj-badge" style={{ color: objStatusColor(obj.status), borderColor: objStatusColor(obj.status) }}>
-                {obj.status === "onTrack" ? "On Track" : obj.status === "met" ? "Met" : obj.status === "failed" ? "Failed" : "Pending"}
+                {objStatusLabel(obj.status)}
               </span>
               {obj.progressNote && <span className="oh-board-obj-note">{obj.progressNote}</span>}
             </div>
@@ -408,8 +405,8 @@ export default function Dashboard({ setScreen }) {
 
       <div className="fm-widget-grid">
         <section className="fm-panel fm-board-widget">
-          <PanelTitle title="Owner" />
-          <BoardWidget boardState={state.boardState} />
+          <PanelTitle title="Owner" action={<button className="fm-panel-link" onClick={() => setScreen?.("board")}>Board ›</button>} />
+          <BoardWidget boardState={state.boardState} onOpen={() => setScreen?.("board")} />
         </section>
 
         <section className="fm-panel fm-league-table">

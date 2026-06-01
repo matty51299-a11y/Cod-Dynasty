@@ -20,6 +20,7 @@ import Standings         from "./components/Standings.jsx";
 import Schedule          from "./components/Schedule.jsx";
 import KDLeaders         from "./components/KDLeaders.jsx";
 import Roster            from "./components/Roster.jsx";
+import BoardObjectives   from "./components/BoardObjectives.jsx";
 import FreeAgency        from "./components/FreeAgency.jsx";
 import Prospects         from "./components/Prospects.jsx";
 import MatchLog          from "./components/MatchLog.jsx";
@@ -153,6 +154,7 @@ export default function App() {
           {screen === "schedule"  && <Schedule />}
           {screen === "kdleaders" && <KDLeaders />}
           {screen === "roster"    && <Roster />}
+          {screen === "board"     && <BoardObjectives />}
           {screen === "fa"        && <FreeAgency />}
           {screen === "prospects" && <Prospects />}
           {screen === "devreport" && <OffseasonReport />}

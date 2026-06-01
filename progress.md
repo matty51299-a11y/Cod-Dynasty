@@ -550,3 +550,51 @@ Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the 
 ### New files
 - `src/engine/boardEngine.js` — pure functions: `migrateBoardState`, `getSecurityBand`, `bandColor`, `generateObjectives`, `evalObjective`, `evalAllObjectives`, `nudgeConfidenceAfterMajor`, `runBoardReview`
 - `src/components/BoardReviewOverlay.jsx` — season-end board review modal
+
+## Update 2026-06-01 (Board Objectives realism + visibility overhaul)
+- Reworked the Owner Expectations system so objectives are driven **primarily by the team's OVR rank relative to the league**, not by absolute OVR thresholds. Added owner personalities, stretch objectives, hard caps, a dedicated Board page, and expectation-relative confidence. Still reads existing data only — no change to match sim, roster AI, staff, free agency, ratings, brackets, points, or saves.
+
+### Owner data (`src/data/teams.js`)
+- Each CDL team now has `owner: { name, ambition, patience }` (0–100). Read-only flavour + light modifiers; never overrides the OVR-rank hard caps.
+
+### OVR-rank tiers (`boardEngine.js`)
+- `getLeagueOvrRanks(state)` ranks all 12 teams by `calcTeamOvr` (avg starter OVR). `getTierForRank(rank)` → Elite (1–3), Strong (4–5), Mid (6–8), Weak (9–10), Rebuild (11–12). **Team OVR rank is the dominant factor.**
+- `buildBoardObjectives(state)` → `{ objectives, meta }`. Each team gets **1 primary + 2 secondary + 1 stretch**. `meta` carries season, ovr, ovrRank, tier, owner ambition/patience, chem/ovr baselines, and an explanation string for the UI.
+
+### Owner modifiers
+- Ambition ≥75 pushes one notch harder (e.g. elite primary becomes "Win a Major"; strong stretch becomes "Win a Major"; weak stretch becomes a Champs-race push). Ambition only ever moves objectives **within** the hard caps.
+- Patience scales confidence swings (`applyPatienceToDelta`): low patience amplifies penalties ×1.3, high patience softens ×0.75, and shifts the Released/Final-Warning verdict floors.
+
+### Hard caps (`applyHardCaps`, enforced after generation)
+- Champs Grand Final / Win Champs (champsResult ≤2): **rank 1–3 only**.
+- Win a Major (majorResult target 1): **rank 1–5 only**.
+- Win Champs as a *primary*: rank 1–3 only.
+- Finish top 6 (or better) as a *primary*: **never for rank 9+**.
+- Rebuild (rank 11–12): no Champs objectives, no top-6, no trophies — downgraded automatically.
+- Verified by `scripts/diagnoseBoardObjectives.mjs` hard-cap assertions across all 12 teams.
+
+### Objective types (evaluated from existing data)
+`finishTopN`, `avoidBottomN` (avoid last / bottom 2), `qualifyChamps` (top 8), `champsResult` (Champs placement), `majorResult` (best regular Major), `winStageMatches` (cumulative standings wins), `developRookie` (rookie maps from matchLog), `improveChemistry` (vs stored baseline), `salaryTarget`. Legacy v1 `reachChamps` maps onto `champsResult`. Statuses: Not started · On track · Ahead of expectations · At risk · Failed · Completed.
+
+### Expectation-relative confidence
+- `nudgeConfidenceAfterMajor` compares the user's Major placement to their **expected placement (= OVR rank)** — overachieving raises confidence, underachieving lowers it, scaled by patience. (Rank-12 roster finishing mid-pack is positive; rank-1 roster bombing is a major concern.)
+- `runBoardReview` (season end): primary ±18, secondary ±8, stretch +6 (upside-only), plus an expectation-relative final-standings adjustment, patience-scaled. Produces verdict + overachievement/underperformance lists. **Uses the same objectives shown all season** — no surprise end-of-season objectives.
+
+### Visibility
+- **New "Board" sidebar tab** → `src/components/BoardObjectives.jsx`. Header (owner name, ambition, patience, confidence band, season, OVR rank, expected tier, league position, OVR + delta), full mandate list (priority / importance / target / live progress / status), "Why these objectives?" explanation panel, and a season-progress panel (position, stage record, points, best Major, Champs status, chemistry trend, OVR change).
+- **Dashboard Owner widget** now live-evaluates objectives and has a "View Board Objectives ›" button + "Board ›" panel link.
+- **BoardReviewOverlay** now shows the stretch group and the overachievement/underperformance summary.
+
+### Save compatibility
+- `boardState.version` (`BOARD_OBJ_VERSION = 2`). `objectivesNeedRegen()` triggers a **safe one-time regeneration** on load when objectives are missing or predate v2 — this replaces old unrealistic objectives. Confidence/history are preserved. Objectives are generated only at new game / season start / load-migration, never on render.
+
+### Reducer hook points (`gameStore.jsx`)
+- `regenBoardObjectives(state, boardState)` sets objectives + meta + version. Called from `createInitialGameState`, `LOAD_GAME` (when `objectivesNeedRegen`), and `ADVANCE_OFFSEASON`.
+
+### New files
+- `src/components/BoardObjectives.jsx` — Board Objectives page
+- `scripts/diagnoseBoardObjectives.mjs` — prints each team's OVR/rank/owner/objectives + hard-cap assertions
+- `scripts/testBoardLifecycle.mjs` — sims a full season for all 12 teams and verifies generate → per-Major nudge → season-end review
+
+### Testing
+- `npm run build` ✓ · `scripts/stressRosterIntegrity.mjs` 24/24 ✓ · `scripts/diagnoseBoardObjectives.mjs` ✓ · `scripts/testBoardLifecycle.mjs` 12/12 ✓
