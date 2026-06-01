@@ -7,12 +7,11 @@ import { useGame } from "../store/gameStore.jsx";
 import { calcTeamOvr } from "../engine/teamOvr.js";
 import { getTeamMapProfile, computeModeEdges, autoVeto } from "../engine/mapProfile.js";
 import { MODE_META, MODE_KEYS } from "../data/mapPool.js";
+import { softenedMapEdge } from "../utils/mapDisplay.js";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 
 function edgeStr(edge, tagA, tagB) {
-  if (edge === 0) return "Even";
-  const n = Math.abs(Math.round(edge));
-  return edge > 0 ? `${tagA} +${n}` : `${tagB} +${n}`;
+  return softenedMapEdge(edge, tagA, tagB).text;
 }
 
 export default function MatchPreview({ teamAId, teamBId, compact = false }) {
@@ -71,7 +70,7 @@ export default function MatchPreview({ teamAId, teamBId, compact = false }) {
               <span className="mpv-map-name">{m.name}</span>
               {m.edgeA !== 0 && (
                 <span className="mpv-map-edge" style={{ color: edgeColor }}>
-                  {m.edgeA > 0 ? tagA : tagB} +{Math.abs(m.edgeA)}
+                  {softenedMapEdge(m.edgeA, tagA, tagB).text}
                 </span>
               )}
             </div>

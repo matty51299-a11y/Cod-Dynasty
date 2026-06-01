@@ -2,6 +2,7 @@
 // Shared component: full breakdown of one simulated series.
 // Used by Dashboard recent results, MatchLog, and MajorBracket match cards.
 
+import { softenedMapEdge } from "../utils/mapDisplay.js";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 
@@ -161,14 +162,11 @@ export default function SeriesDetail({ result, schedule = null }) {
                 {tag(m.winnerId)} win
               </span>
 
-              {typeof m.mapEdgeA === "number" && m.mapEdgeA !== 0 && (() => {
-                const edgeTeam = m.mapEdgeA > 0 ? teamAId : teamBId;
-                return (
-                  <span className="map-edge-chip" title="Pre-map map-pool edge">
-                    edge {tag(edgeTeam)} +{Math.abs(m.mapEdgeA)}
-                  </span>
-                );
-              })()}
+              {typeof m.mapEdgeA === "number" && m.mapEdgeA !== 0 && (
+                <span className="map-edge-chip" title="Pre-map map-pool edge">
+                  {softenedMapEdge(m.mapEdgeA, tag(teamAId), tag(teamBId)).text}
+                </span>
+              )}
             </div>
           );
         })}

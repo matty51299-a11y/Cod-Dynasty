@@ -401,9 +401,10 @@ function applyTraitModifiers(players, ctx) {
 
     // 4. Tactical adjustment boosts from the user's intermission choice
     if (extraBoosts) {
-      if (extraBoosts.gunny)     attrs.gunny     = (attrs.gunny     ?? 50) + extraBoosts.gunny;
-      if (extraBoosts.awareness) attrs.awareness = (attrs.awareness ?? 50) + extraBoosts.awareness;
-      if (extraBoosts.teamwork)  attrs.teamwork  = (attrs.teamwork  ?? 50) + extraBoosts.teamwork;
+      for (const [attr, boost] of Object.entries(extraBoosts)) {
+        if (!boost) continue;
+        attrs[attr] = (attrs[attr] ?? 50) + boost;
+      }
     }
 
     return attrs;

@@ -16,10 +16,11 @@ import { useGame }         from "../store/gameStore.jsx";
 import { useMatchCenter }  from "../store/matchCenterContext.jsx";
 import { CDL_TEAMS }       from "../data/teams.js";
 import { simMap, makeMatchRng, generateSeriesMods } from "../engine/matchSim.js";
-import { getTeamMapProfile, autoVeto, mapStrengthMod } from "../engine/mapProfile.js";
+import { getTeamMapProfile, autoVeto, mapStrengthMod, calcStaffPrep } from "../engine/mapProfile.js";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
+import { formatMapLabel, softenedMapEdge } from "../utils/mapDisplay.js";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamColor(id, schedule) { return getTeamMeta(id, schedule)?.color ?? "#888"; }
@@ -27,7 +28,113 @@ function teamName(id, schedule)  { return getTeamMeta(id, schedule)?.name  ?? id
 function teamTag(id, schedule)   { return getTeamMeta(id, schedule)?.tag   ?? id; }
 
 const MAP_MODES = ["Hardpoint", "Search & Destroy", "Overload", "Hardpoint", "Search & Destroy"];
-const MODE_SHORT = { "Hardpoint": "HP", "Search & Destroy": "S&D", "Overload": "OVR" };
+const TACTICS = [
+  {
+    id: "standard",
+    label: "Standard",
+    guidance: "Safest default. No modifier is applied to the next map.",
+  },
+  {
+    id: "aggressive",
+    label: "Aggressive Pace",
+    guidance: "Best for Hardpoint or when chasing. Riskier if your team has low composure.",
+  },
+  {
+    id: "slow",
+    label: "Slow Fundamentals",
+    guidance: "Best for S&D/Overload. Reduces chaos but may blunt slaying advantage.",
+  },
+  {
+    id: "protect",
+    label: "Protect Lead",
+    guidance: "Best when ahead in the series. Poor choice if chasing.",
+  },
+  {
+    id: "swing",
+    label: "Swing Momentum",
+    guidance: "High-risk option when behind. Can flip a map or backfire.",
+  },
+];
+
+function addBoost(boosts, attr, amount) {
+  if (!amount) return;
+  boosts[attr] = (boosts[attr] ?? 0) + amount;
+}
+
+function staffTacticSupport(staff, teamId) {
+  const prep = calcStaffPrep(staff, teamId);
+  const hc = prep.headCoach;
+  const analyst = prep.analyst;
+  const tacticalAvg = ((hc?.tactical ?? 70) + (analyst?.tactical ?? 70)) / 2;
+  const discipline = hc?.discipline ?? 70;
+  return {
+    bonus: tacticalAvg >= 84 ? 1 : tacticalAvg >= 74 ? 0.5 : 0,
+    disciplineRelief: discipline >= 82 ? 0.5 : 0,
+    hasStaffRead: Boolean(hc || analyst),
+  };
+}
+
+function buildTacticEffect(tacticId, { mode, seriesScore, userTeamIsA, staffSupport }) {
+  const [wA, wB] = seriesScore;
+  const userWins = userTeamIsA ? wA : wB;
+  const oppWins = userTeamIsA ? wB : wA;
+  const trailing = userWins < oppWins;
+  const leading = userWins > oppWins;
+  const boosts = {};
+  let mapStrModUser = 0;
+  let effectText = "No modifier";
+  let note = "No risk added.";
+  const staff = staffSupport?.bonus ?? 0;
+  const relief = staffSupport?.disciplineRelief ?? 0;
+
+  if (tacticId === "aggressive") {
+    addBoost(boosts, "gunny", 1 + (trailing ? 1 : 0));
+    addBoost(boosts, "objective", mode === "Hardpoint" ? 2 + staff : 1);
+    addBoost(boosts, "awareness", -(1.5 - relief));
+    mapStrModUser = mode === "Hardpoint" ? 0.5 + staff * 0.2 : trailing ? 0.25 : 0.1;
+    effectText = mode === "Hardpoint" ? "Hardpoint pressure +2 · Variance increased" : "Pace +1 · Variance increased";
+    note = "Can create pressure, but weaker awareness can backfire.";
+  } else if (tacticId === "slow") {
+    addBoost(boosts, "awareness", 1.5 + staff);
+    addBoost(boosts, "teamwork", 1.5);
+    addBoost(boosts, "composure", (mode === "Search & Destroy" || mode === "Overload") ? 2 : 1);
+    addBoost(boosts, "gunny", -1);
+    mapStrModUser = (mode === "Search & Destroy" || mode === "Overload") ? 0.45 + staff * 0.2 : 0.15;
+    effectText = mode === "Search & Destroy" ? "S&D structure +2 · Variance reduced" : mode === "Overload" ? "Overload structure +2 · Variance reduced" : "Structure +1 · Slaying upside reduced";
+    note = "Stabilizes the map but lowers slaying upside slightly.";
+  } else if (tacticId === "protect") {
+    if (leading) {
+      addBoost(boosts, "composure", 2 + staff);
+      addBoost(boosts, "teamwork", 1.5);
+      mapStrModUser = 0.4 + staff * 0.2;
+      effectText = "Composure +2 · Collapse risk reduced";
+      note = "Best fit: your team is currently leading.";
+    } else {
+      addBoost(boosts, "gunny", -1);
+      addBoost(boosts, "objective", -0.5);
+      mapStrModUser = -0.25;
+      effectText = "Conservative setup · Poor fit while not ahead";
+      note = "Warning: this is intended for protecting a lead, not chasing.";
+    }
+  } else if (tacticId === "swing") {
+    addBoost(boosts, "gunny", trailing ? 2 + staff : 1);
+    addBoost(boosts, "clutch", trailing ? 1 : 0.5);
+    addBoost(boosts, "awareness", -(2 - relief));
+    addBoost(boosts, "composure", -1);
+    mapStrModUser = trailing ? 0.55 + staff * 0.2 : -0.15;
+    effectText = trailing ? "Comeback spark +2 · Variance high" : "High variance · Poor fit while not behind";
+    note = trailing ? "High-risk comeback call with real downside." : "Warning: risky call is best saved for when trailing.";
+  }
+
+  const tactic = TACTICS.find(t => t.id === tacticId) ?? TACTICS[0];
+  return { id: tacticId, label: tactic.label, boosts, mapStrModUser, effectText, note };
+}
+
+function mergeMapSlot(mapSet, idx) {
+  const slot = mapSet?.[idx];
+  if (slot?.selectedMap) return { ...slot.selectedMap, edgeA: slot.edgeA, slot: idx + 1 };
+  return { name: null, mode: MAP_MODES[idx], edgeA: null, slot: idx + 1 };
+}
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 const INIT = {
@@ -44,8 +151,10 @@ const INIT = {
   tiltedIdsA:         new Set(),
   tiltedIdsB:         new Set(),
   lastMapKDByPlayer:  {},
-  regainUsed:         false,
-  pendingBoostA:      { gunny: 0, awareness: 0, teamwork: 0 },
+  pendingBoostA:      {},
+  pendingBoostB:      {},
+  pendingMapStrModA:  0,
+  pendingTactic:      null,
   finalResult:        null,
 };
 
@@ -116,10 +225,10 @@ function reducer(state, action) {
           tiltedIdsB:        state.tiltedIdsB,
           lastMapKDByPlayer: state.lastMapKDByPlayer,
           extraBoostsA:      state.pendingBoostA,
-          extraBoostsB:      {},
+          extraBoostsB:      state.pendingBoostB,
           seriesMods,
           selectedMap:       mapMod?.selectedMap ?? null,
-          mapStrModA:        mapMod?.strModA ?? 0,
+          mapStrModA:        (mapMod?.strModA ?? 0) + (state.pendingMapStrModA ?? 0),
           mapEdgeA:          mapMod?.edgeA ?? null,
         }, state.rng);
 
@@ -136,7 +245,10 @@ function reducer(state, action) {
         newAccStats[id].deaths += s.deaths;
       }
 
-      const allMapResults = [...state.mapResults, mapResult];
+      const enrichedMapResult = state.pendingTactic
+        ? { ...mapResult, tacticName: state.pendingTactic.label, tacticEffect: state.pendingTactic.effectText }
+        : mapResult;
+      const allMapResults = [...state.mapResults, enrichedMapResult];
 
       return {
         ...state,
@@ -153,7 +265,10 @@ function reducer(state, action) {
         lastMapKDByPlayer: Object.fromEntries(
           Object.entries(playerMapStats).map(([id, s]) => [id, s.kd])
         ),
-        pendingBoostA: { gunny: 0, awareness: 0, teamwork: 0 }, // consumed
+        pendingBoostA:     {}, // consumed
+        pendingBoostB:     {},
+        pendingMapStrModA: 0,
+        pendingTactic:     null,
         finalResult: done ? buildFinalResult(teamA, teamB, allMapResults, newWinsA, newWinsB, newAccStats) : null,
       };
     }
@@ -162,19 +277,15 @@ function reducer(state, action) {
       return { ...state, phase: "intermission" };
 
     case "APPLY_TACTIC": {
-      let boost      = { ...state.pendingBoostA };
-      let regainUsed = state.regainUsed;
-      let tiltedA    = state.tiltedIdsA;
-
-      if (action.tactic === "regain" && !regainUsed) {
-        tiltedA    = new Set();
-        regainUsed = true;
-      } else if (action.tactic === "vibes") {
-        boost = { ...boost, teamwork: boost.teamwork + 5 };
-      } else if (action.tactic === "slayout") {
-        boost = { ...boost, gunny: boost.gunny + 5, awareness: boost.awareness - 5 };
-      }
-      return { ...state, pendingBoostA: boost, regainUsed, tiltedIdsA: tiltedA };
+      const userIsA = action.userTeamId === action.teamAId;
+      const effect = action.effect ?? { boosts: {}, mapStrModUser: 0, label: "Standard", effectText: "No modifier" };
+      return {
+        ...state,
+        pendingBoostA: userIsA ? effect.boosts : {},
+        pendingBoostB: userIsA ? {} : effect.boosts,
+        pendingMapStrModA: userIsA ? (effect.mapStrModUser ?? 0) : -(effect.mapStrModUser ?? 0),
+        pendingTactic: { id: action.tactic, label: effect.label, effectText: effect.effectText, note: effect.note },
+      };
     }
 
     case "NEXT_MAP":
@@ -193,21 +304,34 @@ function reducer(state, action) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Scoreboard({ teamA, teamB, seriesScore, mapIdx, userTeamId, schedule }) {
+function Scoreboard({ teamA, teamB, seriesScore, mapIdx, userTeamId, schedule, mapSet, mapResults, phase }) {
   const [wA, wB] = seriesScore;
-  const mode     = MAP_MODES[mapIdx] ?? "";
-  const short    = MODE_SHORT[mode] ?? "";
+  const currentSlot = mergeMapSlot(mapSet, mapIdx);
+  const lastMap = mapResults[mapResults.length - 1];
+  const showLast = (phase === "map_result" || phase === "intermission") && lastMap;
+  const detail = showLast
+    ? `Map ${lastMap.mapNum}: ${lastMap.mapName ? `${lastMap.mapName} ` : ""}${lastMap.mode} · ${teamTag(lastMap.winnerId, schedule)} win ${lastMap.scoreWinner}-${lastMap.scoreLoser}`
+    : `${phase === "simming" ? "Live" : "Next"}: ${formatMapLabel(currentSlot, mapIdx)}`;
+  const nextIdx = showLast ? mapIdx + 1 : mapIdx;
+  const nextSlot = mergeMapSlot(mapSet, nextIdx);
+  const nextLine = showLast && nextIdx < 5 ? `Next: ${formatMapLabel(nextSlot, nextIdx)}` : null;
+
   return (
     <div className="mco-scoreboard">
       <div className={`mco-sb-team ${teamA.id === userTeamId ? "mco-sb-you" : ""}`}>
         <span className="mco-sb-tag" style={{ color: teamColor(teamA.id, schedule) }}>{teamTag(teamA.id, schedule)}</span>
         {teamA.id === userTeamId && <span className="mco-sb-you-badge">YOU</span>}
       </div>
-      <div className="mco-sb-score">
-        <span className="mco-sb-num" style={{ color: wA > wB ? "var(--green)" : wA < wB ? "var(--red)" : "var(--text-head)" }}>{wA}</span>
-        <span className="mco-sb-sep">—</span>
-        <span className="mco-sb-num" style={{ color: wB > wA ? "var(--green)" : wB < wA ? "var(--red)" : "var(--text-head)" }}>{wB}</span>
-        <span className="mco-sb-mode">{short} Map {mapIdx + 1}</span>
+      <div className="mco-sb-center">
+        <div className="mco-sb-series-line">
+          <span style={{ color: teamColor(teamA.id, schedule) }}>{teamTag(teamA.id, schedule)}</span>
+          <span className="mco-sb-num">{wA}</span>
+          <span className="mco-sb-sep">-</span>
+          <span className="mco-sb-num">{wB}</span>
+          <span style={{ color: teamColor(teamB.id, schedule) }}>{teamTag(teamB.id, schedule)}</span>
+        </div>
+        <div className="mco-sb-detail">{detail}</div>
+        {nextLine && <div className="mco-sb-next">{nextLine}</div>}
       </div>
       <div className={`mco-sb-team mco-sb-team-b ${teamB.id === userTeamId ? "mco-sb-you" : ""}`}>
         {teamB.id === userTeamId && <span className="mco-sb-you-badge">YOU</span>}
@@ -306,15 +430,80 @@ function LiveView({ teamA, teamB, currentMapStats, userTeamId, schedule, onPlaye
   );
 }
 
-function MapHistoryRow({ mr, teamA, teamB, schedule }) {
+function MapHistoryRow({ mr, teamA, schedule }) {
   const won = mr.winnerId === teamA.id;
+  const label = `${mr.mapName ? `${mr.mapName} ` : ""}${mr.mode}`;
   return (
     <div className={`mco-map-history-row ${won ? "mco-mhr-a" : "mco-mhr-b"}`}>
-      <span className="mco-mhr-map">Map {mr.mapNum} · {mr.mapName ? `${mr.mapName} ` : ""}{mr.short}</span>
+      <span className="mco-mhr-map">Map {mr.mapNum}: {label}</span>
       <span className="mco-mhr-score">
         <span style={{ color: teamColor(mr.winnerId, schedule) }}>{teamTag(mr.winnerId, schedule)}</span>
         <span className="mco-mhr-sc">{mr.scoreWinner}–{mr.scoreLoser}</span>
       </span>
+      {mr.tacticName && <span className="mco-mhr-tactic">Tactic: {mr.tacticName}</span>}
+    </div>
+  );
+}
+
+function SeriesMapSet({ mapSet, mapResults, currentMapIdx, teamA, teamB, schedule }) {
+  const tags = { a: teamTag(teamA.id, schedule), b: teamTag(teamB.id, schedule) };
+  return (
+    <div className="mco-series-mapset">
+      <div className="mco-history-label">Series Map Set</div>
+      {[0, 1, 2, 3, 4].map(i => {
+        const result = mapResults.find(m => m.mapNum === i + 1);
+        const slot = mergeMapSlot(mapSet, i);
+        const edge = softenedMapEdge(slot.edgeA, tags.a, tags.b, { includeNumber: true });
+        const isNext = !result && i === currentMapIdx;
+        return (
+          <div key={i} className={`mco-mapset-row ${result ? "mco-mapset-done" : isNext ? "mco-mapset-next" : ""}`}>
+            <span className="mco-mapset-num">{i + 1}.</span>
+            <span className="mco-mapset-main">
+              <span className="mco-mapset-map">{formatMapLabel(slot, i, { includePrefix: false })}</span>
+              {result ? (
+                <span className="mco-mapset-status" style={{ color: teamColor(result.winnerId, schedule) }}>
+                  {teamTag(result.winnerId, schedule)} {result.scoreWinner}-{result.scoreLoser}
+                </span>
+              ) : isNext ? (
+                <span className="mco-mapset-status mco-mapset-next-label">Next</span>
+              ) : edge.visibleValue > 0 ? (
+                <span className="mco-mapset-status">{edge.text}</span>
+              ) : null}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TacticsPanel({ nextMapIdx, nextSlot, selected, onSelect, seriesScore, userTeamIsA, staffSupport }) {
+  return (
+    <div className="mco-tactic-panel">
+      <div className="mco-int-label">Choose tactic for {formatMapLabel(nextSlot, nextMapIdx)}</div>
+      <div className="mco-tactics">
+        {TACTICS.map(t => {
+          const effect = buildTacticEffect(t.id, { mode: nextSlot.mode, seriesScore, userTeamIsA, staffSupport });
+          return (
+            <TacticButton
+              key={t.id}
+              label={t.label}
+              desc={t.guidance}
+              effect={effect.effectText}
+              active={selected?.id === t.id}
+              disabled={false}
+              onClick={() => onSelect(t.id, effect)}
+            />
+          );
+        })}
+      </div>
+      {selected && (
+        <div className="mco-selected-tactic">
+          <strong>Current tactic:</strong> {selected.label}
+          <span>{selected.effectText}</span>
+          {selected.note && <em>{selected.note}</em>}
+        </div>
+      )}
     </div>
   );
 }
@@ -332,7 +521,7 @@ function ProcsFeed({ procs }) {
   );
 }
 
-function TacticButton({ label, desc, active, disabled, onClick }) {
+function TacticButton({ label, desc, effect, active, disabled, onClick }) {
   return (
     <button
       className={`mco-tactic-btn ${active ? "mco-tactic-active" : ""} ${disabled ? "mco-tactic-disabled" : ""}`}
@@ -340,6 +529,7 @@ function TacticButton({ label, desc, active, disabled, onClick }) {
     >
       <div className="mco-tactic-label">{label}</div>
       <div className="mco-tactic-desc">{desc}</div>
+      {effect && <div className="mco-tactic-effect">{effect}</div>}
     </button>
   );
 }
@@ -351,7 +541,6 @@ export default function MatchCenterOverlay() {
   const { openPlayerProfile } = usePlayerProfile();
   const [mcState, mcDispatch]      = useReducer(reducer, INIT);
   const [visibleProcs, setVisibleProcs] = useState([]);
-  const [activeTactic, setActiveTactic] = useState(null);
 
   const isOpen = ctx !== null;
 
@@ -359,16 +548,18 @@ export default function MatchCenterOverlay() {
   useEffect(() => {
     if (isOpen) {
       mcDispatch({ type: "RESET" });
-      setActiveTactic(null);
     }
   }, [isOpen]);
 
   // Auto-clear procs after 2.5s
   useEffect(() => {
     if (mcState.procs.length === 0) return;
-    setVisibleProcs(mcState.procs);
-    const t = setTimeout(() => setVisibleProcs([]), 2500);
-    return () => clearTimeout(t);
+    const show = setTimeout(() => setVisibleProcs(mcState.procs), 0);
+    const hide = setTimeout(() => setVisibleProcs([]), 2500);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(hide);
+    };
   }, [mcState.procs]);
 
   // Derive team objects from game state
@@ -381,7 +572,7 @@ export default function MatchCenterOverlay() {
 
   const teamA = (() => {
     if (!state || !ctx) return null;
-    const { schedule, players, userTeamId } = state;
+    const { schedule, userTeamId } = state;
     if (ctx.type === "stage") {
       const stage = schedule.stages?.[schedule.stageIdx];
       const m = stage?.matches.find(mx => !mx.played && (mx.a === userTeamId || mx.b === userTeamId));
@@ -405,7 +596,7 @@ export default function MatchCenterOverlay() {
 
   const teamB = (() => {
     if (!state || !ctx || !teamA) return null;
-    const { schedule, players, userTeamId } = state;
+    const { schedule, userTeamId } = state;
     if (ctx.type === "stage") {
       const stage = schedule.stages?.[schedule.stageIdx];
       const m = stage?.matches.find(mx => !mx.played && (mx.a === userTeamId || mx.b === userTeamId));
@@ -451,10 +642,9 @@ export default function MatchCenterOverlay() {
 
   const { userTeamId } = state;
   const { phase, seriesScore, mapResults, currentMapStats, momentum, finalResult,
-          currentMapIdx, regainUsed, pendingBoostA, tiltedIdsA } = mcState;
+          currentMapIdx, tiltedIdsA, pendingTactic } = mcState;
 
-  const mode  = MAP_MODES[currentMapIdx] ?? "";
-  const short = MODE_SHORT[mode] ?? "";
+  const currentSlot = mergeMapSlot(mapSet, currentMapIdx);
 
   // Count how many user team players are tilted
   const userTeamIsA = teamA.id === userTeamId;
@@ -462,18 +652,23 @@ export default function MatchCenterOverlay() {
     ? teamA.players.slice(0, 4).filter(p => tiltedIdsA.has(p.id)).length
     : teamB.players.slice(0, 4).filter(p => mcState.tiltedIdsB.has(p.id)).length;
 
+  const staffSupport = staffTacticSupport(state.staff, userTeamId);
+
   function handleStart() {
     mcDispatch({ type: "START", seed: ctx.seed });
   }
 
-  function handleTactic(tactic) {
-    if (tactic === "regain" && regainUsed) return;
-    setActiveTactic(tactic);
-    mcDispatch({ type: "APPLY_TACTIC", tactic });
+  function handleTactic(tactic, effect) {
+    mcDispatch({
+      type: "APPLY_TACTIC",
+      tactic,
+      effect,
+      userTeamId,
+      teamAId: teamA.id,
+    });
   }
 
   function handleNextMap() {
-    setActiveTactic(null);
     mcDispatch({ type: "NEXT_MAP" });
   }
 
@@ -526,10 +721,17 @@ export default function MatchCenterOverlay() {
             </div>
           </div>
 
-          <div className="mco-pg-maps">
-            {MAP_MODES.map((m, i) => (
-              <span key={i} className="mco-pg-map-badge">{MODE_SHORT[m]}</span>
-            ))}
+          <div className="mco-pg-maps mco-pg-mapset">
+            {[0, 1, 2, 3, 4].map(i => {
+              const slot = mergeMapSlot(mapSet, i);
+              const edge = softenedMapEdge(slot.edgeA, teamTag(teamA.id, state.schedule), teamTag(teamB.id, state.schedule));
+              return (
+                <span key={i} className="mco-pg-map-badge">
+                  {formatMapLabel(slot, i, { compact: true })}
+                  {edge.visibleValue > 0 && <small>{edge.text}</small>}
+                </span>
+              );
+            })}
           </div>
 
           <button className="btn-primary mco-start-btn" onClick={handleStart}>
@@ -619,6 +821,9 @@ export default function MatchCenterOverlay() {
           mapIdx={seriesMapIdx}
           userTeamId={userTeamId}
           schedule={state.schedule}
+          mapSet={mapSet}
+          mapResults={mapResults}
+          phase={phase}
         />
 
         {/* Momentum bar */}
@@ -631,7 +836,7 @@ export default function MatchCenterOverlay() {
           <div className="mco-body-left">
             {isSimming && (
               <div className="mco-simming-msg">
-                <span className="mco-spin">⟳</span> Simulating {short} Map {currentMapIdx + 1}…
+                <span className="mco-spin">⟳</span> Simulating {formatMapLabel(currentSlot, currentMapIdx)}…
               </div>
             )}
 
@@ -640,8 +845,9 @@ export default function MatchCenterOverlay() {
                 {lastMapResult && (
                   <div className={`mco-map-winner ${lastMapResult.winnerId === userTeamId ? "mco-mw-user-win" : lastMapResult.loserId === userTeamId ? "mco-mw-user-loss" : ""}`}>
                     <span style={{ color: teamColor(lastMapResult.winnerId, state.schedule) }}>{teamTag(lastMapResult.winnerId, state.schedule)}</span>
-                    {" "}win Map {lastMapResult.mapNum} — {lastMapResult.short}
+                    {" "}win {formatMapLabel({ name: lastMapResult.mapName, mode: lastMapResult.mode }, lastMapResult.mapNum - 1)}
                     <span className="mco-mw-score"> {lastMapResult.scoreWinner}–{lastMapResult.scoreLoser}</span>
+                    {lastMapResult.tacticName && <span className="mco-mw-tactic">Tactic: {lastMapResult.tacticName}</span>}
                   </div>
                 )}
                 <LiveView
@@ -658,15 +864,24 @@ export default function MatchCenterOverlay() {
             <ProcsFeed procs={visibleProcs} />
           </div>
 
-          {/* Right: map history */}
+          {/* Right: full series map set */}
           <div className="mco-body-right">
-            <div className="mco-history-label">MAP HISTORY</div>
-            {mapResults.length === 0
-              ? <div className="mco-history-empty muted">No maps played yet</div>
-              : mapResults.map(mr => (
-                  <MapHistoryRow key={mr.mapNum} mr={mr} teamA={teamA} teamB={teamB} schedule={state.schedule} />
-                ))
-            }
+            <SeriesMapSet
+              mapSet={mapSet}
+              mapResults={mapResults}
+              currentMapIdx={isMapResult || isIntermission ? currentMapIdx + 1 : currentMapIdx}
+              teamA={teamA}
+              teamB={teamB}
+              schedule={state.schedule}
+            />
+
+            {pendingTactic && (
+              <div className="mco-current-tactic">
+                <div className="mco-current-tactic-label">Current tactic</div>
+                <strong>{pendingTactic.label}</strong>
+                <span>{pendingTactic.effectText}</span>
+              </div>
+            )}
 
             {myTiltCount > 0 && (
               <div className="mco-tilt-notice">
@@ -677,37 +892,29 @@ export default function MatchCenterOverlay() {
         </div>
 
         {/* Intermission panel */}
-        {isIntermission && (
-          <div className="mco-intermission">
-            <div className="mco-int-label">TACTICAL ADJUSTMENT — Map {currentMapIdx + 2}</div>
-            <div className="mco-tactics">
-              <TacticButton
-                label="Regain"
-                desc="Clear tilt penalties (one-time use)"
-                active={activeTactic === "regain"}
-                disabled={regainUsed}
-                onClick={() => handleTactic("regain")}
+        {isIntermission && (() => {
+          const nextMapIdx = currentMapIdx + 1;
+          const nextSlot = mergeMapSlot(mapSet, nextMapIdx);
+          return (
+            <div className="mco-intermission">
+              <TacticsPanel
+                nextMapIdx={nextMapIdx}
+                nextSlot={nextSlot}
+                selected={pendingTactic}
+                onSelect={handleTactic}
+                seriesScore={seriesScore}
+                userTeamIsA={userTeamIsA}
+                staffSupport={staffSupport}
               />
-              <TacticButton
-                label="Vibes"
-                desc="+5 Teamwork next map"
-                active={activeTactic === "vibes"}
-                disabled={false}
-                onClick={() => handleTactic("vibes")}
-              />
-              <TacticButton
-                label="Slay Out"
-                desc="+5 Gunny, −5 Awareness next map"
-                active={activeTactic === "slayout"}
-                disabled={false}
-                onClick={() => handleTactic("slayout")}
-              />
+              {staffSupport.hasStaffRead && (
+                <div className="mco-staff-note">Staff input: tactical staff can add up to a very small bonus; discipline softens riskier downsides.</div>
+              )}
+              <button className="btn-primary mco-next-map-btn" onClick={handleNextMap}>
+                ▶ {formatMapLabel(nextSlot, nextMapIdx)}
+              </button>
             </div>
-            <button className="btn-primary mco-next-map-btn" onClick={handleNextMap}>
-              ▶ Map {currentMapIdx + 2} — {MODE_SHORT[MAP_MODES[currentMapIdx + 1]] ?? ""}
-            </button>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Map result → "Continue" (no intermission after map 5 or series clinched) */}
         {isMapResult && (() => {
@@ -722,7 +929,7 @@ export default function MatchCenterOverlay() {
                 Adjust Tactics
               </button>
               <button className="btn-primary mco-next-map-btn" onClick={handleNextMap}>
-                ▶ Next Map
+                ▶ {formatMapLabel(mergeMapSlot(mapSet, currentMapIdx + 1), currentMapIdx + 1)}
               </button>
             </div>
           );
