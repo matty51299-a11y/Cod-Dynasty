@@ -1092,6 +1092,7 @@ export function ensureCdlRosterIntegrity(gameState, options = {}) {
   const repairs = [];
   const season = state.season ?? state.schedule?.season ?? 1;
   const windowType = options.windowType ?? "integrity";
+  const fillAiRosters = options.fillAiRosters ?? windowType !== "open_free_agency";
 
   const seenIds = new Set();
   const seenNames = new Set();
@@ -1122,6 +1123,11 @@ export function ensureCdlRosterIntegrity(gameState, options = {}) {
     }
 
     let roster = getActiveCdlRoster(players, team.id);
+    if (!fillAiRosters) {
+      if (roster.length < 4) repairs.push({ type: "ai_thin_cdl_roster_deferred", teamId: team.id, count: roster.length });
+      continue;
+    }
+
     let fillSlot = 0;
     while (roster.length < 4 && fillSlot++ < 8) {
       const committed = roster.reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);

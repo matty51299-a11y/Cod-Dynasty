@@ -35,7 +35,7 @@ import SeasonAwardsOverlay from "./components/SeasonAwardsOverlay.jsx";
 import BoardReviewOverlay from "./components/BoardReviewOverlay.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
 import { CDL_TEAMS }     from "./data/teams.js";
-import { getTeamThemeStyle, getTeamTextAccent } from "./utils/teamTheme.js";
+import { getTeamThemeStyle } from "./utils/teamTheme.js";
 
 export default function App() {
   const { state, dispatch } = useGame();

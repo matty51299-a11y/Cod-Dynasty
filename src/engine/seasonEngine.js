@@ -68,7 +68,7 @@ const CHALLENGER_TEAM_POOL = [
   { id: "belfast_storm", name: "Belfast Storm", tag: "BFS", color: "#1d4ed8" },
 ];
 import { runProgression } from "./progression.js";
-import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, runAIFreeAgencyMarket, getResignDemand, ensureCdlRosterIntegrity } from "./rosterAI.js";
+import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, runAIFreeAgencyMarket, getResignDemand, getSigningCost, getTeamCap, ensureCdlRosterIntegrity } from "./rosterAI.js";
 import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
@@ -78,6 +78,15 @@ function seededRng(seed) {
     s = (s * 1664525 + 1013904223) & 0xffffffff;
     return (s >>> 0) / 0xffffffff;
   };
+}
+
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < String(str).length; i++) {
+    h ^= String(str).charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }
 
 function shuffle(arr, rng) {
@@ -99,6 +108,42 @@ function buildRoundRobin(teamIds) {
 
 function withCdlRosterIntegrity(gameState, windowType) {
   return ensureCdlRosterIntegrity(gameState, { windowType });
+}
+
+function standingsRank(standings, teamId) {
+  const sorted = Object.entries(standings || {}).sort((a, b) => (b[1]?.points || 0) - (a[1]?.points || 0));
+  const idx = sorted.findIndex(([id]) => id === teamId);
+  return idx >= 0 ? idx + 1 : 8;
+}
+
+function shouldAIRenewExpiringPlayer(player, allPlayers, gameState, outgoingSeason) {
+  const teamId = player.teamId;
+  if (!teamId) return false;
+  const demand = getResignDemand(player, 1, gameState.playerSeasonStats, outgoingSeason);
+  const starters = (allPlayers || []).filter(p => p.teamId === teamId && !p.isSub && !isInactivePlayer(p));
+  const committedWithoutPlayer = starters
+    .filter(p => p.id !== player.id)
+    .reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
+  const capPressure = Math.max(0, committedWithoutPlayer + demand - getTeamCap(teamId));
+  const rank = standingsRank(gameState.schedule?.standings, teamId);
+  const seed = hashString(`${outgoingSeason}_${teamId}_${player.id}_ai_contract`);
+  const rng = seededRng(seed);
+  const ovr = player.overall ?? 70;
+  const pot = player.potential ?? ovr;
+  const age = player.age ?? 24;
+  let score = 48;
+  score += (ovr - 78) * 2.8;
+  score += Math.max(-6, Math.min(12, pot - ovr));
+  score -= Math.max(0, age - 28) * 4.5;
+  score += rank <= 4 ? 8 : rank >= 10 ? -5 : 0;
+  score -= player.isSub ? 18 : 0;
+  score -= Math.min(24, capPressure / 20000);
+  score += rng() * 34;
+
+  // Keep franchise-level players most of the time, but do not make them
+  // impossible to hit the market when age/cap pressure is ugly.
+  if (ovr >= 90 && age <= 29 && capPressure <= 75000) score += 12;
+  return score >= 68;
 }
 
 // Deterministic seed for a specific major match (no seed collisions)
@@ -2060,15 +2105,17 @@ export function advanceOffseason(gameState) {
   }
 
   // ── Contract processing ────────────────────────────────────────────────────
-  // AI teams auto-renew any player on a 1-year contract (contractYears === 1)
-  // before the decrement so stars don't flood free agency every offseason.
-  // User's expiring players were already handled in the contracts phase.
-  const withAIRenewals = (gameState.players || []).map(p => {
+  // AI teams no longer auto-renew every expiring contract. Each expiring AI
+  // player gets a deterministic keep/release decision based on quality, age,
+  // cap pressure, team standing and a small per-save/player roll. Non-renewed
+  // players flow through the same decrement/expiry path as user let-walks.
+  const sourcePlayers = gameState.players || [];
+  const withAIRenewals = sourcePlayers.map(p => {
     if (!p.teamId || p.teamId === gameState.userTeamId) return p;
     const years = p.contractYears ?? 2;
-    if (years === 1) {
+    if (years === 1 && shouldAIRenewExpiringPlayer(p, sourcePlayers, gameState, outgoingSeason)) {
       const demand = getResignDemand(p, 1, gameState.playerSeasonStats, outgoingSeason);
-      return { ...p, contractYears: 2, salary: demand };  // AI auto-renew with market salary
+      return { ...p, contractYears: 2, salary: demand };
     }
     return p;
   });
