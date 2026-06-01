@@ -102,8 +102,9 @@ export default function App() {
           <span className="app-title">CDL MANAGER</span>
           <span className="season-badge">S{state.season}</span>
           {team && (
-            <span className="user-team-badge" style={{ color: getTeamTextAccent(team) }}>
-              {team.tag}
+            <span className="user-team-badge" style={{ color: "var(--shell-text)" }}>
+              <strong>{team.tag}</strong>
+              <span className="user-team-name">{team.name}</span>
             </span>
           )}
         </div>
