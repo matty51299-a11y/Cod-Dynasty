@@ -31,6 +31,7 @@ import OffseasonReport   from "./components/OffseasonReport.jsx";
 import TeamHubOverlay    from "./components/TeamHubOverlay.jsx";
 import PlayerProfileOverlay from "./components/PlayerProfileOverlay.jsx";
 import SeasonAwardsOverlay from "./components/SeasonAwardsOverlay.jsx";
+import BoardReviewOverlay from "./components/BoardReviewOverlay.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
 import { CDL_TEAMS }     from "./data/teams.js";
 
@@ -142,6 +143,7 @@ export default function App() {
         <TeamHubOverlay />
         <PlayerProfileOverlay />
         <SeasonAwardsOverlay />
+        <BoardReviewOverlay />
         <NotificationsFeed isOpen={showFeed} onClose={() => setShowFeed(false)} />
 
         {/* Screen content */}

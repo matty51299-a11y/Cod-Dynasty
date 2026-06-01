@@ -236,7 +236,7 @@ export default function TeamHubOverlay() {
           const teamStaff = getStaffForTeam(state.staff || [], openTeamId);
           if (!teamStaff.length) return null;
           const hc = teamStaff.find(s => s.role === "head_coach");
-          const gm = teamStaff.find(s => s.role === "gm");
+          const gm = teamStaff.find(s => s.role === "assistant_gm");
           const an = teamStaff.find(s => s.role === "analyst");
           const pc = teamStaff.find(s => s.role === "performance_coach");
           const shown = [hc, gm, an, pc].filter(Boolean);

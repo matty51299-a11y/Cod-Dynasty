@@ -480,3 +480,73 @@ Player shape (key fields):
 - Offseason Hub now labels the user free-agency window, exposes a Free Agents section with salary/stock context and sign buttons, and only runs AI free agency when the user advances from that window. The Free Agency page also explains that AI bidding is paused during the user window.
 - Added readable free-agency transaction types (`FREE_AGENT_ENTERED`, `FREE_AGENT_SIGNING`, `FREE_AGENT_TO_CHALLENGERS`, `FREE_AGENT_RETIRED`) and a diagnostic script (`scripts/diagnoseOffseasonFreeAgency.mjs`) that prints market entrants, top free agents, AI needs, offers, signings, leftovers, market exits, and roster sizes.
 - Updated the roster-integrity stress script for the two-step offseason flow (`contracts -> free agency window -> AI free agency/new season`).
+
+## Update 2026-06-01 (General Manager → Assistant GM rename)
+- Renamed the `"gm"` staff role key to `"assistant_gm"` and its display label from `"General Manager"` to `"Assistant GM"` across all files. Internal key change only — same slot, same attributes, same bonus effects.
+- `src/data/staff.js`: `STAFF_ROLES.assistant_gm = "Assistant GM"`, all 19 seed entries updated to `role: "assistant_gm"`.
+- `src/engine/staffEngine.js`: `migrateStaff()` now converts any loaded `role === "gm"` → `"assistant_gm"` so old saves migrate on load without crashing. `calcStaffBonuses`, `ensureTeamStaff`, `getKeyAttributes` all updated to reference `"assistant_gm"`.
+- `src/components/StaffPanel.jsx`: `ROLE_ORDER` and `ROLE_COLORS` keys updated.
+- `src/components/TeamHubOverlay.jsx`: staff lookup updated to `"assistant_gm"`.
+- There is no hireable "General Manager" role anymore; the user is the GM. The renamed slot is the deputy role.
+
+## Update 2026-06-01 (Owner Expectations / Job Security system)
+- Added a board-level stakes system for the user-controlled CDL team. Reads existing data only — does not change match sim, roster AI, contracts, budgets, awards, brackets, or ratings.
+
+### Data model (`boardState`)
+Stored on the top-level game state for the user team only:
+```js
+boardState: {
+  confidence: 60,      // 0–100; starts at 60 on new game / first migration
+  objectives: [],      // generated each season (see below)
+  verdict: null,       // "Retained" | "Final Warning" | "Released" | null
+  history: [],         // per-season archived review records
+}
+pendingBoardReview: null  // set after awards overlay; drives BoardReviewOverlay
+```
+Old saves without `boardState` hydrate to defaults via `migrateBoardState()`. Objectives are generated on first load if the array is empty.
+
+### Security band (derived, not stored)
+- 80–100: Secure · 60–79: Stable · 40–59: Shaky · 20–39: At Risk · 0–19: Critical
+
+### Objective generation (`generateObjectives`)
+1 primary + 1–2 secondary objectives generated at each season start, tailored by team OVR:
+| Tier | OVR | Primary | Secondary |
+|------|-----|---------|-----------|
+| Elite | 84+ | Reach Champs Grand Final (top 2) | Finish Top 3, Reach Major Top 4 |
+| Strong | 80–83 | Finish Top 4 | Reach Champs Top 6, Major Top 6 |
+| Mid | 75–79 | Finish Top 6 | Develop a Rookie, Major Top 8 |
+| Weak | <75 | Finish Top 8 | Develop a Rookie, Stay Under Cap |
+
+Objective types: `reachChamps`, `finishTopN`, `majorResult`, `developRookie`, `salaryTarget`. Evaluation reads `schedule.standings`, Major bracket placements via `getMajorPlacementMap`, match log map counts for rookie progress, and `getTeamCap` for salary checks.
+
+### Confidence updates
+- After each regular Major (idx 0–3): ±5/3/0/−3/−5 by placement band. Hooked into all major-sim actions via `withMajorBoardNudge` helper.
+- Season-end board review: primary met +20 / failed −20; each secondary met +8 / failed −8. Clamped 0–100.
+
+### Season-end board review
+Triggered by `CONTINUE_FROM_SEASON_AWARDS`. Runs `runBoardReview` → evaluates all objectives with `isFinal=true`, computes delta, derives verdict:
+- **Retained**: confidence > 40 OR primary met
+- **Final Warning**: confidence 20–40 AND primary failed
+- **Released**: confidence < 20 AND primary failed
+
+Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the offseason hub.
+
+### Released verdict options
+1. **Accept New Mandate** → resets confidence to 60, clears overlay, game continues (`BOARD_ACCEPT_NEW_MANDATE`)
+2. **Start New Game** → `deleteSave()` + `RESET_TO_TEAM_SELECT`; no save corruption
+
+### Hook points in reducer
+- `createInitialGameState`: boardState initialised; objectives generated after integrity check
+- `LOAD_GAME`: `migrateBoardState` + objective backfill if empty
+- `SIM_MAJOR` / `SIM_NEXT_MAJOR_MATCH` / `SIM_MAJOR_ROUND` / `COMMIT_USER_MATCH_RESULT`: `withMajorBoardNudge` applied when a regular Major completes
+- `CONTINUE_FROM_SEASON_AWARDS`: `runBoardReview` → `pendingBoardReview` set; `boardState` updated
+- `ADVANCE_OFFSEASON`: new objectives generated for incoming season; `board_mandate` feed entry posted; `pendingBoardReview` cleared
+
+### UI surfaces
+- **Dashboard Board widget** (`fm-board-widget`): security band dot + label, confidence bar + number, primary objective + status badge. Appears in the main widget grid during stage/major/preChamps phases.
+- **Offseason Hub Owner Review card** (`oh-board-card`): all objectives with status badges and progress notes, confidence before/after, verdict badge, last 2 history entries. First card in the right aside of the Offseason Hub.
+- **BoardReviewOverlay** (`src/components/BoardReviewOverlay.jsx`): modal shown after the awards popup. Verdict badge, confidence change visualisation, per-objective results, owner flavour text, action buttons.
+
+### New files
+- `src/engine/boardEngine.js` — pure functions: `migrateBoardState`, `getSecurityBand`, `bandColor`, `generateObjectives`, `evalObjective`, `evalAllObjectives`, `nudgeConfidenceAfterMajor`, `runBoardReview`
+- `src/components/BoardReviewOverlay.jsx` — season-end board review modal
