@@ -9189,3 +9189,317 @@ body { background: #111317; }
   font-style: normal;
   margin-left: auto;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   USER TEAM IDENTITY POLISH PASS
+   Display-only accent layer. Uses CSS variables supplied by teamTheme.js.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.app {
+  --accent: var(--user-accent, #60a5fa);
+}
+
+.topbar {
+  background:
+    radial-gradient(circle at 18% 0%, var(--user-accent-softer), transparent 34%),
+    #1d1f24;
+  border-bottom-color: var(--user-accent-border);
+}
+
+.user-team-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--user-accent-border);
+  border-radius: 999px;
+  background: var(--user-accent-soft);
+  text-shadow: 0 1px 8px rgba(0,0,0,.35);
+}
+
+.toast {
+  top: 52px;
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 32px));
+  background: linear-gradient(180deg, #242933, #1b1f27);
+  border: 1px solid var(--user-accent-border);
+  border-left: 4px solid var(--user-accent);
+  color: var(--text-head);
+  box-shadow: 0 18px 42px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.05);
+  border-radius: 10px;
+  font-weight: 750;
+}
+.toast::before {
+  content: "Update";
+  display: block;
+  margin-bottom: 3px;
+  color: var(--user-accent-text);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.sidebar {
+  background:
+    radial-gradient(circle at 0 0, var(--user-accent-soft), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--user-accent) 10%, #151821) 0%, #16191f 100%);
+  border-right-color: var(--user-accent-border);
+}
+.sb-team-block {
+  background: linear-gradient(90deg, var(--user-accent-soft), transparent 78%);
+  border-bottom-color: var(--user-accent-border);
+}
+.sb-team-block::before {
+  content: "";
+  width: 3px;
+  align-self: stretch;
+  margin: -10px 2px -10px -12px;
+  border-radius: 999px;
+  background: var(--user-accent);
+  box-shadow: 0 0 14px var(--user-accent-border);
+}
+.sb-team-tag { color: var(--user-accent-text); }
+.sb-item {
+  border-left-color: transparent;
+  color: #c8cfdb;
+}
+.sb-item:hover {
+  color: #fff;
+  background: var(--user-accent-softer);
+}
+.sb-item.active {
+  color: #fff;
+  background: linear-gradient(90deg, var(--user-accent-soft), rgba(255,255,255,.025));
+  border-left-color: var(--user-accent);
+  box-shadow: inset 3px 0 0 var(--user-accent), 0 0 18px rgba(0,0,0,.16);
+}
+.sb-item.active .sb-icon,
+.sb-item.active .sb-label { color: #fff; }
+.sb-dot { background: var(--user-accent); box-shadow: 0 0 10px var(--user-accent-border); }
+.sb-badge { box-shadow: 0 0 0 2px #16191f; }
+.sb-pill-live {
+  color: var(--user-accent-text);
+  background: var(--user-accent-soft);
+  border-color: var(--user-accent-border);
+}
+
+.btn-primary,
+.btn-primary-sm,
+.btn-cta,
+.filter-btn.active,
+.nmo-play-btn,
+.mto-play-match-btn {
+  background: var(--user-accent);
+  border-color: var(--user-accent);
+  color: var(--readable-accent-text, #06110a);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.04) inset;
+}
+.btn-primary:hover,
+.btn-primary-sm:hover,
+.btn-cta:hover,
+.nmo-play-btn:hover { filter: brightness(1.06); opacity: 1; }
+.btn-secondary:hover,
+.btn-secondary-sm:hover { border-color: var(--user-accent-border); }
+
+.db-club-banner {
+  border-color: var(--user-accent-border);
+  border-top: 3px solid var(--user-accent);
+  background: linear-gradient(135deg, var(--user-accent-softer), var(--bg2) 38%, var(--bg2));
+}
+.db-cb-team-name,
+.db-match-you,
+.db-rp-row-you .db-rp-name,
+.db-standing-you .db-standing-name { color: var(--text-head); }
+.db-cb-left { border-right-color: var(--user-accent-border); }
+.db-phase-chip:not(.db-phase-chip-major):not(.db-phase-chip-offseason) {
+  background: var(--user-accent);
+  color: var(--readable-accent-text, #06110a);
+}
+.db-card:hover,
+.db-rp-card:hover,
+.oh-card:hover { border-color: var(--user-accent-border); }
+.db-card:has(.db-match-teams) {
+  border-top-color: var(--user-accent);
+}
+.db-match-teams {
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--user-accent-softer), rgba(255,255,255,.02));
+  border: 1px solid var(--user-accent-border);
+}
+.db-results-body .win-row td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.db-results-body .loss-row td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+.db-rp-row-you,
+.db-standing-you {
+  background: var(--user-accent-softer);
+  box-shadow: inset 3px 0 0 var(--user-accent);
+}
+.db-rp-row-you:hover { background: var(--user-accent-soft); }
+
+.standings-table th,
+.roster-table th,
+.kd-table th,
+.staff-table th,
+.oh-market-table th,
+.dev-table th {
+  font-size: 10px;
+  letter-spacing: .095em;
+  text-transform: uppercase;
+  color: #b6becb;
+}
+.standings-table td,
+.roster-table td,
+.kd-table td,
+.staff-table td,
+.oh-market-table td,
+.dev-table td {
+  border-color: rgba(190,197,207,.13);
+}
+.standings-table tbody tr:hover td,
+.roster-table tbody tr:hover td,
+.kd-table tbody tr:hover td,
+.staff-table tbody tr:hover td,
+.oh-market-table tbody tr:hover td,
+.dev-table tbody tr:hover td {
+  background: rgba(255,255,255,.045);
+}
+.user-row td,
+.kd-user-row td,
+.staff-row--myteam td,
+.dev-row--myteam td,
+.oh-market-table tr.user-row td {
+  background: var(--user-accent-softer) !important;
+  border-top-color: var(--user-accent-border) !important;
+  border-bottom-color: var(--user-accent-border) !important;
+}
+.user-row td:first-child,
+.kd-user-row td:first-child,
+.staff-row--myteam td:first-child,
+.dev-row--myteam td:first-child {
+  box-shadow: inset 3px 0 0 var(--user-accent);
+}
+
+.nmo-backdrop,
+.mco-backdrop,
+.mto-backdrop,
+.cqo-modal-backdrop {
+  background: rgba(3, 7, 18, .78);
+  backdrop-filter: blur(3px);
+}
+.nmo-card,
+.mco-card,
+.cqo-modal {
+  border-color: var(--user-accent-border);
+  box-shadow: 0 28px 72px rgba(0,0,0,.62), 0 0 0 1px rgba(255,255,255,.035) inset;
+}
+.nmo-card::before,
+.mco-card::before,
+.cqo-modal::before {
+  content: "";
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, var(--user-accent), var(--user-accent-2), transparent);
+}
+.nmo-context,
+.nmo-title,
+.mco-int-label,
+.mto-curmatch-round { color: var(--user-accent-text); }
+.nmo-team-user,
+.nmo-you-badge,
+.mco-sb-you-badge {
+  border-color: var(--user-accent-border);
+  background: var(--user-accent-soft);
+}
+.nmo-you-badge,
+.mco-sb-you-badge {
+  color: var(--readable-accent-text, #06110a);
+  background: var(--user-accent);
+}
+.nmo-stakes,
+.nmo-result-mvp,
+.mco-tactic-active,
+.mco-pr-user-team {
+  border-color: var(--user-accent-border) !important;
+  background: var(--user-accent-softer) !important;
+}
+.mco-tactic-btn:hover:not(.mco-tactic-disabled) { border-color: var(--user-accent-border); }
+
+.mto-bc-user-involved {
+  border-left-color: var(--user-accent);
+  box-shadow: inset 0 0 0 1px var(--user-accent-border);
+}
+.mto-cm-team.mto-cm-you,
+.mto-path-next,
+.mto-lr-user,
+.mto-pl-you {
+  background: var(--user-accent-softer);
+  box-shadow: inset 3px 0 0 var(--user-accent);
+}
+.mto-curmatch-user { border-color: var(--user-accent-border); box-shadow: 0 0 0 1px var(--user-accent-border); }
+.mto-myteam-name { color: var(--user-accent-text) !important; }
+.mto-next-user-badge {
+  color: var(--user-accent-text);
+  background: var(--user-accent-softer);
+  border-color: var(--user-accent-border);
+}
+
+.oh-hero {
+  background:
+    radial-gradient(circle at 0 0, var(--user-accent-soft), transparent 42%),
+    linear-gradient(135deg, #20242b 0%, #181b21 58%, #13161b 100%);
+  border-color: var(--user-accent-border);
+  border-top-color: var(--user-accent) !important;
+  box-shadow: 0 18px 42px rgba(0,0,0,.34);
+}
+.oh-kicker { color: var(--user-accent-text); }
+.oh-hero-stats > div,
+.oh-outlook-grid > div {
+  background: rgba(255,255,255,.035);
+  border-color: rgba(190,197,207,.14);
+}
+.oh-card { background: #20242b; border-color: rgba(190,197,207,.14); }
+.oh-contract-card { border-left: 3px solid var(--user-accent); }
+.oh-board-card { border-top: 2px solid var(--user-accent-border); }
+
+.team-logo--table,
+.team-logo--bracket,
+.team-logo--hero,
+.oh-logo {
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.42));
+}
+
+.ui-team-accent-border {
+  border: 1px solid var(--user-accent-border);
+  border-left: 3px solid var(--user-accent);
+  background: linear-gradient(135deg, var(--user-accent-softer), transparent 52%);
+}
+.ui-team-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--user-accent-border);
+  background: var(--user-accent-soft);
+  color: var(--user-accent-text);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.ui-action-btn {
+  border: 1px solid var(--user-accent-border);
+  border-radius: 7px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.ui-action-primary {
+  background: var(--user-accent);
+  color: var(--readable-accent-text, #06110a);
+}
+.ui-action-secondary {
+  background: var(--bg3);
+  color: var(--text);
+}

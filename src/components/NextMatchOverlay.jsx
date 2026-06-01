@@ -16,8 +16,9 @@ import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { isUserRosterPlayable } from "../utils/rosterValidation.js";
 import MatchPreview from "./MatchPreview.jsx";
+import { getTeamTextAccent } from "../utils/teamTheme.js";
 
-function teamColor(id) { return CDL_TEAMS.find(t => t.id === id)?.color ?? "#888"; }
+function teamColor(id) { return getTeamTextAccent(CDL_TEAMS.find(t => t.id === id)); }
 function teamName(id)  { return CDL_TEAMS.find(t => t.id === id)?.name  ?? id; }
 function teamTag(id)   { return CDL_TEAMS.find(t => t.id === id)?.tag   ?? id; }
 
