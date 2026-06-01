@@ -3,16 +3,9 @@
 // Displays verdict, confidence changes, objective results, and owner flavour text.
 
 import { useGame, saveGame, deleteSave } from "../store/gameStore.jsx";
-import { getSecurityBand, bandColor } from "../engine/boardEngine.js";
+import { getSecurityBand, bandColor, objStatusColor, objStatusLabel } from "../engine/boardEngine.js";
 
-function statusBadgeColor(status) {
-  switch (status) {
-    case "met":     return "#34d399";
-    case "failed":  return "#f87171";
-    case "onTrack": return "#60a5fa";
-    default:        return "var(--text-dim)";
-  }
-}
+const statusBadgeColor = objStatusColor;
 
 function verdictColor(verdict) {
   switch (verdict) {
@@ -24,25 +17,22 @@ function verdictColor(verdict) {
 }
 
 function StatusBadge({ status }) {
-  const label = status === "onTrack" ? "On Track"
-    : status === "met" ? "Met"
-    : status === "failed" ? "Failed"
-    : "Pending";
   return (
     <span
       className="br-status-badge"
       style={{ color: statusBadgeColor(status), borderColor: statusBadgeColor(status) }}
     >
-      {label}
+      {objStatusLabel(status)}
     </span>
   );
 }
 
 function ObjRow({ obj }) {
+  const weight = obj.weight === "primary" ? "Primary" : obj.weight === "stretch" ? "Stretch" : "Secondary";
   return (
     <div className="br-obj-row">
       <div className="br-obj-header">
-        <span className="br-obj-weight">{obj.weight === "primary" ? "Primary" : "Secondary"}</span>
+        <span className="br-obj-weight">{weight}</span>
         <span className="br-obj-label">{obj.label}</span>
         <StatusBadge status={obj.status} />
       </div>
@@ -92,10 +82,13 @@ export default function BoardReviewOverlay() {
     delta,
     flavour,
     season,
+    overachievements,
+    underperformances,
   } = review;
 
   const primary = (objectives ?? []).find(o => o.weight === "primary");
   const secondaries = (objectives ?? []).filter(o => o.weight === "secondary");
+  const stretches = (objectives ?? []).filter(o => o.weight === "stretch");
 
   const vc = verdictColor(verdict);
   const isReleased = verdict === "Released";
@@ -135,7 +128,28 @@ export default function BoardReviewOverlay() {
           {secondaries.map(obj => (
             <ObjRow key={obj.id} obj={obj} />
           ))}
+          {stretches.map(obj => (
+            <ObjRow key={obj.id} obj={obj} />
+          ))}
         </div>
+
+        {/* Overachievements / underperformances */}
+        {(overachievements?.length > 0 || underperformances?.length > 0) && (
+          <div className="br-summary-section">
+            {overachievements?.length > 0 && (
+              <div className="br-summary-col">
+                <div className="br-summary-title" style={{ color: "#34d399" }}>Overachievements</div>
+                {overachievements.map((t, i) => <div key={i} className="br-summary-item">▲ {t}</div>)}
+              </div>
+            )}
+            {underperformances?.length > 0 && (
+              <div className="br-summary-col">
+                <div className="br-summary-title" style={{ color: "#f87171" }}>Underperformances</div>
+                {underperformances.map((t, i) => <div key={i} className="br-summary-item">▼ {t}</div>)}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Flavour text from owner */}
         <div className="br-flavour">

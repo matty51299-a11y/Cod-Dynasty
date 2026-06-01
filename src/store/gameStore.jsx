@@ -15,7 +15,7 @@ import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/roster
 import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "../engine/staffEngine.js";
-import { migrateBoardState, generateObjectives, evalAllObjectives, nudgeConfidenceAfterMajor, runBoardReview } from "../engine/boardEngine.js";
+import { migrateBoardState, buildBoardObjectives, objectivesNeedRegen, BOARD_OBJ_VERSION, nudgeConfidenceAfterMajor, runBoardReview } from "../engine/boardEngine.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
@@ -246,8 +246,16 @@ function createInitialGameState(userTeamId) {
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
   const finalState = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
-  finalState.boardState = { ...finalState.boardState, objectives: generateObjectives(finalState) };
+  finalState.boardState = regenBoardObjectives(finalState, finalState.boardState);
   return finalState;
+}
+
+// ── Board objective (re)generation — sets objectives + explanatory meta ───────
+// Generated at season start and stored in the save. Never call this on render.
+function regenBoardObjectives(state, boardState) {
+  const base = migrateBoardState(boardState);
+  const { objectives, meta } = buildBoardObjectives({ ...state, boardState: base });
+  return { ...base, objectives, meta, version: BOARD_OBJ_VERSION };
 }
 
 // ── Board nudge helper — applies after a Major completes ──────────────────────
@@ -298,10 +306,14 @@ function reducer(state, action) {
       cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
       // Migrate staff: old saves without staff get the full starting pool
       cleaned.staff = ensureTeamStaff(migrateStaff(cleaned.staff));
-      // Migrate board state: old saves without boardState get a fresh one
+      // Migrate board state: old saves without boardState get a fresh one.
+      // Also safely regenerate objectives if they are missing OR predate the
+      // current (realism-fixed) objective logic — a one-time mid-season migration
+      // that replaces clearly-invalid legacy objectives. Placement/Major/Champs
+      // objectives evaluate from current standings, so regenerating mid-season is safe.
       cleaned.boardState = migrateBoardState(cleaned.boardState);
-      if (!cleaned.boardState.objectives.length) {
-        cleaned.boardState = { ...cleaned.boardState, objectives: generateObjectives(cleaned) };
+      if (objectivesNeedRegen(cleaned.boardState)) {
+        cleaned.boardState = regenBoardObjectives(cleaned, cleaned.boardState);
       }
       return isValidGameState(cleaned) ? cleaned : null;
     }
@@ -469,10 +481,9 @@ function reducer(state, action) {
       const advanced = advanceOffseason({ ...state });
       const newState = { ...advanced, enteredMajorIdx: null, pendingBoardReview: null };
 
-      // Build new objectives for the incoming season
+      // Build new objectives for the incoming season (carries confidence/history forward)
       const newBoardState = {
-        ...migrateBoardState(newState.boardState),
-        objectives: generateObjectives(newState),
+        ...regenBoardObjectives(newState, newState.boardState),
         verdict: null,
       };
       const tag = CDL_TEAMS.find(t => t.id === newState.userTeamId)?.tag ?? "Owner";
