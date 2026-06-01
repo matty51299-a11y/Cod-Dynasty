@@ -35,6 +35,7 @@ import SeasonAwardsOverlay from "./components/SeasonAwardsOverlay.jsx";
 import BoardReviewOverlay from "./components/BoardReviewOverlay.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
 import { CDL_TEAMS }     from "./data/teams.js";
+import { getTeamThemeStyle, getTeamTextAccent } from "./utils/teamTheme.js";
 
 export default function App() {
   const { state, dispatch } = useGame();
@@ -77,6 +78,7 @@ export default function App() {
   }
 
   const team         = CDL_TEAMS.find(t => t.id === state.userTeamId);
+  const teamThemeStyle = getTeamThemeStyle(team);
   const notification = state.notifications?.[0];
 
   function handleNewGame() {
@@ -93,15 +95,16 @@ export default function App() {
     <MatchCenterProvider>
     <TeamHubProvider>
     <PlayerProfileProvider>
-    <div className="app">
+    <div className="app" style={teamThemeStyle}>
       {/* ── Top bar ── */}
       <header className="topbar">
         <div className="topbar-left">
           <span className="app-title">CDL MANAGER</span>
           <span className="season-badge">S{state.season}</span>
           {team && (
-            <span className="user-team-badge" style={{ color: team.color }}>
-              {team.tag}
+            <span className="user-team-badge" style={{ color: "var(--shell-text)" }}>
+              <strong>{team.tag}</strong>
+              <span className="user-team-name">{team.name}</span>
             </span>
           )}
         </div>
