@@ -233,6 +233,7 @@ export default function Dashboard({ setScreen }) {
 
   const isStage     = phase === "stage";
   const isChallengerQualifier = phase === "challengerQualifier";
+  const isChallengersFinals = isChallengerQualifier && schedule.currentChallengerQualifier?.eventType === "challengersFinals";
   const isMajor     = phase === "major";
   const isPreChamps = phase === "preChamps";
   const isOffseason = phase === "offseason";
@@ -306,7 +307,8 @@ export default function Dashboard({ setScreen }) {
     : (isOffseason || isContracts) ? "db-phase-chip db-phase-chip-offseason"
     : "db-phase-chip";
 
-  const phaseLabel = isOffseason  ? "Offseason"
+  const phaseLabel = isChallengersFinals ? "Challengers Finals"
+    : isOffseason  ? "Offseason"
     : isContracts  ? "Contract Period"
     : isMajor      ? majorName
     : isPreChamps   ? "Pre-Champs Window"

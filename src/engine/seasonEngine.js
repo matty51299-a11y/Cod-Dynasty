@@ -25,11 +25,14 @@ import tellurideBushLogo from "../assets/logos/challengers/Telluride_Bush_Gaming
 import fiveFearsLogo from "../assets/logos/challengers/FiveFears_logo.png";
 import fazeFalconsLogo from "../assets/logos/challengers/FazeFalconslogo.png";
 import forFunEsportsLogo from "../assets/logos/challengers/ForFunEsports.png";
-import { qualifierPlacementLabel } from "../utils/placementDisplay.js";
+import { placementText, qualifierPlacementLabel } from "../utils/placementDisplay.js";
 import { archiveCompletedSeason } from "../utils/seasonArchive.js";
 import { calculateSeasonAwards, mergeSeasonAwards } from "../utils/seasonAwards.js";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
+const CHALLENGERS_FINALS_TEAMS = 16;
+const CHALLENGERS_FINALS_ESWC_SPOTS = 4;
+const ESWC_MAJOR_IDX = 5;
 const CHALLENGER_REGIONS = {
   omit_brooklyn: "NA", omit_noir: "NA", project_notorious: "NA", project_7: "EU",
   death_by_cabal: "EU", huntsmen: "NA", stallions: "NA", telluride_bush: "NA",
@@ -268,12 +271,13 @@ export function buildSeason(season) {
       { name: "Major 3", bracket: null, completed: false },
       { name: "Major 4", bracket: null, completed: false },
       { name: "Champs",  bracket: null, completed: false },
+      { name: "ESWC",    bracket: null, completed: false, eventType: "eswc", pointsAwarded: true },
     ],
     standings:      initStandings(teamIds),  // cumulative season W/L/pts
     stageStandings: initStandings(teamIds),  // per-stage; kept as bracket snapshot, reset on Major→Stage
     stageIdx:        0,     // current stage index (0–3)
-    majorIdx:        null,  // current major index (0–4); null when not in major phase
-    phase:           "stage",  // "stage" | "major" | "preChamps" | "offseason"
+    majorIdx:        null,  // current major index; null when not in major phase
+    phase:           "stage",  // "stage" | "challengerQualifier" | "major" | "preChamps" | "offseason"
     currentMatchday: 0,
     matchLog:        [],
     challengerQualifierResults: [],
@@ -372,6 +376,15 @@ function challengerPointsForPlacement(placement) {
   return CHALLENGER_QUALIFIER_POINTS[placement] ?? 0;
 }
 
+function challengerFinalsPointsForPlacement(placement) {
+  const base = challengerPointsForPlacement(placement);
+  if (placement === 1) return 40;
+  if (placement === 2) return 30;
+  if (placement === 3) return 24;
+  if (placement === 4) return 18;
+  return base;
+}
+
 function getChallengerRoster(team, gameState, cdlNames = buildCdlRosterNameSet(gameState.players || [])) {
   return (team?.playerIds || [])
     .map(pid => gameState.prospects.find(p => p.id === pid) || gameState.players.find(p => p.id === pid))
@@ -418,38 +431,41 @@ function buildChallengerQualifierField(gameState, schedule) {
   return rows.map((row, idx) => ({ ...row, seed: idx + 1 }));
 }
 
-function getExistingQualifierForMajor(schedule, majorIdx = schedule?.majorIdx) {
+function getExistingQualifierForMajor(schedule, majorIdx = schedule?.majorIdx, source = "visibleQualifier") {
   return (schedule?.challengerQualifierResults || []).find(r =>
     r?.season === schedule?.season &&
     r?.majorIdx === majorIdx &&
-    r?.source === "visibleQualifier"
+    r?.source === source
   );
 }
 
-// Build a 24-team qualifier bracket: seeds 1–8 get byes; seeds 9–24 play a
-// play-in round (8 matches). The 8 play-in winners then join seeds 1–8 for a
-// standard DE16 main bracket. Play-in losers are eliminated (placements 17–24).
+// Build a true 24-team double-elimination qualifier bracket. Seeds 1–8
+// receive byes into WB Round 2; seeds 9–24 play WB Round 1. Crucially,
+// WB Round 1 losers drop to LB Round 1 after WB Round 2 is played — nobody
+// is eliminated until their second loss.
 function buildChallengerBracketDE24(seeds) {
-  const playInMatches = [];
+  const wbR1Matches = [];
   for (let i = 0; i < 8; i++) {
     const hiIdx = 8 + i;       // seeds 9–16 (indices 8–15)
     const loIdx = 23 - i;      // seeds 24–17 (indices 23–16)
-    playInMatches.push({ a: seeds[hiIdx], b: seeds[loIdx], seedA: 9 + i, seedB: 24 - i, played: false, result: null });
+    wbR1Matches.push({ a: seeds[hiIdx], b: seeds[loIdx], seedA: 9 + i, seedB: 24 - i, played: false, result: null });
   }
   return {
     seeds,
     type: "DE24",
+    byes: seeds.slice(0, 8),
     rounds: [
-      { name: "Play-In Round", type: "PLAYIN", matches: playInMatches },
-      { name: "WB Round 1", type: "WB", matches: [] },
-      { name: "LB Round 1", type: "LB", matches: [] },
+      { name: "WB Round 1", type: "WB", matches: wbR1Matches },
       { name: "WB Round 2", type: "WB", matches: [] },
+      { name: "LB Round 1", type: "LB", matches: [] },
+      { name: "WB Round 3", type: "WB", matches: [] },
       { name: "LB Round 2", type: "LB", matches: [] },
       { name: "LB Round 3", type: "LB", matches: [] },
       { name: "WB Semifinals", type: "WB", matches: [] },
       { name: "LB Round 4", type: "LB", matches: [] },
-      { name: "WB Final", type: "WB", matches: [] },
       { name: "LB Round 5", type: "LB", matches: [] },
+      { name: "WB Final", type: "WB", matches: [] },
+      { name: "LB Round 6", type: "LB", matches: [] },
       { name: "LB Final", type: "LB", matches: [] },
       { name: "Grand Final", type: "GF", matches: [] },
     ],
@@ -457,16 +473,18 @@ function buildChallengerBracketDE24(seeds) {
     champion: null,
     _wbChampion: null,
     _wbFLoser: null,
-    _lbr3Winners: null,
+    _wbR1Losers: null,
+    _wbR3Losers: null,
+    _wbSemiLosers: null,
   };
 }
 
 function _tryPopulateLBFinalDE24(bracket) {
-  const lbR5 = bracket.rounds[9]; // LB Round 5
-  if (!lbR5.matches.length || !lbR5.matches[0]?.played) return;
+  const lbR6 = bracket.rounds[10]; // LB Round 6
+  if (!lbR6.matches.length || !lbR6.matches[0]?.played) return;
   if (!bracket._wbFLoser) return;
-  bracket.rounds[10].matches = [
-    { a: bracket._wbFLoser, b: lbR5.matches[0].result.winnerId, played: false, result: null },
+  bracket.rounds[11].matches = [
+    { a: bracket._wbFLoser, b: lbR6.matches[0].result.winnerId, played: false, result: null },
   ];
 }
 
@@ -477,28 +495,43 @@ function _advanceQualifierBracketDE24(bracket, roundIdx) {
   const losers  = round.matches.map(m => m.result.loserId);
 
   switch (roundIdx) {
-    case 0: { // Play-In → build WB Round 1 (top-8 seeds + 8 play-in winners)
-      const s = [...bracket.seeds.slice(0, 8), ...winners];
+    case 0: { // WB Round 1 → seeds 1–8 enter WB Round 2; losers wait for LB Round 1.
+      bracket._wbR1Losers = losers;
+      const s = bracket.seeds;
       bracket.rounds[1].matches = [
-        { a: s[0], b: s[15], seedA: 1, seedB: 16, played: false, result: null },
-        { a: s[7], b: s[8],  seedA: 8, seedB: 9,  played: false, result: null },
-        { a: s[3], b: s[12], seedA: 4, seedB: 13, played: false, result: null },
-        { a: s[4], b: s[11], seedA: 5, seedB: 12, played: false, result: null },
-        { a: s[1], b: s[14], seedA: 2, seedB: 15, played: false, result: null },
-        { a: s[6], b: s[9],  seedA: 7, seedB: 10, played: false, result: null },
-        { a: s[2], b: s[13], seedA: 3, seedB: 14, played: false, result: null },
-        { a: s[5], b: s[10], seedA: 6, seedB: 11, played: false, result: null },
+        { a: s[0], b: winners[7], seedA: 1, seedB: 16, played: false, result: null },
+        { a: s[7], b: winners[0], seedA: 8, seedB: 9,  played: false, result: null },
+        { a: s[3], b: winners[4], seedA: 4, seedB: 13, played: false, result: null },
+        { a: s[4], b: winners[3], seedA: 5, seedB: 12, played: false, result: null },
+        { a: s[1], b: winners[6], seedA: 2, seedB: 15, played: false, result: null },
+        { a: s[6], b: winners[1], seedA: 7, seedB: 10, played: false, result: null },
+        { a: s[2], b: winners[5], seedA: 3, seedB: 14, played: false, result: null },
+        { a: s[5], b: winners[2], seedA: 6, seedB: 11, played: false, result: null },
       ];
       break;
     }
-    case 1: { // WB Round 1 → LB Round 1 + WB Round 2
-      bracket.rounds[2].matches = [
-        { a: losers[0], b: losers[1], played: false, result: null },
-        { a: losers[2], b: losers[3], played: false, result: null },
-        { a: losers[4], b: losers[5], played: false, result: null },
-        { a: losers[6], b: losers[7], played: false, result: null },
-      ];
+    case 1: { // WB Round 2 → WB Round 3 + LB Round 1 (all teams now have at most one loss)
+      const wbR1Losers = bracket._wbR1Losers || [];
       bracket.rounds[3].matches = [
+        { a: winners[0], b: winners[1], played: false, result: null },
+        { a: winners[2], b: winners[3], played: false, result: null },
+        { a: winners[4], b: winners[5], played: false, result: null },
+        { a: winners[6], b: winners[7], played: false, result: null },
+      ];
+      bracket.rounds[2].matches = [
+        { a: wbR1Losers[0], b: losers[1], played: false, result: null },
+        { a: wbR1Losers[1], b: losers[0], played: false, result: null },
+        { a: wbR1Losers[2], b: losers[3], played: false, result: null },
+        { a: wbR1Losers[3], b: losers[2], played: false, result: null },
+        { a: wbR1Losers[4], b: losers[5], played: false, result: null },
+        { a: wbR1Losers[5], b: losers[4], played: false, result: null },
+        { a: wbR1Losers[6], b: losers[7], played: false, result: null },
+        { a: wbR1Losers[7], b: losers[6], played: false, result: null },
+      ];
+      break;
+    }
+    case 2: { // LB Round 1 → LB Round 2
+      bracket.rounds[4].matches = [
         { a: winners[0], b: winners[1], played: false, result: null },
         { a: winners[2], b: winners[3], played: false, result: null },
         { a: winners[4], b: winners[5], played: false, result: null },
@@ -506,36 +539,66 @@ function _advanceQualifierBracketDE24(bracket, roundIdx) {
       ];
       break;
     }
-    case 2: break; // LB Round 1 — LB Round 2 populated when WB Round 2 finishes
-    case 3: { // WB Round 2 → WB Semis + LB Round 2
+    case 3: { // WB Round 3 → WB Semis; losers wait for LB Round 3
+      bracket._wbR3Losers = losers;
       bracket.rounds[6].matches = [
         { a: winners[0], b: winners[1], played: false, result: null },
         { a: winners[2], b: winners[3], played: false, result: null },
       ];
-      const lb1w = bracket.rounds[2].matches.map(m => m.result.winnerId);
-      bracket.rounds[4].matches = [
-        { a: lb1w[0], b: losers[0], played: false, result: null },
-        { a: lb1w[1], b: losers[1], played: false, result: null },
-        { a: lb1w[2], b: losers[2], played: false, result: null },
-        { a: lb1w[3], b: losers[3], played: false, result: null },
+      break;
+    }
+    case 4: { // LB Round 2 → LB Round 3 vs WB Round 3 losers
+      const wbR3Losers = bracket._wbR3Losers || [];
+      bracket.rounds[5].matches = [
+        { a: winners[0], b: wbR3Losers[0], played: false, result: null },
+        { a: winners[1], b: wbR3Losers[1], played: false, result: null },
+        { a: winners[2], b: wbR3Losers[2], played: false, result: null },
+        { a: winners[3], b: wbR3Losers[3], played: false, result: null },
       ];
       break;
     }
-    case 4: bracket.rounds[5].matches = [{ a: winners[0], b: winners[1], played: false, result: null }, { a: winners[2], b: winners[3], played: false, result: null }]; break;
-    case 5: bracket._lbr3Winners = winners; break;
-    case 6: { // WB Semis → WB Final + LB Round 4
-      bracket.rounds[8].matches = [{ a: winners[0], b: winners[1], played: false, result: null }];
+    case 5: { // LB Round 3 → LB Round 4
       bracket.rounds[7].matches = [
-        { a: bracket._lbr3Winners[0], b: losers[0], played: false, result: null },
-        { a: bracket._lbr3Winners[1], b: losers[1], played: false, result: null },
+        { a: winners[0], b: winners[1], played: false, result: null },
+        { a: winners[2], b: winners[3], played: false, result: null },
       ];
       break;
     }
-    case 7: bracket.rounds[9].matches = [{ a: winners[0], b: winners[1], played: false, result: null }]; break;
-    case 8: bracket._wbChampion = winners[0]; bracket._wbFLoser = losers[0]; _tryPopulateLBFinalDE24(bracket); break;
-    case 9: _tryPopulateLBFinalDE24(bracket); break;
-    case 10: bracket.rounds[11].matches = [{ a: bracket._wbChampion, b: winners[0], played: false, result: null }]; break;
-    case 11: bracket.champion = winners[0]; return true;
+    case 6: { // WB Semis → WB Final; losers wait for LB Round 5
+      bracket._wbSemiLosers = losers;
+      bracket.rounds[9].matches = [{ a: winners[0], b: winners[1], played: false, result: null }];
+      break;
+    }
+    case 7: { // LB Round 4 → LB Round 5 vs WB Semi losers
+      const wbSemiLosers = bracket._wbSemiLosers || [];
+      bracket.rounds[8].matches = [
+        { a: winners[0], b: wbSemiLosers[0], played: false, result: null },
+        { a: winners[1], b: wbSemiLosers[1], played: false, result: null },
+      ];
+      break;
+    }
+    case 8: { // LB Round 5 → LB Round 6
+      bracket.rounds[10].matches = [{ a: winners[0], b: winners[1], played: false, result: null }];
+      break;
+    }
+    case 9: { // WB Final → store WB champ + loser; try LB Final after LB Round 6
+      bracket._wbChampion = winners[0];
+      bracket._wbFLoser = losers[0];
+      _tryPopulateLBFinalDE24(bracket);
+      break;
+    }
+    case 10: { // LB Round 6 → LB Final once WB Final is known
+      _tryPopulateLBFinalDE24(bracket);
+      break;
+    }
+    case 11: { // LB Final → Grand Final
+      bracket.rounds[12].matches = [{ a: bracket._wbChampion, b: winners[0], played: false, result: null }];
+      break;
+    }
+    case 12: {
+      bracket.champion = winners[0];
+      return true;
+    }
   }
   return false;
 }
@@ -558,13 +621,11 @@ function computeDE24Placements(bracket) {
     place(bracket.champion, 1);
   }
 
-  const lbFinalRound = bracket.rounds.find(r => r.name === "LB Final");
-  const lbFinalMatch = lbFinalRound?.matches?.[0];
+  const lbFinalMatch = bracket.rounds.find(r => r.name === "LB Final")?.matches?.[0];
   if (lbFinalMatch?.played && lbFinalMatch.result) place(lbFinalMatch.result.loserId, 3);
 
-  const lbR5Round = bracket.rounds.find(r => r.name === "LB Round 5");
-  const lbR5Match = lbR5Round?.matches?.[0];
-  if (lbR5Match?.played && lbR5Match.result) place(lbR5Match.result.loserId, 4);
+  const lbR6Match = bracket.rounds.find(r => r.name === "LB Round 6")?.matches?.[0];
+  if (lbR6Match?.played && lbR6Match.result) place(lbR6Match.result.loserId, 4);
 
   const bucketize = (roundName, places) => {
     const round = bracket.rounds.find(r => r.name === roundName);
@@ -572,15 +633,11 @@ function computeDE24Placements(bracket) {
     losers.forEach((id, i) => place(id, places[Math.min(i, places.length - 1)]));
   };
 
-  bucketize("LB Round 4", [5, 6]);
-  bucketize("LB Round 3", [7, 8]);
-  bucketize("LB Round 2", [9, 10, 11, 12]);
-  bucketize("LB Round 1", [13, 14, 15, 16]);
-
-  // Play-in losers are eliminated immediately: placements 17–24
-  const playInRound = bracket.rounds.find(r => r.name === "Play-In Round");
-  (playInRound?.matches ?? []).filter(m => m.played && m.result?.loserId)
-    .forEach((m, i) => place(m.result.loserId, 17 + i));
+  bucketize("LB Round 5", [5, 6]);
+  bucketize("LB Round 4", [7, 8]);
+  bucketize("LB Round 3", [9, 10, 11, 12]);
+  bucketize("LB Round 2", [13, 14, 15, 16]);
+  bucketize("LB Round 1", [17, 18, 19, 20, 21, 22, 23, 24]);
 
   return placements;
 }
@@ -614,11 +671,43 @@ function createChallengerQualifierEvent(gameState, schedule) {
   };
 }
 
+function createChallengersFinalsEvent(gameState, schedule) {
+  const existing = schedule.currentChallengerQualifier;
+  if (existing?.season === schedule.season && existing?.eventType === "challengersFinals") {
+    if (!existing.bracket && !existing.completed) {
+      const field = existing.field?.length ? existing.field : buildChallengerQualifierField(gameState, schedule).slice(0, CHALLENGERS_FINALS_TEAMS).map((row, idx) => ({ ...row, seed: idx + 1 }));
+      return { ...existing, field, bracket: buildMajorBracketDE16(field.map(row => row.teamId)), matchLog: existing.matchLog || [] };
+    }
+    return existing;
+  }
+  const field = buildChallengerQualifierField(gameState, schedule)
+    .slice(0, CHALLENGERS_FINALS_TEAMS)
+    .map((row, idx) => ({ ...row, seed: idx + 1 }));
+  return {
+    season: schedule.season,
+    majorIdx: 4,
+    eventType: "challengersFinals",
+    name: "Challengers Finals",
+    completed: false,
+    field,
+    bracket: buildMajorBracketDE16(field.map(row => row.teamId)),
+    matchLog: [],
+    results: [],
+  };
+}
+
 function enterChallengerQualifierPhase(gameState, schedule) {
   const majorIdx = schedule.stageIdx ?? 0;
   schedule.phase = "challengerQualifier";
   schedule.majorIdx = majorIdx;
   schedule.currentChallengerQualifier = createChallengerQualifierEvent(gameState, schedule);
+  return { ...gameState, schedule: { ...schedule } };
+}
+
+function enterChallengersFinalsPhase(gameState, schedule) {
+  schedule.phase = "challengerQualifier";
+  schedule.majorIdx = null;
+  schedule.currentChallengerQualifier = createChallengersFinalsEvent(gameState, schedule);
   return { ...gameState, schedule: { ...schedule } };
 }
 
@@ -713,6 +802,7 @@ function _simOneChallengerQualifierMatch(current, gameState, schedule) {
 
 function finalizeChallengerQualifier(gameState, schedule, current) {
   if (current.completed && current.results?.length) return current;
+  const isFinals = current.eventType === "challengersFinals";
   const majorIdx = current.majorIdx ?? schedule.majorIdx ?? schedule.stageIdx ?? 0;
   const placements = current.bracket?.type === "DE24"
     ? computeDE24Placements(current.bracket)
@@ -724,17 +814,18 @@ function finalizeChallengerQualifier(gameState, schedule, current) {
     records[match.winnerId].wins += 1;
     records[match.loserId].losses += 1;
   }
+  const qualifyLimit = isFinals ? CHALLENGERS_FINALS_ESWC_SPOTS : CHALLENGER_QUALIFIER_TEAMS;
   const results = (current.field || []).map(row => {
     const placement = placements[row.teamId] ?? (current.field?.length || 16);
-    const circuitPointsAwarded = challengerPointsForPlacement(placement);
-    const qualified = placement <= CHALLENGER_QUALIFIER_TEAMS;
+    const circuitPointsAwarded = isFinals ? challengerFinalsPointsForPlacement(placement) : challengerPointsForPlacement(placement);
+    const qualified = placement <= qualifyLimit;
     const rec = records[row.teamId] || { wins: 0, losses: 0 };
     const formAfter = Math.max(-10, Math.min(10, (row.formBefore ?? 0) + (qualified ? 2 : placement <= 8 ? 0 : -1)));
     return {
       ...row,
       placement,
       qualified,
-      placementLabel: qualifierPlacementLabel(placement),
+      placementLabel: isFinals ? placementText(placement) : qualifierPlacementLabel(placement),
       circuitPointsAwarded,
       circuitPointsAfter: (row.circuitPointsBefore ?? 0) + circuitPointsAwarded,
       formAfter,
@@ -745,16 +836,20 @@ function finalizeChallengerQualifier(gameState, schedule, current) {
   }).sort((a, b) => a.placement - b.placement || a.seed - b.seed);
 
   const completed = { ...current, results, completed: true };
+  const source = isFinals ? "challengersFinals" : "visibleQualifier";
   const historyEntry = {
     season: schedule.season,
     majorIdx,
-    source: "visibleQualifier",
+    eventType: current.eventType ?? "majorQualifier",
+    name: current.name ?? (isFinals ? "Challengers Finals" : `Major ${majorIdx + 1} Qualifier`),
+    source,
     completed: true,
-    bracketType: "DE16",
+    bracketType: current.bracket?.type ?? "DE16",
     matchLog: completed.matchLog || [],
     teams: results.map(r => ({
       season: schedule.season,
       majorIdx,
+      eventType: current.eventType ?? "majorQualifier",
       seed: r.seed,
       placement: r.placement,
       teamId: r.teamId,
@@ -772,7 +867,7 @@ function finalizeChallengerQualifier(gameState, schedule, current) {
       score: r.performanceScore,
     })),
   };
-  const alreadyStored = getExistingQualifierForMajor(schedule, majorIdx);
+  const alreadyStored = getExistingQualifierForMajor(schedule, majorIdx, source);
   schedule.challengerQualifierResults = alreadyStored
     ? (schedule.challengerQualifierResults || []).map(r => (r === alreadyStored ? historyEntry : r))
     : [...(schedule.challengerQualifierResults || []), historyEntry];
@@ -783,7 +878,9 @@ function finalizeChallengerQualifier(gameState, schedule, current) {
       circuitPoints: row.circuitPointsAfter,
       form: row.formAfter,
       lastQualifierPlacement: row.placement,
-      qualifiedMajorIdxs: row.qualified ? [...new Set([...(t.qualifiedMajorIdxs || []), majorIdx])] : (t.qualifiedMajorIdxs || []),
+      finalsPlacement: isFinals ? row.placement : t.finalsPlacement,
+      qualifiedEswcSeason: isFinals && row.qualified ? schedule.season : t.qualifiedEswcSeason,
+      qualifiedMajorIdxs: (!isFinals && row.qualified) ? [...new Set([...(t.qualifiedMajorIdxs || []), majorIdx])] : (t.qualifiedMajorIdxs || []),
     } : t;
   });
   return completed;
@@ -855,10 +952,16 @@ function qualifierRowsToEventTeams(rows, gameState, schedule, eventKey = "major"
 export function continueFromChallengerQualifier(gameState) {
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
-  const majorIdx = schedule.majorIdx ?? schedule.stageIdx ?? 0;
   const qualifier = schedule.currentChallengerQualifier;
   if (!qualifier?.completed || !qualifier?.results?.length) return gameState;
 
+  if (qualifier.eventType === "challengersFinals") {
+    schedule.phase = "preChamps";
+    schedule.majorIdx = null;
+    return { ...gameState, schedule: { ...schedule } };
+  }
+
+  const majorIdx = schedule.majorIdx ?? schedule.stageIdx ?? 0;
   const cdlSeeds = Object.entries(schedule.stageStandings)
     .sort((a,b)=>b[1].points-a[1].points)
     .map(([id])=>id);
@@ -1565,6 +1668,67 @@ function _simOneMajorMatch(schedule, gameState, precomputedResult = null) {
 }
 
 // ── Internal: advance season phase after a major completes ────────────────────
+function latestChallengersFinals(schedule) {
+  return [...(schedule?.challengerQualifierResults || [])]
+    .reverse()
+    .find(r => r?.season === schedule?.season && r?.source === "challengersFinals" && r?.completed && r?.teams?.length);
+}
+
+function buildEswcEventTeams(gameState, schedule) {
+  const finals = latestChallengersFinals(schedule);
+  const rows = (finals?.teams || [])
+    .filter(t => t.qualified || (t.placement ?? 99) <= CHALLENGERS_FINALS_ESWC_SPOTS)
+    .sort((a, b) => a.placement - b.placement)
+    .slice(0, CHALLENGERS_FINALS_ESWC_SPOTS);
+  const fallbackRows = rows.length >= CHALLENGERS_FINALS_ESWC_SPOTS
+    ? rows
+    : buildChallengerQualifierField(gameState, schedule).slice(0, CHALLENGERS_FINALS_ESWC_SPOTS);
+  return qualifierRowsToEventTeams(
+    fallbackRows.map((row, idx) => ({ ...row, placement: row.placement ?? idx + 1, placementLabel: row.placementLabel ?? placementText(row.placement ?? idx + 1), seed: row.seed ?? idx + 1 })),
+    gameState,
+    { ...schedule, majorIdx: ESWC_MAJOR_IDX },
+    "eswc"
+  );
+}
+
+export function beginEswc(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_eswc_generation");
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "offseason") return gameState;
+  if (!schedule.majors?.[ESWC_MAJOR_IDX]) {
+    schedule.majors = [...(schedule.majors || []), { name: "ESWC", bracket: null, completed: false, eventType: "eswc", pointsAwarded: true }];
+  }
+  if (schedule.majors[ESWC_MAJOR_IDX]?.completed) return gameState;
+
+  const cdlSeeds = Object.entries(schedule.standings ?? {})
+    .sort((a, b) => b[1].points - a[1].points)
+    .map(([id]) => id);
+  for (const team of CDL_TEAMS) {
+    if (!cdlSeeds.includes(team.id)) cdlSeeds.push(team.id);
+  }
+  const eventTeams = buildEswcEventTeams(gameState, schedule);
+  const eswcSeeds = [...cdlSeeds.slice(0, 12), ...eventTeams.map(t => t.id)].slice(0, 16);
+  while (eswcSeeds.length < 16) {
+    const padId = cdlSeeds[eswcSeeds.length % Math.max(1, cdlSeeds.length)] ?? CDL_TEAMS[0]?.id;
+    if (!padId) break;
+    eswcSeeds.push(padId);
+  }
+
+  schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
+  schedule.majors[ESWC_MAJOR_IDX] = {
+    ...(schedule.majors[ESWC_MAJOR_IDX] || {}),
+    name: "ESWC",
+    eventType: "eswc",
+    pointsAwarded: true,
+    bracket: buildMajorBracketDE16(eswcSeeds),
+    completed: false,
+  };
+  schedule.pendingPostChampsEswc = false;
+  schedule.phase = "major";
+  schedule.majorIdx = ESWC_MAJOR_IDX;
+  return { ...gameState, schedule: { ...schedule } };
+}
+
 function logChallengerTxDiagnostic(label, payload) {
   const enabled = typeof globalThis !== "undefined" && (globalThis.__CLM_DEBUG_CHALLENGER_TX__ || globalThis.__CLM_TRACE_CHALLENGER_TX__);
   if (enabled) console.debug(`[challenger-tx] ${label}`, payload);
@@ -1599,22 +1763,33 @@ function _advanceMajorPhase(schedule, gameState) {
     schedule.majorIdx = null;
     schedule.currentMatchday = 0;
   } else if (majorIdx === 3) {
-    // Major 4 → Pre-Champs roster window
+    // Major 4 → Challengers Finals → Pre-Champs roster window.
     schedule.stageStandings = initStandings(teamIds);
-    schedule.phase    = "preChamps";
+    schedule.phase = "challengerQualifier";
     schedule.majorIdx = null;
-  } else {
-    // Champs → archived season awards gate → Offseason. Keep the completed
+    schedule.currentChallengerQualifier = createChallengersFinalsEvent(nextState, schedule);
+  } else if (majorIdx === 4) {
+    // Champs → archived season awards gate → ESWC → Offseason. Keep the completed
     // outgoing schedule visible until the user continues from the awards overlay.
     schedule.phase    = "offseason";
     schedule.majorIdx = null;
+    schedule.pendingPostChampsEswc = !schedule.majors?.[ESWC_MAJOR_IDX]?.completed;
     const archived = archiveCompletedSeason(nextState);
     const seasonAwards = calculateSeasonAwards(archived);
     const withAwards = mergeSeasonAwards(archived, seasonAwards);
     const seen = new Set((withAwards.seenAwardsSeasons || []).map(Number));
     nextState = seen.has(Number(seasonAwards.season))
-      ? withAwards
+      ? beginEswc(withAwards)
       : { ...withAwards, pendingSeasonAwards: seasonAwards };
+  } else if (majorIdx === ESWC_MAJOR_IDX) {
+    // ESWC is a prestige post-Champs event only; no CDL points and no extra
+    // awards gate. The regular offseason flow starts after it completes.
+    schedule.phase    = "offseason";
+    schedule.majorIdx = null;
+    schedule.pendingPostChampsEswc = false;
+  } else {
+    schedule.phase    = "offseason";
+    schedule.majorIdx = null;
   }
 
   // AI roster window after each regular major (not after Champs), once the
@@ -1633,7 +1808,7 @@ function _advanceMajorPhase(schedule, gameState) {
     nextState = { ...nextState, schedule: advancedSchedule };
   }
 
-  const integrityState = withCdlRosterIntegrity(nextState, majorIdx <= 3 ? "post_major_transition" : "post_champs_transition");
+  const integrityState = withCdlRosterIntegrity(nextState, majorIdx <= 3 ? "post_major_transition" : majorIdx === ESWC_MAJOR_IDX ? "post_eswc_transition" : "post_champs_transition");
   logChallengerTxDiagnostic("after _advanceMajorPhase returns", {
     majorIdx,
     before: txBeforeMajorCompletion,

@@ -670,3 +670,12 @@ Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the 
 - Replaced the old intermission tactic buttons with next-map manager choices: Standard, Aggressive Pace, Slow Fundamentals, Protect Lead, and Swing Momentum. Effects are consumed on the next map only and stay modest through small attribute/map-strength nudges.
 - Staff tactical/discipline input can lightly improve tactic effectiveness or soften downside when data is present; missing staff data safely falls back to no extra help.
 - Match sim, roster AI, contracts, budgets, free agency, awards, owner/board, profile history, brackets, points, ratings, save data, and logos remain unchanged except for optional next-map tactic boosts passed into the existing map sim.
+
+## Update 2026-06-01 (Challenger DE24 / Challengers Finals / ESWC)
+- Fixed the visible 24-team Challenger Qualifier so it is true double elimination from the start: seeds 9–24 play WB Round 1, seeds 1–8 receive byes into WB Round 2, WB Round 1 losers drop into LB Round 1 after WB Round 2, and teams are only eliminated on a second loss. The UI now labels this as WB/LB rounds rather than Play-In.
+- Qualifier seeding uses circuit points, team OVR, form, prior qualifier placement, and small seeded noise; random ordering is only a small fallback nudge.
+- Added Challengers Finals after Major 4 and before the Pre-Champs window. The top 16 Challenger teams qualify by the same season-long seeding score, play a 16-team double-elimination bracket, receive extra circuit-prestige points, and the top 4 qualify for ESWC.
+- Added ESWC after CDL Champs season awards and before offseason. ESWC is a 16-team DE bracket using all 12 CDL teams plus the top 4 Challengers Finals teams. It is a prestige event only and does not award CDL points.
+- Existing saves hydrate safely with an ESWC major slot if missing; saves already past the new event point continue without crashing rather than being rewound.
+- Added diagnostics: `scripts/diagnoseChallengerQualifier24.mjs` and `scripts/diagnosePostSeasonEvents.mjs`.
+- Testing: `npm run build` ✓, offseason diagnostics ✓, DE24 qualifier diagnostic ✓, postseason event diagnostic ✓, roster-integrity stress 24/24 ✓.
