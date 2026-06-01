@@ -598,3 +598,28 @@ Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the 
 
 ### Testing
 - `npm run build` ✓ · `scripts/stressRosterIntegrity.mjs` 24/24 ✓ · `scripts/diagnoseBoardObjectives.mjs` ✓ · `scripts/testBoardLifecycle.mjs` 12/12 ✓
+
+## Update 2026-06-01 (Tournament screen redesign — Major/Champs control room)
+- Redesigned `src/components/MajorTournamentOverlay.jsx` (the live Major + Champs bracket screen) into a compact, FM-style "tournament control room". UI/UX only — no change to tournament logic, bracket generation, seeding, results, points, or simulation. All data is derived read-only from existing bracket state. `MajorBracket.jsx` was already dead code (not imported); the Challenger Qualifier overlay is a separate component and is unchanged.
+
+### Layout
+- **Sticky command header** (`mto-cmd-header`, lives outside the scroll area so it never scrolls away): event name · current round · teams alive · user status (Alive/Eliminated/Champion) · user record · best-possible/finish · next opponent or latest result · compact command bar (Play Your Match / Sim Next / Sim Round / Finish Event).
+- **Two-column body** (`mto-layout`): tabbed bracket on the left, sticky **Event Summary aside** on the right (`mto-aside`, `position: sticky`). On ≤1080px the aside stacks above the bracket (`order: -1`).
+- **Tabs** (`mto-tabs`): DE (Majors/Champs) → Overview / Winners / Losers / Results / Placements; SE fallback → Overview / Bracket / Results / Placements. Default **Overview** shows the current round + most-recent completed round only (no scroll to see live action).
+
+### Event Summary aside
+- **My Team**: logo, seed, status, record, bracket side (Winners/Losers/Eliminated/Champion), best-possible/finish, projected points (regular Majors only, from `MAJOR_PLACEMENT_POINTS`).
+- **Current Match**: next match with seeds/tags, user marker, primary "Play Your Match" (opens Match Center) or "Sim This Match".
+- **My Team Path** (`getUserPath`): the user's route — each played leg (Won/Lost score vs opp) + the next upcoming leg + final placement when eliminated.
+- **Latest Results** (`getLatestResults`, most-recent-first, 8 rows): round · winner · score · loser · MVP · Details (jumps to Results tab and expands the series).
+- **Placements & Points** (`getMajorPlacementMap` grouped into bands Champion→13th–16th): live as teams are eliminated; full ladder when complete; points per band for regular Majors.
+
+### User-team highlighting (everywhere)
+- "YOUR TEAM"/"YOU" pills, accent left-border + tint on bracket cards involving the user (`mto-bc-user-involved`), green glow on the user's win cards, distinct tint on the user's team line, glow on the user's tag in score rows, highlighted aside rows, and a ◆ marker in the placements list.
+
+### Active-match visibility
+- The next unplayed match in the current round gets a **NEXT MATCH** badge (or **YOUR NEXT MATCH**, green) and a stronger border/glow (`mto-bc-next` / `mto-bc-next-user`). The same match appears in the aside Current Match panel.
+
+### Save compatibility / safety
+- No save migration. All new display helpers are pure derivations over existing bracket state with safe fallbacks (missing MVP/K/D, TBD slots, bye teams with no populated match, missing placements). Existing defensive guards (missing bracket → recoverable panel) are preserved.
+- Build ✓ · roster-integrity stress 24/24 ✓.

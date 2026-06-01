@@ -4216,11 +4216,194 @@ body { margin: 0; }
 .mto-seed-name { flex: 1; color: var(--text-head); font-weight: 500; }
 .mto-seed-rec  { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOURNAMENT CONTROL ROOM — redesigned bracket screen (.mto-redesign)
+   Sticky command header · main tabbed bracket · sticky event-summary aside
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* You-badge size variant (shared) */
+.you-badge-sm { font-size: 8px; padding: 1px 5px; letter-spacing: .5px; }
+
+/* ── Sticky command header ── */
+.mto-cmd-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 9px 16px;
+  background: linear-gradient(180deg, #141a2b 0%, #10141f 100%);
+  border-bottom: 1px solid #2a3a57;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  z-index: 5;
+}
+.mto-ch-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mto-ch-live { color: #34d399; font-size: 9px; animation: mto-pulse 1.6s ease-in-out infinite; }
+@keyframes mto-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+.mto-ch-event { font-size: 15px; font-weight: 900; color: var(--text-head); letter-spacing: .3px; }
+.mto-ch-sep   { color: #3b4a66; }
+.mto-ch-round { font-size: 12px; font-weight: 700; color: #60a5fa; text-transform: uppercase; letter-spacing: .5px; }
+.mto-ch-alive { font-size: 10px; font-weight: 700; color: var(--text-dim); background: var(--bg3); border: 1px solid var(--border); padding: 2px 8px; border-radius: 10px; margin-left: 2px; }
+
+.mto-ch-user { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.mto-ch-team { font-size: 13px; font-weight: 800; white-space: nowrap; }
+.mto-ch-status { font-size: 10px; font-weight: 800; padding: 2px 9px; border-radius: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.mto-ch-status-alive { color: #34d399; background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.3); }
+.mto-ch-status-out   { color: #f87171; background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); }
+.mto-ch-status-champ { color: #facc15; background: rgba(250,204,21,.14); border: 1px solid rgba(250,204,21,.35); }
+.mto-ch-rec    { font-size: 12px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.mto-ch-finish { font-size: 11px; color: var(--text-dim); }
+.mto-ch-next   { font-size: 11px; font-weight: 600; color: var(--text-head); background: var(--bg3); border: 1px solid var(--border); padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
+
+.mto-ch-cmds { display: flex; gap: 6px; flex: 0 0 auto; }
+.mto-cmd-btn { font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 7px; white-space: nowrap; }
+.mto-cmd-primary { box-shadow: 0 0 0 1px rgba(96,165,250,.4), 0 0 14px rgba(96,165,250,.25); }
+.mto-cmd-ghost { opacity: .75; }
+.mto-cmd-ghost:hover { opacity: 1; }
+
+/* ── Two-column layout ── */
+.mto-redesign .mto-scroll-area { padding: 0; }
+.mto-layout {
+  width: min(98vw, 1760px);
+  margin: 0 auto;
+  padding: 14px 14px 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 16px;
+  align-items: start;
+}
+.mto-main { min-width: 0; }
+
+/* ── Tabs ── */
+.mto-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; flex-wrap: wrap; }
+.mto-tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: .4px;
+  text-transform: uppercase; padding: 8px 12px; cursor: pointer; margin-bottom: -1px;
+}
+.mto-tab:hover { color: var(--text-head); }
+.mto-tab-active { color: var(--text-head); border-bottom-color: var(--accent); }
+.mto-tab-body { min-height: 200px; }
+.mto-tab-empty { color: var(--text-dim); font-size: 13px; padding: 30px 8px; text-align: center; }
+
+/* Tighter bracket columns inside the redesign */
+.mto-redesign .mto-round { flex: 0 0 clamp(196px, 14vw, 244px); min-width: 196px; }
+.mto-redesign .mto-round-matches { gap: 7px; }
+
+/* ── Next-match emphasis on bracket cards ── */
+.mto-bc-nextbadge {
+  font-size: 8px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  padding: 3px 8px; color: var(--accent); background: rgba(96,165,250,.1);
+  border-bottom: 1px solid rgba(96,165,250,.25);
+}
+.mto-bc-nextbadge-you { color: #34d399; background: rgba(52,211,153,.12); border-bottom-color: rgba(52,211,153,.3); }
+.mto-bc-next { border-color: rgba(96,165,250,.5); box-shadow: 0 0 0 1px rgba(96,165,250,.25); }
+.mto-bc-next-user {
+  border-color: rgba(52,211,153,.6);
+  box-shadow: 0 0 0 1px rgba(52,211,153,.35), 0 0 14px rgba(52,211,153,.18);
+}
+.mto-bc-user-involved { border-left: 3px solid var(--accent); }
+.mbc-user-win.mto-bc-user-involved  { border-left-color: #34d399; }
+.mbc-user-loss.mto-bc-user-involved { border-left-color: #f87171; }
+.mto-bc-teamline-you { background: rgba(96,165,250,.08); }
+.mto-bc-sc-you .mto-bc-sc-tag { text-shadow: 0 0 8px currentColor; }
+
+/* ── Aside (event summary) ── */
+.mto-aside {
+  position: sticky;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.mto-aside-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.mto-aside-title {
+  font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+}
+
+/* My Team */
+.mto-myteam-id { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mto-myteam-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mto-myteam-name { font-size: 14px; font-weight: 800; }
+.mto-myteam-seed { font-size: 10px; color: var(--text-dim); }
+.mto-myteam-rows { display: flex; flex-direction: column; gap: 5px; }
+.mto-mt-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
+.mto-mt-row span { color: var(--text-dim); }
+.mto-mt-row strong { color: var(--text-head); font-weight: 800; }
+.mto-x-alive { color: #34d399 !important; }
+.mto-x-out   { color: #f87171 !important; }
+.mto-x-champ { color: #facc15 !important; }
+
+/* Current Match */
+.mto-curmatch-user { border-color: rgba(52,211,153,.4); box-shadow: 0 0 0 1px rgba(52,211,153,.2); }
+.mto-curmatch-round { font-size: 9px; color: var(--accent); letter-spacing: .5px; }
+.mto-curmatch-teams { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.mto-cm-team { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; padding: 5px 6px; border-radius: 6px; }
+.mto-cm-team.mto-cm-you { background: rgba(96,165,250,.1); }
+.mto-cm-seed { font-size: 10px; color: var(--text-dim); font-weight: 700; }
+.mto-cm-name { font-size: 13px; font-weight: 800; }
+.mto-cm-vs { font-size: 10px; color: var(--text-dim); font-weight: 700; }
+.mto-cm-btn { width: 100%; font-size: 12px; font-weight: 800; padding: 8px; border-radius: 7px; }
+
+/* My Team Path */
+.mto-path { display: flex; flex-direction: column; gap: 5px; }
+.mto-path-leg { display: flex; flex-direction: column; gap: 1px; padding: 6px 9px; border-radius: 6px; border-left: 3px solid var(--border); background: var(--bg3); }
+.mto-path-win  { border-left-color: #34d399; }
+.mto-path-loss { border-left-color: #f87171; }
+.mto-path-next { border-left-color: var(--accent); background: rgba(96,165,250,.08); }
+.mto-path-round { font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-dim); }
+.mto-path-detail { font-size: 12px; font-weight: 600; color: var(--text-head); }
+.mto-path-finish { margin-top: 4px; text-align: center; font-size: 11px; font-weight: 800; color: var(--text-head); background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 5px; }
+
+/* Latest Results */
+.mto-lr-empty { font-size: 12px; color: var(--text-dim); }
+.mto-lr-list { display: flex; flex-direction: column; gap: 4px; }
+.mto-lr-row { display: grid; grid-template-columns: 54px 1fr auto auto; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 6px; font-size: 11px; }
+.mto-lr-row:hover { background: var(--bg3); }
+.mto-lr-user { background: rgba(96,165,250,.08); box-shadow: inset 2px 0 0 var(--accent); }
+.mto-lr-round { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mto-lr-line { display: flex; align-items: center; gap: 5px; font-weight: 700; }
+.mto-lr-score { color: var(--text-head); font-variant-numeric: tabular-nums; }
+.mto-lr-lose { opacity: .7; }
+.mto-lr-mvp { font-size: 9px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px; }
+.mto-lr-details { background: none; border: none; color: var(--text-dim); font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1; }
+.mto-lr-details:hover { color: var(--text-head); }
+
+/* Placements / points */
+.mto-pl-list { display: flex; flex-direction: column; gap: 5px; }
+.mto-pl-band { padding: 5px 8px; border-radius: 6px; background: var(--bg3); }
+.mto-pl-band-head { display: flex; justify-content: space-between; align-items: baseline; }
+.mto-pl-band-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--text-dim); }
+.mto-pl-pts { font-size: 9px; font-weight: 700; color: #facc15; }
+.mto-pl-teams { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 3px; }
+.mto-pl-team { font-size: 12px; font-weight: 700; }
+.mto-pl-you { text-shadow: 0 0 8px currentColor; }
+.mto-pl-tbd { font-size: 11px; color: #4b5a73; font-style: italic; }
+.mto-placements-full .mto-pl-band { padding: 8px 12px; }
+
+.mto-champ-placements { width: 100%; margin: 16px 0 4px; }
+.mto-champ-placements .mto-aside-card { background: rgba(255,255,255,.02); }
+
+/* ── Responsive: stack aside above bracket on narrow screens ── */
+@media (max-width: 1080px) {
+  .mto-layout { grid-template-columns: 1fr; }
+  .mto-aside { position: static; max-height: none; order: -1; flex-direction: column; }
+}
+@media (max-width: 720px) {
+  .mto-cmd-header { gap: 8px 12px; }
+  .mto-ch-cmds { width: 100%; }
+  .mto-cmd-btn { flex: 1; }
+}
+
 /* ── Champion screen ───────────────────────────────────────────────────────── */
 
 .mto-champion-screen {
   position: relative;
-  width: min(520px, 92vw);
+  width: min(560px, 94vw);
   display: flex;
   flex-direction: column;
   align-items: center;
