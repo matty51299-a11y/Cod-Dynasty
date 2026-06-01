@@ -157,8 +157,10 @@ export default function ChallengerQualifierOverlay() {
   const qualifier = schedule.currentChallengerQualifier;
   if (!qualifier) return null;
 
+  const isFinals = qualifier.eventType === "challengersFinals";
   const majorIdx = qualifier.majorIdx ?? schedule.majorIdx ?? 0;
-  const majorName = schedule.majors?.[majorIdx]?.name ?? `Major ${majorIdx + 1}`;
+  const majorName = isFinals ? "ESWC" : (schedule.majors?.[majorIdx]?.name ?? `Major ${majorIdx + 1}`);
+  const eventTitle = qualifier.name || (isFinals ? "Challengers Finals" : "Challenger Qualifier");
   const completed = !!qualifier.completed;
   const fieldRows = qualifier.field || [];
   const fieldMap = buildFieldMap(fieldRows);
@@ -176,13 +178,8 @@ export default function ChallengerQualifierOverlay() {
   }
 
   const bracketType = bracket?.type ?? "DE16";
-  const playInLostIds = bracketType === "DE24"
-    ? new Set((bracket?.rounds?.find(r => r.name === "Play-In Round")?.matches ?? [])
-        .filter(m => m.played && m.result?.loserId).map(m => m.result.loserId))
-    : new Set();
   const alive = fieldRows.filter(row => {
     if (completed) return false;
-    if (playInLostIds.has(row.teamId)) return false;
     const losses = (qualifier.matchLog || []).filter(m => m.loserId === row.teamId).length;
     return losses < 2;
   });
@@ -202,8 +199,8 @@ export default function ChallengerQualifierOverlay() {
         <div className="cqo-header">
           <div>
             <div className="cqo-kicker">CHALLENGERS EVENT</div>
-            <h1>Challenger Qualifier</h1>
-            <p>Season {schedule.season} · {majorName} Qualifier · {fieldRows.length}-team {bracketType === "DE24" ? "play-in + double elimination" : "double elimination"} · Top 4 qualify (Major seeds 13–16)</p>
+            <h1>{eventTitle}</h1>
+            <p>Season {schedule.season} · {isFinals ? "Top Challengers feed ESWC" : `${majorName} Qualifier`} · {fieldRows.length}-team {bracketType === "DE24" ? "double elimination with seeds 1–8 byes" : "double elimination"} · {isFinals ? "Top 4 qualify for ESWC" : "Top 4 qualify (Major seeds 13–16)"}</p>
           </div>
           <div className={`cqo-status ${completed ? "complete" : "pending"}`}>
             {completed ? "Complete" : nextMatch ? nextMatch.roundName : "Ready"}
@@ -232,7 +229,7 @@ export default function ChallengerQualifierOverlay() {
               </>
             ) : (
               <button className="btn-cta" onClick={() => dispatch({ type: "CONTINUE_FROM_CHALLENGER_QUALIFIER" })}>
-                Continue to {majorName} →
+                Continue to {isFinals ? "CDL Champs" : majorName} →
               </button>
             )}
           </div>

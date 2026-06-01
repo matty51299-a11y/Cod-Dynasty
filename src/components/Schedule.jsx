@@ -30,7 +30,7 @@ export default function Schedule() {
 
   if (phase !== "stage") {
     const phaseLabel =
-      phase === "challengerQualifier" ? "Challenger Qualifier" :
+      phase === "challengerQualifier" ? (schedule.currentChallengerQualifier?.eventType === "challengersFinals" ? "Challengers Finals" : "Challenger Qualifier") :
       phase === "major"     ? "Major in progress" :
       phase === "preChamps" ? "Pre-Championship window" :
       phase === "offseason" ? "Offseason — no active stage" :

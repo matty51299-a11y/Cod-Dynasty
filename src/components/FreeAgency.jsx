@@ -38,6 +38,7 @@ export default function FreeAgency() {
   const { openPlayerProfile } = usePlayerProfile();
   const [sortKey, setSortKey] = useState("overall");
   const [roleFilter, setRoleFilter] = useState("All");
+  const [marketFilter, setMarketFilter] = useState("All");
   const [signAs, setSignAs] = useState({}); // playerId -> "starter" | "sub"
 
   if (!state) return null;
@@ -52,14 +53,38 @@ export default function FreeAgency() {
   const budgetPct   = Math.min(100, Math.round((committed / teamCap) * 100));
   const budgetColor = budgetPct >= 90 ? "#dc2626" : budgetPct >= 70 ? "#9a3412" : "#15803d";
 
-  // Free agents = no team from the pro roster
+  // Free agents = no team from the pro roster. Previous-team metadata is
+  // preserved by contract expiry/release processing so the market can be
+  // audited as league-wide instead of only showing former user players.
   const freeAgents = players
     .filter(p => !p.teamId && !p.isProspect && !isInactivePlayer(p))
     .filter(p => !p.status || p.status === "freeAgent")
     .sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0));
 
+  const marketCounts = {
+    total: freeAgents.length,
+    formerUser: freeAgents.filter(p => p.previousTeamId === userTeamId).length,
+    formerAi: freeAgents.filter(p => p.previousTeamId && p.previousTeamId !== userTeamId).length,
+    veterans: freeAgents.filter(p => p.previousTeamId).length,
+    unsigned: freeAgents.filter(p => !p.previousTeamId).length,
+  };
+
   const roles = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];
-  const filtered = roleFilter === "All" ? freeAgents : freeAgents.filter(p => p.primary === roleFilter);
+  const marketFilters = [
+    { id: "All", label: "All Free Agents" },
+    { id: "Former User", label: "Former User Players" },
+    { id: "Former AI", label: "Former AI Players" },
+    { id: "CDL Veterans", label: "CDL Veterans" },
+    { id: "Unsigned", label: "Unsigned" },
+  ];
+  const byMarket = freeAgents.filter(p => {
+    if (marketFilter === "Former User") return p.previousTeamId === userTeamId;
+    if (marketFilter === "Former AI") return p.previousTeamId && p.previousTeamId !== userTeamId;
+    if (marketFilter === "CDL Veterans") return !!p.previousTeamId;
+    if (marketFilter === "Unsigned") return !p.previousTeamId;
+    return true;
+  });
+  const filtered = roleFilter === "All" ? byMarket : byMarket.filter(p => p.primary === roleFilter);
 
   const myRoster = players.filter(p => p.teamId === userTeamId);
   const starterCount = myRoster.filter(p => !p.isSub).length;
@@ -78,7 +103,8 @@ export default function FreeAgency() {
         subtitle="Open-market players, salary demands, role fit and roster-slot controls."
         meta={(
           <div className="ui-stat-grid compact">
-            <StatCard label="Market" value={filtered.length} hint={`${freeAgents.length} total`} />
+            <StatCard label="Market" value={filtered.length} hint={`${marketCounts.total} total`} />
+            <StatCard label="Former AI" value={marketCounts.formerAi} hint={`${marketCounts.formerUser} user`} />
             <StatCard label="Starters" value={`${starterCount}/4`} tone={starterCount < 4 ? "warning" : "neutral"} />
             <StatCard label="Sub" value={`${subCount}/1`} />
             <StatCard label="Remaining" value={fmtMoney(remaining)} tone={remaining < 0 ? "danger" : "success"} />
@@ -91,11 +117,21 @@ export default function FreeAgency() {
           <Pill>Cap {fmtMoney(teamCap)}</Pill>
           <Pill>Committed {fmtMoney(committed)}</Pill>
           <Pill tone={remaining < 0 ? "danger" : "success"}>Remaining {fmtMoney(remaining)}</Pill>
+          <Pill>{marketCounts.veterans} former CDL</Pill>
+          <Pill>{marketCounts.formerAi} former AI</Pill>
+          <Pill>{marketCounts.formerUser} former user</Pill>
         </div>
         <div className="cm-budget-bar"><div style={{ width: `${budgetPct}%`, background: budgetColor }} /></div>
       </div>
 
       <div className="filters">
+        <div className="filter-group">
+          <label>Market:</label>
+          {marketFilters.map(f => (
+            <button key={f.id} className={`filter-btn ${marketFilter === f.id ? "active" : ""}`}
+              onClick={() => setMarketFilter(f.id)}>{f.label}</button>
+          ))}
+        </div>
         <div className="filter-group">
           <label>Role:</label>
           {roles.map(r => (

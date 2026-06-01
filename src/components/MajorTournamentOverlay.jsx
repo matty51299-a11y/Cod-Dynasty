@@ -27,10 +27,11 @@ import { useTeamHub } from "../store/teamHubContext.jsx";
 import { useMatchCenter } from "../store/matchCenterContext.jsx";
 import { isUserRosterPlayable } from "../utils/rosterValidation.js";
 import MatchPreview from "./MatchPreview.jsx";
+import { getTeamTextAccent } from "../utils/teamTheme.js";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamTag(id, schedule)  { return resolveTeamDisplay(id, schedule)?.tag ?? id; }
-function teamColor(id, schedule){ return resolveTeamDisplay(id, schedule)?.color ?? "#888"; }
+function teamColor(id, schedule){ return getTeamTextAccent(resolveTeamDisplay(id, schedule)); }
 
 // ── Derivation helpers (all read-only over existing bracket state) ─────────────
 

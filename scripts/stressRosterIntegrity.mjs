@@ -2,7 +2,7 @@ import { buildInitialRoster } from "../src/data/players.js";
 import { generateProspects } from "../src/data/prospects.js";
 import { applyChallengerRatingOverride } from "../src/data/challengerRatingOverrides.js";
 import { CDL_TEAMS } from "../src/data/teams.js";
-import { buildSeason, beginChamps, ensureChallengerTeams, simMajor, simMajorRound, simNextMajorMatch, simMatchday, simStage, simChallengerQualifier, simChallengerQualifierRound, simNextChallengerQualifierMatch, continueFromChallengerQualifier, enterContractPhase, advanceOffseason } from "../src/engine/seasonEngine.js";
+import { buildSeason, beginChamps, ensureChallengerTeams, simMajor, simMajorRound, simNextMajorMatch, simMatchday, simStage, simChallengerQualifier, simChallengerQualifierRound, simNextChallengerQualifierMatch, continueFromChallengerQualifier, enterContractPhase, advanceOffseason, beginEswc } from "../src/engine/seasonEngine.js";
 import { ensureCdlRosterIntegrity } from "../src/engine/rosterAI.js";
 import { isInactivePlayer, normalizePlayerName } from "../src/utils/playerIdentity.js";
 
@@ -53,7 +53,7 @@ function validate(state, label) {
   const problems = [];
   for (const team of CDL_TEAMS) {
     const roster = activeRoster(state, team.id);
-    if (team.id !== state.userTeamId && roster.length < 4) problems.push(`${label}: ${team.id} has ${roster.length} active CDL players`);
+    if (team.id !== state.userTeamId && roster.length < 4 && !state.offseason?.freeAgencyOpen) problems.push(`${label}: ${team.id} has ${roster.length} active CDL players`);
     for (const p of roster) {
       const key = normalizePlayerName(p.name);
       if (ids.has(p.id)) problems.push(`${label}: duplicate active player id ${p.id}`);
@@ -114,9 +114,14 @@ function runSimulation(teamId, seed) {
     } else if (phase === "preChamps") {
       state = runAction(state, `${teamId}/${seed}:beginChamps:${state.season}:${steps}`, beginChamps);
     } else if (phase === "offseason") {
-      state = state.offseason?.freeAgencyOpen
-        ? runAction(state, `${teamId}/${seed}:aiFreeAgency:${state.season}:${steps}`, advanceOffseason)
-        : runAction(state, `${teamId}/${seed}:contracts:${state.season}:${steps}`, enterContractPhase);
+      if (state.pendingSeasonAwards) {
+        state = { ...state, pendingSeasonAwards: null, seenAwardsSeasons: [...new Set([...(state.seenAwardsSeasons || []), state.season])] };
+        if (state.schedule?.pendingPostChampsEswc) state = runAction(state, `${teamId}/${seed}:beginEswc:${state.season}:${steps}`, beginEswc);
+      } else {
+        state = state.offseason?.freeAgencyOpen
+          ? runAction(state, `${teamId}/${seed}:aiFreeAgency:${state.season}:${steps}`, advanceOffseason)
+          : runAction(state, `${teamId}/${seed}:contracts:${state.season}:${steps}`, enterContractPhase);
+      }
     } else if (phase === "contracts") {
       state = runAction(state, `${teamId}/${seed}:advanceOffseason:${state.season}:${steps}`, advanceOffseason);
     } else {

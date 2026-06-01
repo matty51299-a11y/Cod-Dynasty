@@ -7,7 +7,7 @@ import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, beginEswc, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { generateMajorFeed, generateChallengerQualFeed, generateRosterMoveFeed, generateOffseasonFeed } from "../engine/feedGenerator.js";
 import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { canAffordStarterResign } from "../utils/contractBudget.js";
@@ -298,8 +298,11 @@ function reducer(state, action) {
         pendingSeasonAwards: action.state?.pendingSeasonAwards ?? null,
         seenAwardsSeasons: action.state?.seenAwardsSeasons ?? [],
       };
+      const migratedMajors = [...(loaded.schedule?.majors ?? [])];
+      if (!migratedMajors[5]) migratedMajors[5] = { name: "ESWC", bracket: null, completed: false, eventType: "eswc", pointsAwarded: true };
       loaded.schedule = {
         ...loaded.schedule,
+        majors: migratedMajors,
         challengerQualifierResults: loaded.schedule?.challengerQualifierResults ?? [],
         currentChallengerQualifier: loaded.schedule?.currentChallengerQualifier ?? null,
         currentMajorEventTeams: loaded.schedule?.currentMajorEventTeams ?? null,
@@ -447,8 +450,17 @@ function reducer(state, action) {
 
     case "CONTINUE_FROM_CHALLENGER_QUALIFIER": {
       return runIfUserRosterValid(state, () => {
+        const event = state.schedule?.currentChallengerQualifier;
         const majorIdx = state.schedule?.majorIdx ?? state.schedule?.stageIdx ?? 0;
         const newState = continueFromChallengerQualifier({ ...state });
+        if (event?.eventType === "challengersFinals") {
+          const winner = event.results?.find(r => r.placement === 1);
+          const eswcTeams = (event.results || []).filter(r => r.qualified).sort((a, b) => a.placement - b.placement).map(r => r.teamName).join(", ");
+          return pushFeed(newState, [
+            ...(winner ? [mkFeed("challengers_finals", `${winner.teamName} win Challengers Finals`, newState.season, "challengerQualifier")] : []),
+            ...(eswcTeams ? [mkFeed("eswc_field", `Challenger ESWC qualifiers: ${eswcTeams}`, newState.season, "challengerQualifier")] : []),
+          ]);
+        }
         return pushFeed(newState, generateChallengerQualFeed(newState, majorIdx));
       });
     }
@@ -468,7 +480,8 @@ function reducer(state, action) {
       const baseState = { ...state, pendingSeasonAwards: null, seenAwardsSeasons, enteredMajorIdx: null };
       const currentBoard = migrateBoardState(baseState.boardState);
       const { newBoardState, pendingBoardReview } = runBoardReview(currentBoard, baseState);
-      return { ...baseState, boardState: newBoardState, pendingBoardReview };
+      const reviewedState = { ...baseState, boardState: newBoardState, pendingBoardReview };
+      return reviewedState.schedule?.pendingPostChampsEswc ? beginEswc(reviewedState) : reviewedState;
     }
 
     // ── Offseason — retirements, prospect class, notable AI signings, roster moves ──
