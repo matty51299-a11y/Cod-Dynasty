@@ -53,7 +53,7 @@ function validate(state, label) {
   const problems = [];
   for (const team of CDL_TEAMS) {
     const roster = activeRoster(state, team.id);
-    if (team.id !== state.userTeamId && roster.length < 4) problems.push(`${label}: ${team.id} has ${roster.length} active CDL players`);
+    if (team.id !== state.userTeamId && roster.length < 4 && !state.offseason?.freeAgencyOpen) problems.push(`${label}: ${team.id} has ${roster.length} active CDL players`);
     for (const p of roster) {
       const key = normalizePlayerName(p.name);
       if (ids.has(p.id)) problems.push(`${label}: duplicate active player id ${p.id}`);

@@ -7,7 +7,13 @@ import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../src/eng
 import { isInactivePlayer, normalizePlayerName } from "../src/utils/playerIdentity.js";
 
 function newGame(teamId = "lat") {
-  const players = buildInitialRoster().map(applyChallengerRatingOverride).map((p) => ({ ...p, contractYears: p.teamId === teamId ? 1 : (p.contractYears ?? 2) }));
+  const indexByTeam = new Map();
+  const players = buildInitialRoster().map(applyChallengerRatingOverride).map((p) => {
+    if (!p.teamId) return { ...p, contractYears: p.contractYears ?? 2 };
+    const idx = indexByTeam.get(p.teamId) || 0;
+    indexByTeam.set(p.teamId, idx + 1);
+    return { ...p, contractYears: p.teamId === teamId || idx < 2 ? 1 : (p.contractYears ?? 2) };
+  });
   const prospects = generateProspects(424242).map(applyChallengerRatingOverride);
   const state = { userTeamId: teamId, season: 1, players, prospects, schedule: { ...buildSeason(1), phase: "offseason" }, notifications: [], feed: [], playerSeasonStats: {}, playerOvrHistory: {}, retiredPlayers: [], challengersLog: [], challengerTransactions: [] };
   ensureChallengerTeams(state);
@@ -49,6 +55,7 @@ const freeAgents = (state.players || []).filter(p => p.status === "freeAgent" &&
 console.log("\nFree agents entering market:", freeAgents.length);
 console.table(freeAgents.slice(0, 20).map(p => ({ name: p.name, ovr: p.overall, role: p.primary, age: p.age, previousTeamId: p.previousTeamId, demand: getSigningCost(p) })));
 if (!freeAgents.some(p => p.id === userExpiring.id)) throw new Error("User expiring player did not enter free agency.");
+if (!freeAgents.some(p => p.previousTeamId && p.previousTeamId !== state.userTeamId)) throw new Error("AI expiring players did not reach free agency.");
 
 const cap = getTeamCap(state.userTeamId);
 const committed = activeStarters(state, state.userTeamId).reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);

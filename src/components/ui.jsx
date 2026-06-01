@@ -58,3 +58,15 @@ export function EmptyState({ title, detail }) {
     </div>
   );
 }
+
+export function TeamAccentBorder({ children, className = "", as: Component = "div" }) {
+  return <Component className={`ui-team-accent-border ${className}`.trim()}>{children}</Component>;
+}
+
+export function TeamBadge({ children, className = "" }) {
+  return <span className={`ui-team-badge ${className}`.trim()}>{children}</span>;
+}
+
+export function ActionButton({ children, className = "", tone = "primary", ...props }) {
+  return <button className={`ui-action-btn ui-action-${tone} ${className}`.trim()} {...props}>{children}</button>;
+}
