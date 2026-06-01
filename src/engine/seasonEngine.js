@@ -72,7 +72,7 @@ const CHALLENGER_TEAM_POOL = [
 ];
 import { runProgression } from "./progression.js";
 import { runAIMajorRosterWindow, runAIOffseasonRosterWindow, runAIFreeAgencyMarket, getResignDemand, getSigningCost, getTeamCap, ensureCdlRosterIntegrity } from "./rosterAI.js";
-import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
+import { buildCdlRosterNameSet, isCdlTeamId, isInactivePlayer, normalizePlayerName, shouldExcludeFromChallengers } from "../utils/playerIdentity.js";
 
 // ── PRNG / helpers ────────────────────────────────────────────────────────────
 function seededRng(seed) {
@@ -399,7 +399,10 @@ function calcChallengerTeamOvr(team, gameState, cdlNames) {
 
 
 function buildChallengerQualifierField(gameState, schedule) {
-  ensureChallengerTeams(gameState);
+  // Repair every Challenger team to 4 real players before the field is seeded so
+  // captured rosterIds carry real players (not "Sub N" placeholders) into the
+  // qualifier / Challengers Finals / ESWC that read from this field.
+  repairChallengerRosters(gameState);
   const rng = seededRng(schedule.season * 8191 + ((schedule.majorIdx ?? schedule.stageIdx ?? 0) + 1) * 131 + 23);
   const cdlNames = buildCdlRosterNameSet(gameState.players || []);
   const rows = (gameState.challengerTeams || []).map((team) => {
@@ -715,7 +718,7 @@ function challengerTeamObj(teamId, gameState, field = []) {
   const row = field.find(r => r.teamId === teamId);
   const base = (gameState.challengerTeams || []).find(t => t.id === teamId) || row || { id: teamId, name: teamId };
   const cdlNames = buildCdlRosterNameSet(gameState.players || []);
-  const roster = getChallengerRoster({ ...base, playerIds: row?.rosterIds || base.playerIds || [] }, gameState, cdlNames);
+  const roster = resolveEventRoster(base, row, gameState, cdlNames);
   // Derive a map profile from the qualifier roster (no staff) so qualifier
   // series also show real CDL 2026 map names. Players carry challenger ids, so
   // tag them with this teamId for the starter filter.
@@ -933,7 +936,7 @@ function qualifierRowsToEventTeams(rows, gameState, schedule, eventKey = "major"
   const cdlNames = buildCdlRosterNameSet(gameState.players || []);
   return rows.slice(0, CHALLENGER_QUALIFIER_TEAMS).map((row, i) => {
     const base = (gameState.challengerTeams || []).find(t => t.id === row.teamId) || row;
-    const roster = getChallengerRoster({ ...base, playerIds: row.rosterIds || base.playerIds || [] }, gameState, cdlNames);
+    const roster = resolveEventRoster(base, row, gameState, cdlNames);
     return {
       id: `${eventKey}_qual_${schedule.season}_${(schedule.majorIdx ?? 0) + 1}_${i + 1}`,
       ...base,
@@ -1164,6 +1167,217 @@ export function ensureChallengerTeams(gameState) {
     }
   }
   gameState.challengerTeams = merged;
+}
+
+// Generate a believable last-resort Challenger player. Uses the same gamertag
+// pool as the prospect refresh so it is indistinguishable from a real player in
+// the UI — never "Sub N". Pushed into prospects so profile clicks resolve.
+function makeEmergencyChallengerPlayer(teamId, slot, season, avoidNames = new Set()) {
+  const seed = hashString(`${teamId}_${season}_${slot}_challenger_emergency`);
+  let name = FRESH_PROSPECT_NAMES[seed % FRESH_PROSPECT_NAMES.length];
+  let tries = 0;
+  while (avoidNames.has(normalizePlayerName(name)) && tries < FRESH_PROSPECT_NAMES.length) {
+    tries += 1;
+    name = FRESH_PROSPECT_NAMES[(seed + tries) % FRESH_PROSPECT_NAMES.length];
+  }
+  const overall = 58 + (seed % 7); // 58–64 filler depth
+  const role = ["SMG", "AR", "Flex", "OBJ"][slot % 4];
+  return {
+    id: `challenger_emergency_${teamId}_${season}_${slot}_${seed.toString(36)}`,
+    name,
+    age: 19 + (seed % 5),
+    region: CHALLENGER_REGIONS[teamId] ?? "NA",
+    primary: role,
+    secondary: "AR",
+    overall,
+    potential: Math.max(overall + 6, 70 + (seed % 8)),
+    gunny: 50 + (seed % 20), awareness: 50, objective: 50, searchIQ: 50,
+    clutch: 45 + (seed % 25), teamwork: 55, composure: 50, adaptability: 50,
+    ego: 40, workEthic: 60, tiltResistance: 3, leadership: 45, metaDependence: 50,
+    form: 60, experience: 0,
+    isProspect: true,
+    isEmergencyGenerated: true,
+    challengerTeamId: teamId,
+    status: "challengers",
+    teamId: null,
+  };
+}
+
+// ── Challenger roster integrity / repair pipeline ─────────────────────────────
+// Ensures every Challenger team carries 4 real, valid players before event play.
+// Pipeline (each step only runs if the previous one left holes):
+//   1. clean invalid references + prospect fill   (ensureChallengerTeams)
+//   2. fill from the real pool (free agents + free unsigned prospects)
+//   3. seed-aware poaching from lower-priority teams (donors backfill in turn)
+//   4. emergency generated player with a realistic gamertag — true last resort.
+// Mutates `gameState` (challengerTeams / players / prospects) and returns it.
+export function repairChallengerRosters(gameState, options = {}) {
+  const { seeds = null, allowEmergency = true, includeFreeAgents = true } = options;
+  const diag = {
+    teams: 0, filledFromPool: 0, poaches: [], emergencies: [],
+    donorTeamsRepaired: new Set(), poolSize: 0, freeAgentCandidates: 0,
+    prospectCandidates: 0,
+  };
+
+  // Step 1: validate references + prospect fill (existing pass).
+  ensureChallengerTeams(gameState);
+
+  const teams = gameState.challengerTeams || [];
+  diag.teams = teams.length;
+  const cdlNames = buildCdlRosterNameSet(gameState.players || []);
+  const byPlayerId = new Map(
+    [...(gameState.players || []), ...(gameState.prospects || [])].map(p => [p.id, p])
+  );
+
+  // Track everything already on a Challenger roster (ids + names).
+  const used = new Set();
+  const usedNames = new Set();
+  for (const t of teams) {
+    for (const pid of t.playerIds || []) {
+      used.add(pid);
+      const p = byPlayerId.get(pid);
+      if (p) usedNames.add(normalizePlayerName(p.name));
+    }
+  }
+
+  // Step 2: build the real candidate pool — free agents + free unsigned prospects.
+  const isEligibleFree = (p) => {
+    if (!p || isInactivePlayer(p)) return false;            // not retired/inactive
+    if (p.teamId && isCdlTeamId(p.teamId)) return false;    // active on a CDL team
+    if (p.teamId) return false;                             // signed somewhere else
+    if (used.has(p.id)) return false;                       // already on a Challenger roster
+    const key = normalizePlayerName(p.name);
+    if (!key || usedNames.has(key)) return false;           // duplicate name in pool
+    if (cdlNames.has(key)) return false;                    // shares a name w/ an active CDL player
+    return true;
+  };
+  const freeAgents = includeFreeAgents
+    ? (gameState.players || []).filter(p => p.status === "freeAgent" || (!p.teamId && !p.challengerTeamId))
+    : [];
+  diag.freeAgentCandidates = freeAgents.filter(isEligibleFree).length;
+  diag.prospectCandidates = (gameState.prospects || []).filter(isEligibleFree).length;
+  const candidatePool = [...(gameState.prospects || []), ...freeAgents]
+    .filter(isEligibleFree)
+    .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i)
+    .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+  diag.poolSize = candidatePool.length;
+
+  // Priority order: explicit seeds when supplied, else the same season-long
+  // seeding score the qualifier/finals use (circuit points + OVR + form + form).
+  const priorityOf = (team) => {
+    const { ovr } = calcChallengerTeamOvr(team, gameState, cdlNames);
+    const prevPlacement = team.lastQualifierPlacement ?? 9;
+    const prevBonus = Math.max(0, 9 - prevPlacement) * 1.25;
+    return (team.circuitPoints ?? 0) + (ovr - 65) * 1.35 + (team.form ?? 0) * 2.2 + prevBonus;
+  };
+  let order;
+  if (Array.isArray(seeds) && seeds.length) {
+    const rankById = new Map(seeds.map((id, i) => [id, i]));
+    order = [...teams].sort((a, b) =>
+      (rankById.has(a.id) ? rankById.get(a.id) : 999) - (rankById.has(b.id) ? rankById.get(b.id) : 999)
+    );
+  } else {
+    order = [...teams].sort((a, b) => priorityOf(b) - priorityOf(a));
+  }
+
+  const rosterLen = (t) => (t.playerIds || []).length;
+  const assignFromPool = (team, player) => {
+    team.playerIds = [...(team.playerIds || []), player.id].slice(0, 4);
+    used.add(player.id);
+    usedNames.add(normalizePlayerName(player.name));
+    player.challengerTeamId = team.id;
+    if (player.status === "freeAgent") player.status = "challengers";
+    if (!player.region) player.region = team.region;
+    diag.filledFromPool += 1;
+  };
+  const takeFromPool = (region) => {
+    if (!candidatePool.length) return null;
+    let idx = region ? candidatePool.findIndex(p => (p.region || region) === region) : -1;
+    if (idx === -1) idx = 0;
+    return candidatePool.splice(idx, 1)[0];
+  };
+
+  // Step 3a: fill every team from the real pool, highest priority first.
+  for (const team of order) {
+    while (rosterLen(team) < 4) {
+      const pick = takeFromPool(team.region);
+      if (!pick) break;
+      assignFromPool(team, pick);
+    }
+  }
+
+  // Step 3b: seed-aware poaching. Pool is exhausted; top teams that are still
+  // short take the best player from the LOWEST-priority team that still has one,
+  // pushing the shortage down toward the bottom/backfill teams. Each donor is
+  // processed later in the same top-down loop and refills from teams below it,
+  // so only the very bottom teams can reach the emergency fallback.
+  const rankIndex = new Map(order.map((t, i) => [t.id, i]));
+  for (const team of order) {
+    let guard = 0;
+    while (rosterLen(team) < 4 && guard++ < 64) {
+      let donor = null;
+      for (let i = order.length - 1; i >= 0; i--) {
+        const d = order[i];
+        if (d.id === team.id) continue;
+        if (rankIndex.get(d.id) <= rankIndex.get(team.id)) continue; // must be lower priority
+        if (rosterLen(d) < 1) continue;
+        donor = d;
+        break;
+      }
+      if (!donor) break;
+      const donorPlayers = (donor.playerIds || [])
+        .map(id => byPlayerId.get(id))
+        .filter(Boolean)
+        .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+      const poached = donorPlayers[0];
+      if (!poached) break;
+      donor.playerIds = (donor.playerIds || []).filter(id => id !== poached.id);
+      team.playerIds = [...(team.playerIds || []), poached.id];
+      poached.challengerTeamId = team.id;
+      diag.poaches.push({ from: donor.id, to: team.id, playerId: poached.id, playerName: poached.name });
+      diag.donorTeamsRepaired.add(donor.id);
+    }
+  }
+
+  // Step 4: emergency generated player (realistic gamertag) — true last resort.
+  if (allowEmergency) {
+    const avoid = new Set([...usedNames, ...cdlNames]);
+    for (const team of order) {
+      while (rosterLen(team) < 4) {
+        const slot = rosterLen(team);
+        const emergency = makeEmergencyChallengerPlayer(team.id, slot, gameState.season ?? gameState.schedule?.season ?? 1, avoid);
+        gameState.prospects = [...(gameState.prospects || []), emergency];
+        byPlayerId.set(emergency.id, emergency);
+        team.playerIds = [...(team.playerIds || []), emergency.id];
+        used.add(emergency.id);
+        usedNames.add(normalizePlayerName(emergency.name));
+        avoid.add(normalizePlayerName(emergency.name));
+        diag.emergencies.push({ teamId: team.id, playerId: emergency.id, playerName: emergency.name });
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn(`[challenger-repair] LAST RESORT: generated emergency player "${emergency.name}" for ${team.name || team.id} — real candidate pool exhausted.`);
+        }
+      }
+    }
+  }
+
+  diag.donorTeamsRepaired = [...diag.donorTeamsRepaired];
+  gameState.challengerTeams = teams;
+  gameState.__challengerRepairDiag = diag;
+  return gameState;
+}
+
+// Resolve an event team's 4-man roster. Prefers the captured rosterIds, but if
+// those resolve short (e.g. a player was promoted to CDL between events) it
+// backfills from the team's current, already-repaired Challenger roster.
+function resolveEventRoster(base, row, gameState, cdlNames) {
+  const ids = row?.rosterIds?.length ? row.rosterIds : (base?.playerIds || []);
+  let roster = getChallengerRoster({ ...base, playerIds: ids }, gameState, cdlNames);
+  if (roster.length < 4 && (base?.playerIds || []).length) {
+    const have = new Set(roster.map(p => p.id));
+    const extra = getChallengerRoster(base, gameState, cdlNames).filter(p => !have.has(p.id));
+    roster = [...roster, ...extra].slice(0, 4);
+  }
+  return roster;
 }
 
 // ── Build 12-team Double-Elimination bracket (Majors 1–4) ────────────────────
@@ -1706,6 +1920,9 @@ export function beginEswc(gameState) {
   for (const team of CDL_TEAMS) {
     if (!cdlSeeds.includes(team.id)) cdlSeeds.push(team.id);
   }
+  // Repair Challenger teams before ESWC so the 4 ESWC Challenger seeds field
+  // real players even if a finalist lost a player to CDL since the Finals.
+  repairChallengerRosters(gameState);
   const eventTeams = buildEswcEventTeams(gameState, schedule);
   const eswcSeeds = [...cdlSeeds.slice(0, 12), ...eventTeams.map(t => t.id)].slice(0, 16);
   while (eswcSeeds.length < 16) {
@@ -1732,6 +1949,23 @@ export function beginEswc(gameState) {
 function logChallengerTxDiagnostic(label, payload) {
   const enabled = typeof globalThis !== "undefined" && (globalThis.__CLM_DEBUG_CHALLENGER_TX__ || globalThis.__CLM_TRACE_CHALLENGER_TX__);
   if (enabled) console.debug(`[challenger-tx] ${label}`, payload);
+}
+
+// Archive the completed season, compute Season Awards (now including ESWC since
+// it has finished), and gate them behind the awards overlay. Mutates `schedule`
+// to land in the offseason; sets `pendingSeasonAwards` unless this season's
+// awards were already shown (legacy saves that saw awards before ESWC).
+function gateSeasonAwards(nextState, schedule) {
+  schedule.phase    = "offseason";
+  schedule.majorIdx = null;
+  schedule.pendingPostChampsEswc = false;
+  const archived = archiveCompletedSeason(nextState);
+  const seasonAwards = calculateSeasonAwards(archived);
+  const withAwards = mergeSeasonAwards(archived, seasonAwards);
+  const seen = new Set((withAwards.seenAwardsSeasons || []).map(Number));
+  return seen.has(Number(seasonAwards.season))
+    ? withAwards
+    : { ...withAwards, pendingSeasonAwards: seasonAwards };
 }
 
 function _advanceMajorPhase(schedule, gameState) {
@@ -1769,24 +2003,23 @@ function _advanceMajorPhase(schedule, gameState) {
     schedule.majorIdx = null;
     schedule.currentChallengerQualifier = createChallengersFinalsEvent(nextState, schedule);
   } else if (majorIdx === 4) {
-    // Champs → archived season awards gate → ESWC → Offseason. Keep the completed
-    // outgoing schedule visible until the user continues from the awards overlay.
+    // Champs → ESWC → Season Awards → Offseason.
+    // After Champs the next competitive event is ESWC (if it hasn't run yet).
+    // Season Awards are deferred until ESWC completes so they close the year.
     schedule.phase    = "offseason";
     schedule.majorIdx = null;
-    schedule.pendingPostChampsEswc = !schedule.majors?.[ESWC_MAJOR_IDX]?.completed;
-    const archived = archiveCompletedSeason(nextState);
-    const seasonAwards = calculateSeasonAwards(archived);
-    const withAwards = mergeSeasonAwards(archived, seasonAwards);
-    const seen = new Set((withAwards.seenAwardsSeasons || []).map(Number));
-    nextState = seen.has(Number(seasonAwards.season))
-      ? beginEswc(withAwards)
-      : { ...withAwards, pendingSeasonAwards: seasonAwards };
+    const eswcDone = !!schedule.majors?.[ESWC_MAJOR_IDX]?.completed;
+    schedule.pendingPostChampsEswc = !eswcDone;
+    if (!eswcDone) {
+      // Start ESWC immediately; the awards gate runs after ESWC completes.
+      nextState = beginEswc(nextState);
+    } else {
+      // Legacy/edge save: ESWC already completed → straight to the awards gate.
+      nextState = gateSeasonAwards(nextState, schedule);
+    }
   } else if (majorIdx === ESWC_MAJOR_IDX) {
-    // ESWC is a prestige post-Champs event only; no CDL points and no extra
-    // awards gate. The regular offseason flow starts after it completes.
-    schedule.phase    = "offseason";
-    schedule.majorIdx = null;
-    schedule.pendingPostChampsEswc = false;
+    // ESWC completes the competitive year → Season Awards → Offseason.
+    nextState = gateSeasonAwards(nextState, schedule);
   } else {
     schedule.phase    = "offseason";
     schedule.majorIdx = null;
