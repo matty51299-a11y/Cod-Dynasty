@@ -16,6 +16,7 @@ import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "../engine/staffEngine.js";
 import { migrateBoardState, buildBoardObjectives, objectivesNeedRegen, BOARD_OBJ_VERSION, nudgeConfidenceAfterMajor, runBoardReview } from "../engine/boardEngine.js";
+import { ensureTeamMapProfiles } from "../engine/mapProfile.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
@@ -247,6 +248,8 @@ function createInitialGameState(userTeamId) {
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
   const finalState = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
   finalState.boardState = regenBoardObjectives(finalState, finalState.boardState);
+  // CDL 2026 map pool: generate every team's map/mode profile once at new game.
+  finalState.teamMapProfiles = ensureTeamMapProfiles(finalState, { force: true });
   return finalState;
 }
 
@@ -315,6 +318,8 @@ function reducer(state, action) {
       if (objectivesNeedRegen(cleaned.boardState)) {
         cleaned.boardState = regenBoardObjectives(cleaned, cleaned.boardState);
       }
+      // Map pool: hydrate profiles for old saves; rebuild if stale (new season).
+      cleaned.teamMapProfiles = ensureTeamMapProfiles(cleaned);
       return isValidGameState(cleaned) ? cleaned : null;
     }
 
@@ -480,6 +485,8 @@ function reducer(state, action) {
 
       const advanced = advanceOffseason({ ...state });
       const newState = { ...advanced, enteredMajorIdx: null, pendingBoardReview: null };
+      // New season → regenerate every team's map profile from the updated rosters.
+      newState.teamMapProfiles = ensureTeamMapProfiles(newState, { force: true });
 
       // Build new objectives for the incoming season (carries confidence/history forward)
       const newBoardState = {
@@ -759,10 +766,19 @@ function addNotif(state, msg) {
 // Stores diagnostics on `window.__lastAction` and `window.__phaseProblems` so
 // the ErrorBoundary can show them when a render crash happens, and so console
 // users can inspect what just happened. Never throws.
+// Actions that change rosters or staff → safe trigger to refresh map profiles
+// mid-season (deterministic rebuild, so it stays stable until the next change).
+const MAP_PROFILE_REFRESH_ACTIONS = new Set([
+  "SIGN_PLAYER", "RELEASE_PLAYER", "RESIGN_PLAYER", "HIRE_STAFF", "FIRE_STAFF",
+]);
+
 function instrumentedReducer(prevState, action) {
   const phaseBefore = prevState?.schedule?.phase ?? null;
   const txBefore = prevState?.challengerTransactions?.length ?? 0;
-  const nextState = reducer(prevState, action);
+  let nextState = reducer(prevState, action);
+  if (nextState && MAP_PROFILE_REFRESH_ACTIONS.has(action?.type) && nextState !== prevState) {
+    nextState = { ...nextState, teamMapProfiles: ensureTeamMapProfiles(nextState, { force: true }) };
+  }
   const phaseAfter = nextState?.schedule?.phase ?? null;
   const txAfter = nextState?.challengerTransactions?.length ?? 0;
   if (typeof window !== "undefined") {

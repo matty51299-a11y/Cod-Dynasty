@@ -13,6 +13,7 @@
 // Champs seeded by standings.points (cumulative season total)
 
 import { simMatch } from "./matchSim.js";
+import { getTeamMapProfile, buildTeamMapProfile } from "./mapProfile.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import omitBrooklynLogo from "../assets/logos/challengers/omit-brooklyn.png";
 import omitNoirLogo from "../assets/logos/challengers/Omit_Noir_logo.png";
@@ -581,7 +582,12 @@ function challengerTeamObj(teamId, gameState, field = []) {
   const base = (gameState.challengerTeams || []).find(t => t.id === teamId) || row || { id: teamId, name: teamId };
   const cdlNames = buildCdlRosterNameSet(gameState.players || []);
   const roster = getChallengerRoster({ ...base, playerIds: row?.rosterIds || base.playerIds || [] }, gameState, cdlNames);
-  return { id: teamId, name: row?.teamName || base.name || teamId, players: roster };
+  // Derive a map profile from the qualifier roster (no staff) so qualifier
+  // series also show real CDL 2026 map names. Players carry challenger ids, so
+  // tag them with this teamId for the starter filter.
+  const tagged = (roster || []).map(p => ({ ...p, teamId }));
+  const mapProfile = buildTeamMapProfile(teamId, tagged, [], gameState?.season ?? 1);
+  return { id: teamId, name: row?.teamName || base.name || teamId, players: roster, mapProfile };
 }
 
 function findNextBracketMatch(bracket) {
@@ -2497,11 +2503,16 @@ export function refreshProspectPool(prospects, season) {
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 function buildTeamObj(teamId, gameState) {
+  // Attach the team's CDL 2026 map profile so simMatch can derive the veto /
+  // map-pool edge. getTeamMapProfile is read-only with a safe fallback, so this
+  // works for CDL teams, temporary Challenger event teams, and legacy saves.
   const eventTeam = gameState.schedule?.currentMajorEventTeams?.[teamId];
-  if (eventTeam) return { id: eventTeam.id, name: eventTeam.name, players: eventTeam.players || [] };
+  if (eventTeam) {
+    return { id: eventTeam.id, name: eventTeam.name, players: eventTeam.players || [], mapProfile: getTeamMapProfile(gameState, teamId) };
+  }
   const meta    = CDL_TEAMS.find(t => t.id === teamId) ?? { id: teamId, name: teamId };
   const players = (gameState.players || []).filter(p => p.teamId === teamId);
-  return { id: meta.id, name: meta.name, players };
+  return { id: meta.id, name: meta.name, players, mapProfile: getTeamMapProfile(gameState, teamId) };
 }
 
 // Non-seeded form update for interactive match results (mirrors updateForm logic).

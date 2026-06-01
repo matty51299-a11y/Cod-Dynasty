@@ -16,6 +16,7 @@ import { useGame }         from "../store/gameStore.jsx";
 import { useMatchCenter }  from "../store/matchCenterContext.jsx";
 import { CDL_TEAMS }       from "../data/teams.js";
 import { simMap, makeMatchRng, generateSeriesMods } from "../engine/matchSim.js";
+import { getTeamMapProfile, autoVeto, mapStrengthMod } from "../engine/mapProfile.js";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
@@ -97,7 +98,7 @@ function reducer(state, action) {
       return { ...state, phase: "simming", rng: makeMatchRng(action.seed) };
 
     case "SIM_MAP": {
-      const { teamA, teamB } = action;
+      const { teamA, teamB, mapSet } = action;
 
       // Generate series performance modifiers once on map 1, reuse for all subsequent maps
       let seriesMods = state.seriesMods;
@@ -105,6 +106,9 @@ function reducer(state, action) {
         const allPlayers = [...teamA.players.slice(0, 4), ...teamB.players.slice(0, 4)];
         seriesMods = generateSeriesMods(allPlayers, state.rng);
       }
+
+      // CDL 2026 map layer (opt-in): real map identity + capped strength edge.
+      const mapMod = mapSet?.[state.currentMapIdx] ?? null;
 
       const { mapResult, playerMapStats, procs, newTiltedIdsA, newTiltedIdsB, momentum } =
         simMap(teamA, teamB, state.currentMapIdx, {
@@ -114,6 +118,9 @@ function reducer(state, action) {
           extraBoostsA:      state.pendingBoostA,
           extraBoostsB:      {},
           seriesMods,
+          selectedMap:       mapMod?.selectedMap ?? null,
+          mapStrModA:        mapMod?.strModA ?? 0,
+          mapEdgeA:          mapMod?.edgeA ?? null,
         }, state.rng);
 
       const aWon     = mapResult.winnerId === teamA.id;
@@ -303,7 +310,7 @@ function MapHistoryRow({ mr, teamA, teamB, schedule }) {
   const won = mr.winnerId === teamA.id;
   return (
     <div className={`mco-map-history-row ${won ? "mco-mhr-a" : "mco-mhr-b"}`}>
-      <span className="mco-mhr-map">Map {mr.mapNum} · {mr.short}</span>
+      <span className="mco-mhr-map">Map {mr.mapNum} · {mr.mapName ? `${mr.mapName} ` : ""}{mr.short}</span>
       <span className="mco-mhr-score">
         <span style={{ color: teamColor(mr.winnerId, schedule) }}>{teamTag(mr.winnerId, schedule)}</span>
         <span className="mco-mhr-sc">{mr.scoreWinner}–{mr.scoreLoser}</span>
@@ -367,9 +374,9 @@ export default function MatchCenterOverlay() {
   // Derive team objects from game state
   function buildSide(id) {
     const eventTeam = state?.schedule?.currentMajorEventTeams?.[id];
-    if (eventTeam) return { id: eventTeam.id, name: eventTeam.name, tag: eventTeam.tag, color: eventTeam.color, players: eventTeam.players || [] };
+    if (eventTeam) return { id: eventTeam.id, name: eventTeam.name, tag: eventTeam.tag, color: eventTeam.color, players: eventTeam.players || [], mapProfile: getTeamMapProfile(state, id) };
     const meta = CDL_TEAMS.find(t => t.id === id) ?? { id, name: id, tag: id, color: "#888" };
-    return { id: meta.id, name: meta.name, tag: meta.tag, color: meta.color, players: (state.players || []).filter(p => p.teamId === id) };
+    return { id: meta.id, name: meta.name, tag: meta.tag, color: meta.color, players: (state.players || []).filter(p => p.teamId === id), mapProfile: getTeamMapProfile(state, id) };
   }
 
   const teamA = (() => {
@@ -420,11 +427,21 @@ export default function MatchCenterOverlay() {
     return null;
   })();
 
+  // CDL 2026 veto: deterministic projected map set for this series (matches the
+  // preview + the burst sim). Recomputed only when the two teams change.
+  const mapSet = (teamA?.mapProfile && teamB?.mapProfile)
+    ? autoVeto(teamA.mapProfile, teamB.mapProfile).map(slot => ({
+        selectedMap: { id: slot.id, name: slot.name, mode: slot.mode },
+        edgeA: slot.edgeA,
+        strModA: mapStrengthMod(slot.edgeA),
+      }))
+    : null;
+
   // Auto-sim: when phase becomes "simming", wait 600ms then sim the map
   useEffect(() => {
     if (mcState.phase !== "simming" || !teamA || !teamB) return;
     const t = setTimeout(() => {
-      mcDispatch({ type: "SIM_MAP", teamA, teamB });
+      mcDispatch({ type: "SIM_MAP", teamA, teamB, mapSet });
     }, 600);
     return () => clearTimeout(t);
   }, [mcState.phase, mcState.currentMapIdx]); // eslint-disable-line

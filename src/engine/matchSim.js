@@ -25,6 +25,7 @@
 // Tactical boosts (user choices at intermission) are also applied here.
 
 import { calcChemistry } from "./chemistry.js";
+import { autoVeto, mapStrengthMod } from "./mapProfile.js";
 
 // Defensive: every code path in simMap assumes a 4-player starter slate (it
 // does indexed reads like teamA4[i] for i=0..3). Roster windows are supposed
@@ -465,7 +466,13 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
 
   const strA = teamStrength(modA, chemA, mapDef.mode);
   const strB = teamStrength(modB, chemB, mapDef.mode);
-  const aWon = rng() < mapWinProb(strA, strB);
+  // Map-pool influence (opt-in via matchCtx): a modest, capped strength delta
+  // derived from the two teams' rating on the selected map. Zero by default, so
+  // callers that don't supply a map set get unchanged behaviour.
+  const mapStrModA = ctx.mapStrModA ?? 0;
+  const strAadj = strA + mapStrModA;
+  const strBadj = strB - mapStrModA;
+  const aWon = rng() < mapWinProb(strAadj, strBadj);
 
   const [winScore, loseScore] = genMapScore(mapDef.mode, rng);
   const scoreA = aWon ? winScore : loseScore;
@@ -537,14 +544,20 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
   const newTiltedIdsA = aWon ? new Set() : new Set(teamAObj.players.slice(0, 4).filter(p => (p.tiltResistance ?? 3) < 3).map(p => p.id));
   const newTiltedIdsB = aWon ? new Set(teamBObj.players.slice(0, 4).filter(p => (p.tiltResistance ?? 3) < 3).map(p => p.id)) : new Set();
 
-  const totalStr = strA + strB;
-  const momentum = totalStr > 0 ? strA / totalStr : 0.5;
+  const totalStr = strAadj + strBadj;
+  const momentum = totalStr > 0 ? strAadj / totalStr : 0.5;
+
+  const selectedMap = ctx.selectedMap ?? null;
 
   return {
     mapResult: {
       mapNum:      mapIdx + 1,
       mode:        mapDef.mode,
       short:       mapDef.short,
+      // Map-pool layer (optional): real CDL 2026 map identity + map edge.
+      mapId:       selectedMap?.id   ?? null,
+      mapName:     selectedMap?.name ?? null,
+      mapEdgeA:    ctx.mapEdgeA ?? null,   // signed, team-A perspective
       winnerId:    aWon ? teamAObj.id : teamBObj.id,
       winnerName:  aWon ? teamAObj.name : teamBObj.name,
       loserId:     aWon ? teamBObj.id : teamAObj.id,
@@ -583,6 +596,22 @@ export function simMatch(teamA, teamB, seed) {
     rng
   );
 
+  // ── Map-pool layer (opt-in) ──
+  // When both team objects carry a .mapProfile (attached by buildTeamObj /
+  // the Match Center), derive the CDL 2026 best-of-5 veto and a small, capped
+  // per-map strength modifier. Deterministic from the profiles, so the match
+  // preview's projected map set matches what is actually played. When profiles
+  // are absent (e.g. legacy callers / diagnostic scripts) this is null and the
+  // sim behaves exactly as before.
+  let mapSet = null;
+  if (teamA.mapProfile && teamB.mapProfile) {
+    mapSet = autoVeto(teamA.mapProfile, teamB.mapProfile).map(slot => ({
+      selectedMap: { id: slot.id, name: slot.name, mode: slot.mode },
+      edgeA: slot.edgeA,
+      strModA: mapStrengthMod(slot.edgeA),
+    }));
+  }
+
   let winsA = 0, winsB = 0;
 
   const accStats = {};
@@ -599,9 +628,15 @@ export function simMatch(teamA, teamB, seed) {
   for (let m = 0; m < 5; m++) {
     if (winsA === 3 || winsB === 3) break;
 
+    const mapMod = mapSet?.[m] ?? null;
     const { mapResult, playerMapStats, newTiltedIdsA, newTiltedIdsB } = simMap(
       teamA, teamB, m,
-      { tiltedIdsA, tiltedIdsB, lastMapKDByPlayer, seriesMods },
+      {
+        tiltedIdsA, tiltedIdsB, lastMapKDByPlayer, seriesMods,
+        selectedMap: mapMod?.selectedMap ?? null,
+        mapStrModA:  mapMod?.strModA ?? 0,
+        mapEdgeA:    mapMod?.edgeA ?? null,
+      },
       rng
     );
 
