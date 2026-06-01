@@ -662,3 +662,11 @@ Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the 
 
 ### Testing
 - `npm run build` ✓ · `scripts/stressRosterIntegrity.mjs` 24/24 ✓ · `scripts/diagnoseMapProfiles.mjs` ✓ (range/variety/determinism/veto/named-maps/legacy-compat) · `scripts/testBoardLifecycle.mjs` 12/12 ✓.
+
+## Update 2026-06-01 (Matchday map set / tactics polish)
+- Polished `MatchCenterOverlay` live match presentation to use real map names/modes in current-map, next-map, and result labels instead of dev-style mode slots.
+- Reworked the live scoreboard into a horizontal series score with a compact current/next map line, and replaced the right-side map-history-only panel with a full Series Map Set panel showing completed results, the next map, and softened upcoming map edges.
+- Added shared map display helpers for formatted map labels and softened edge wording. UI now bands map-pool edges as Even/Slight/Edge/Strong/Heavy and caps visible numbers at +12 while leaving internal map-edge calculations unchanged.
+- Replaced the old intermission tactic buttons with next-map manager choices: Standard, Aggressive Pace, Slow Fundamentals, Protect Lead, and Swing Momentum. Effects are consumed on the next map only and stay modest through small attribute/map-strength nudges.
+- Staff tactical/discipline input can lightly improve tactic effectiveness or soften downside when data is present; missing staff data safely falls back to no extra help.
+- Match sim, roster AI, contracts, budgets, free agency, awards, owner/board, profile history, brackets, points, ratings, save data, and logos remain unchanged except for optional next-map tactic boosts passed into the existing map sim.

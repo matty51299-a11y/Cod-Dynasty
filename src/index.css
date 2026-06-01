@@ -9044,3 +9044,148 @@ body { background: #111317; }
 
 /* ── Staff map-prep chips ── */
 .staff-mapprep-row { margin-top: 6px; }
+
+/* Match Center polish: horizontal score, full map set, simple tactics */
+.mco-live-card { max-width: 980px; }
+.mco-sb-center {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.mco-sb-series-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+.mco-sb-detail {
+  color: var(--text-head);
+  font-size: .86rem;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.mco-sb-next {
+  color: var(--text-dim);
+  font-size: .74rem;
+  font-weight: 700;
+}
+.mco-sb-score { flex-direction: row; }
+.mco-body { grid-template-columns: minmax(0, 1fr) 300px; }
+.mco-pg-mapset {
+  align-items: stretch;
+  flex-wrap: wrap;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.mco-pg-mapset .mco-pg-map-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 118px;
+  text-align: left;
+  color: var(--text-head);
+}
+.mco-pg-mapset .mco-pg-map-badge small {
+  color: var(--text-dim);
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.mco-series-mapset { display: flex; flex-direction: column; gap: 6px; }
+.mco-mapset-row {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 6px;
+  align-items: start;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  border-radius: 8px;
+}
+.mco-mapset-next { border-color: rgba(96, 165, 250, .55); background: rgba(96, 165, 250, .08); }
+.mco-mapset-done { opacity: .92; }
+.mco-mapset-num { color: var(--text-dim); font-weight: 800; font-size: .76rem; }
+.mco-mapset-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mco-mapset-map { color: var(--text-head); font-size: .76rem; font-weight: 800; line-height: 1.2; }
+.mco-mapset-status { color: var(--text-dim); font-size: .68rem; font-weight: 700; line-height: 1.25; }
+.mco-mapset-next-label { color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+.mco-mhr-tactic,
+.mco-mw-tactic {
+  color: var(--accent);
+  font-size: .68rem;
+  font-weight: 800;
+  margin-left: 8px;
+}
+.mco-map-history-row { flex-wrap: wrap; gap: 4px 8px; }
+.mco-intermission { padding: 14px 18px 16px; }
+.mco-tactics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.mco-tactic-btn { padding: 9px 10px; }
+.mco-tactic-effect {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--accent);
+  font-size: .68rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.mco-selected-tactic,
+.mco-current-tactic,
+.mco-staff-note {
+  border: 1px solid rgba(96, 165, 250, .25);
+  background: rgba(96, 165, 250, .08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text-dim);
+  font-size: .74rem;
+  line-height: 1.35;
+}
+.mco-selected-tactic {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.mco-current-tactic {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mco-current-tactic strong,
+.mco-selected-tactic strong { color: var(--text-head); }
+.mco-current-tactic-label {
+  font-size: .62rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.mco-staff-note { margin: -2px 0 10px; border-color: rgba(251, 191, 36, .25); background: rgba(251, 191, 36, .08); }
+@media (max-width: 900px) {
+  .mco-body { grid-template-columns: 1fr; }
+  .mco-body-left { border-right: 0; border-bottom: 1px solid var(--border); }
+  .mco-tactics { grid-template-columns: 1fr; }
+  .mco-scoreboard { flex-wrap: wrap; }
+  .mco-sb-center { order: 3; flex-basis: 100%; }
+}
+.mco-selected-tactic em {
+  color: var(--yellow);
+  font-style: normal;
+  margin-left: auto;
+}
