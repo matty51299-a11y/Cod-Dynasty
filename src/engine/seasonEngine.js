@@ -892,6 +892,10 @@ function finalizeChallengerQualifier(gameState, schedule, current) {
 export function simNextChallengerQualifierMatch(gameState) {
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  // Repair before simming: the post-Major AI window may have signed a captured
+  // qualifier player to a CDL team since the field was built, which would leave
+  // that Challenger team short at sim time. Re-repairing keeps every match 4v4.
+  repairChallengerRosters(gameState);
   const current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
   if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
   const working = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
@@ -903,6 +907,7 @@ export function simNextChallengerQualifierMatch(gameState) {
 export function simChallengerQualifierRound(gameState) {
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  repairChallengerRosters(gameState);
   let current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
   if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
   current = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
@@ -923,6 +928,7 @@ export function simChallengerQualifierRound(gameState) {
 export function simChallengerQualifier(gameState) {
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  repairChallengerRosters(gameState);
   let current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
   if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
   current = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
@@ -965,6 +971,10 @@ export function continueFromChallengerQualifier(gameState) {
   }
 
   const majorIdx = schedule.majorIdx ?? schedule.stageIdx ?? 0;
+  // Repair before baking the Major's 4 Challenger event teams so their frozen
+  // rosters are 4 real players (a qualifier player may have been signed to CDL
+  // since the field was built).
+  repairChallengerRosters(gameState);
   const cdlSeeds = Object.entries(schedule.stageStandings)
     .sort((a,b)=>b[1].points-a[1].points)
     .map(([id])=>id);
@@ -1366,15 +1376,51 @@ export function repairChallengerRosters(gameState, options = {}) {
   return gameState;
 }
 
-// Resolve an event team's 4-man roster. Prefers the captured rosterIds, but if
-// those resolve short (e.g. a player was promoted to CDL between events) it
-// backfills from the team's current, already-repaired Challenger roster.
+// Integrity guard: a normalized player name must never be active on two CDL
+// teams at once (e.g. a regenerated prospect signed under a name already on a
+// roster). Keeps the highest-OVR holder, releases the rest to free agency so the
+// downstream integrity pass can refill. Deterministic; only fires on the
+// illegal duplicate-name state. Returns the (mutated) gameState.
+function resolveDuplicateActiveCdlNames(gameState) {
+  const byName = new Map();
+  for (const p of gameState.players || []) {
+    if (!p?.teamId || !isCdlTeamId(p.teamId) || p.isSub || isInactivePlayer(p)) continue;
+    const key = normalizePlayerName(p.name);
+    if (!key) continue;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(p);
+  }
+  const userTeamId = gameState.userTeamId;
+  const releaseIds = new Set();
+  for (const group of byName.values()) {
+    if (group.length <= 1) continue;
+    // Keep the user team's player if involved (their roster is sacrosanct);
+    // otherwise keep the highest-OVR holder. Release the rest to free agency.
+    group.sort((a, b) => {
+      const au = a.teamId === userTeamId ? 1 : 0;
+      const bu = b.teamId === userTeamId ? 1 : 0;
+      if (au !== bu) return bu - au;
+      return (b.overall ?? 0) - (a.overall ?? 0) || String(a.id).localeCompare(String(b.id));
+    });
+    for (const p of group.slice(1)) releaseIds.add(p.id);
+  }
+  if (!releaseIds.size) return gameState;
+  gameState.players = (gameState.players || []).map(p => releaseIds.has(p.id)
+    ? { ...p, teamId: null, isSub: false, challengerTeamId: null, contractYears: 0, status: "freeAgent", previousTeamId: p.teamId }
+    : p);
+  return gameState;
+}
+
+// Resolve an event team's 4-man roster. Prefers the team's CURRENT repaired
+// roster (playerIds), which the repair pass de-duplicates globally so two event
+// teams can never share a player. Falls back to the captured rosterIds only if
+// the current roster resolves short (defensive — keeps the team at 4).
 function resolveEventRoster(base, row, gameState, cdlNames) {
-  const ids = row?.rosterIds?.length ? row.rosterIds : (base?.playerIds || []);
-  let roster = getChallengerRoster({ ...base, playerIds: ids }, gameState, cdlNames);
-  if (roster.length < 4 && (base?.playerIds || []).length) {
+  let roster = getChallengerRoster(base, gameState, cdlNames);
+  if (roster.length < 4 && row?.rosterIds?.length) {
     const have = new Set(roster.map(p => p.id));
-    const extra = getChallengerRoster(base, gameState, cdlNames).filter(p => !have.has(p.id));
+    const extra = getChallengerRoster({ ...base, playerIds: row.rosterIds }, gameState, cdlNames)
+      .filter(p => !have.has(p.id));
     roster = [...roster, ...extra].slice(0, 4);
   }
   return roster;
@@ -2074,6 +2120,9 @@ export function beginChamps(gameState) {
     }
   }
 
+  // Repair before baking the Champs Challenger event teams so their rosters are
+  // 4 real players at sim time.
+  repairChallengerRosters(gameState);
   const eventTeams = simulateChallengerQualifier(gameState, schedule, "champs") ?? [];
   schedule.currentMajorEventTeams = Object.fromEntries(eventTeams.map(t => [t.id, t]));
   const challengerSeedIds = eventTeams.map(t => t.id);
@@ -2481,13 +2530,23 @@ export function advanceOffseason(gameState) {
     const outgoingSeason = gameState.offseason?.outgoingSeason ?? gameState.schedule?.season ?? gameState.season ?? 1;
     const newSeason = gameState.offseason?.newSeason ?? outgoingSeason + 1;
     const marketState = runAIFreeAgencyMarket(gameState);
-    const withAiMoves = runAIOffseasonRosterWindow(marketState);
-    return withCdlRosterIntegrity({
+    // Release any duplicate-named CDL players created during AI moves before the
+    // integrity pass refills, so the new season never starts with a name active
+    // on two CDL teams.
+    const withAiMoves = resolveDuplicateActiveCdlNames(runAIOffseasonRosterWindow(marketState));
+    const newSeasonState = withCdlRosterIntegrity({
       ...withAiMoves,
       schedule: buildSeason(newSeason),
       season: newSeason,
       offseason: { ...(withAiMoves.offseason || {}), freeAgencyOpen: false, completedFreeAgencySeason: outgoingSeason },
     }, "post_offseason");
+    // Repair Challenger rosters at the start of the new season (spec: run after
+    // offseason roster movement / at season start). This drops stale duplicate
+    // references (e.g. a Challenger-pool player whose name now matches an active
+    // CDL player) and backfills from the leftover free-agent / prospect pool, so
+    // Challenger teams never carry dead-weight slots into the new season.
+    repairChallengerRosters(newSeasonState);
+    return newSeasonState;
   }
 
   const standings      = gameState.schedule?.standings ?? {};
