@@ -716,3 +716,30 @@ Result stored in `pendingBoardReview`; `BoardReviewOverlay` shows on top of the 
 - Emergency Challenger players are intentionally still possible if *every* real pool is exhausted AND no lower team can be poached (only the bottom/backfill teams), but they now carry realistic gamertags. Literal `Sub N` is gone from normal gameplay.
 - Event-time Challenger repair pulls free agents into Challenger teams; the offseason **user/AI free-agency window** still excludes them to avoid stealing signings mid-window (repair only runs at event entry, after the window).
 - Season MVP/role awards now fold in ESWC match stats (a consequence of awards moving after ESWC). This is intended; ESWC MVP is tracked separately.
+
+## Update 2026-06-01 (Full multi-season stability diagnostic + integrity hardening)
+
+### New diagnostic: `scripts/diagnoseFullSeasonFlow.mjs`
+Simulates **6 complete seasons** through the real engine (default `optic`, configurable via `node … diagnoseFullSeasonFlow.mjs <team> <seed>`) and verifies the entire loop. It mirrors the reducer's offseason hooks (board-objective regen, map-profile rebuild, season-end board review) and simulates a competent user (re-sign keepers, let one walk, sign a replacement during the FA window). Validates per season:
+- **Phase order**: Stage→Qualifier→Major ×4 → Challengers Finals → Champs → ESWC → Awards → Offseason/Contracts → User FA → AI FA → New Season (asserts the intended competitive order Champs → ESWC → Awards → Offseason).
+- **Tournaments**: every Major/Champs/ESWC = 16 teams (12 CDL + 4 Challengers), no duplicate teams, bracket completes, champion + valid placements, regular-Major points awarded (champion +100), ESWC/Champs award **no** CDL standings points; qualifiers = 24-team true DE (LB rounds, top-4 qualify); Challengers Finals = 16-team DE. Scans **every match's player stats** for `Sub`/`__placeholder_` and 4v4 integrity.
+- **Rosters**: CDL teams 4 valid starters, no player on two CDL teams / two Challenger teams / both, no retired-active, no undefined player in sim. Challenger shortages at non-event checkpoints are reported as transient warnings (they self-heal at the next event-entry repair); placeholders reaching a real event match are hard failures.
+- **Offseason/FA**: contract review after awards, user re-signed keepers not poached by AI, let-walk players leave the user team, FA market includes former-AI players, no player both FA and rostered, AI rosters repaired after FA.
+- **Awards/history**: Season MVP, Rookie (if eligible), role awards resolve to real players, 4 Major MVPs, Champs MVP, ESWC MVP; season/team/OVR history persists into the next season.
+- **Board/Staff/Map**: board objectives + confidence exist and stay stable mid-season, every CDL team has staff, empty-staff path doesn't crash, every CDL team has a map profile, `autoVeto` always yields 5 valid maps with no intra-mode repeat.
+
+Prints a per-season report (majors/qualifiers completed, finals/champs/eswc/awards/offseason status, roster issues, duplicates, placeholders-in-events, FA former-AI count, re-sign/let-walk, awards check, board/staff/map) + PASS/FAIL with phase·event·subject·expected·actual·source for any failure.
+
+### Bugs found & fixed (small, targeted)
+1. **Placeholders in later-season events.** The post-Major AI roster window signs Challenger players to CDL *after* the event field is built, shadowing already-captured event rosters → teams short at sim time → placeholder pads. Fix (`seasonEngine.js`): re-run `repairChallengerRosters` at the start of the qualifier/finals sims (`simChallengerQualifier`/`…Round`/`…NextMatch`), before baking regular-Major event teams (`continueFromChallengerQualifier`), before Champs event teams (`beginChamps`), and at the new-season transition (`advanceOffseason`). `resolveEventRoster` now resolves from the team's **current, globally-deduped repaired roster** first (falling back to captured rosterIds only if short) — this also fixes a duplicate-ownership case where two event teams shared a player ("7-player match").
+2. **Duplicate active player names across two CDL teams** (e.g. "Snoopy on two CDL teams"), created when AI signs a regenerated same-named player. Fix: `resolveDuplicateActiveCdlNames` runs at the new-season transition — keeps the user's player (roster is sacrosanct) or the highest-OVR holder, releases the rest to free agency; the integrity pass then refills. Deterministic; only fires on the illegal duplicate-name state.
+
+These are spec-aligned with the prior Challenger-integrity work ("run repair at season start / after offseason / after CDL teams sign Challenger players"). No changes to match simulation, ratings, contracts/budgets, brackets, points, awards selection, staff, board, or map/veto logic.
+
+### Testing
+`npm run build` ✓ · `diagnoseFullSeasonFlow` ✓ across 12 team/seed combos (72 season-runs, 0 placeholders / 0 duplicates / 0 CDL roster issues) · `diagnosePostSeasonFlow`/`diagnosePostSeasonEvents`/`diagnoseChallengerRosterIntegrity`/`stressRosterIntegrity` 24/24/`diagnoseOffseasonFreeAgency`/`diagnoseOffseasonState`/`diagnoseChallengerQualifier24`/`testChallengerRosterVariety`/`testProfileHistory`/`testBoardLifecycle`/`testPlacementDisplay`/`verifyMajorCompletion`/`test:rookie-awards` ✓.
+
+### Known limitations
+- Between events a Challenger team can transiently carry a CDL-shadowed reference until the next event-entry repair (reported as a warning, not a failure; never reaches a match). The diagnostic's gameplay guarantee is "no placeholder/Sub in any event match", which holds.
+- CDL duplicate-name resolution runs at the season rollover; a duplicate created mid-season by an AI roster window would persist until the next season start (none observed reaching a match in 72 season-runs).
+- The diagnostic simulates a competent user (keeps roster ≥4); a passive user can still play a thin roster in-game (the UI blocks simming with <4, by design).
