@@ -12,7 +12,7 @@ import {
   isTransferWindowOpen, transferWindowLabel, getWindowKey, getTransferBudget,
   getPlayerValuation, getAskingPrice, getTransferStatus, getIncomingOffers,
   getOutgoingOffers, getLeagueTransferListed, fmtFee, teamTag,
-  teamName, getAcceptedOutgoingTermsOffers, getTransferTermsPreview,
+  teamName, getAcceptedOutgoingTermsOffers, getTransferTermsPreview, evaluatePlayerTerms, getTransferIntel,
 } from "../engine/transferEngine.js";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 
@@ -46,11 +46,17 @@ function nextStepLabel(n) {
 
 function ConfirmSigningModal() {
   const { state, dispatch } = useGame();
+  const [role, setRole] = useState("Starter");
+  const [salaryK, setSalaryK] = useState("");
+  const [years, setYears] = useState(2);
   if (!state?.transferMarket?.activeTermsOfferId) return null;
   const neg = getAcceptedOutgoingTermsOffers(state).find(n => n.id === state.transferMarket.activeTermsOfferId);
-  const preview = getTransferTermsPreview(state, neg);
+  const basePreview = getTransferTermsPreview(state, neg, { promisedRole: role, contractYears: years });
+  const salary = Number(salaryK) > 0 ? Number(salaryK) * 1000 : basePreview?.salary;
+  const preview = getTransferTermsPreview(state, neg, { promisedRole: role, salary, contractYears: years });
   if (!neg || !preview) return null;
   const capTone = preview.capAfter < 0 ? "tr-impact-bad" : "tr-impact-good";
+  const termsResp = evaluatePlayerTerms(preview.player, preview.buyerTeamId, preview.sellerTeamId, state, { promisedRole: role, salary: preview.salary, contractYears: years });
 
   return (
     <div className="transfer-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-signing-title">
@@ -58,8 +64,13 @@ function ConfirmSigningModal() {
         <div className="transfer-modal-kicker">Player terms required</div>
         <h2 id="confirm-signing-title">Confirm Signing</h2>
         <p>
-          <strong>{preview.player.name}</strong> will join your roster from {teamName(preview.sellerTeamId)} for {fmtFee(preview.transferFee)}.
+          <strong>{preview.player.name}</strong> will join your roster from {teamName(preview.sellerTeamId)} for {fmtFee(preview.transferFee)} if he accepts the role and salary.
         </p>
+        <div className="transfer-terms-controls">
+          <label><span>Promised Role</span><select className="slot-select" value={role} onChange={e => setRole(e.target.value)}><option>Starter</option><option>Substitute</option><option>Prospect</option></select></label>
+          <label><span>Salary Offer (k)</span><input className="slot-select tr-fee-input" type="number" placeholder={`${Math.round((basePreview?.salary || 0) / 1000)}`} value={salaryK} onChange={e => setSalaryK(e.target.value)} /></label>
+          <label><span>Contract</span><select className="slot-select" value={years} onChange={e => setYears(Number(e.target.value))}><option value={1}>1 year</option><option value={2}>2 years</option><option value={3}>3 years</option></select></label>
+        </div>
         <div className="transfer-terms-grid">
           <span><strong>Player</strong>{preview.player.name}</span>
           <span><strong>From</strong>{teamName(preview.sellerTeamId)}</span>
@@ -69,14 +80,21 @@ function ConfirmSigningModal() {
           <span><strong>Contract</strong>{preview.contractYears} year{preview.contractYears === 1 ? "" : "s"}</span>
           <span className={capTone}><strong>Cap Space After Deal</strong>{fmtFee(preview.capAfter)}</span>
           <span><strong>Roster Impact</strong>{preview.rosterNote}</span>
+          <span><strong>Player Interest</strong>{termsResp.interestLabel}</span>
+          <span><strong>Terms Readout</strong>{termsResp.reason}</span>
         </div>
         {preview.capAfter < 0 && (
           <div className="ui-warning-banner tr-modal-warning">
             Cannot complete transfer: this signing would exceed your salary cap by {fmtFee(Math.abs(preview.capAfter))}.
           </div>
         )}
+        {!termsResp.accepted && (
+          <div className="ui-warning-banner tr-modal-warning">
+            Player terms risk: {termsResp.reason}
+          </div>
+        )}
         <div className="transfer-modal-actions">
-          <button className="btn-primary" onClick={() => dispatch({ type: "RESPOND_TRANSFER_OFFER", negotiationId: neg.id, action: "accept" })}>Confirm Transfer</button>
+          <button className="btn-primary" onClick={() => dispatch({ type: "RESPOND_TRANSFER_OFFER", negotiationId: neg.id, action: "accept", promisedRole: role, salary: preview.salary, contractYears: years })}>Confirm Transfer</button>
           <button className="btn-secondary" onClick={() => dispatch({ type: "RESPOND_TRANSFER_OFFER", negotiationId: neg.id, action: "cancel" })}>Cancel Deal</button>
           <button className="btn-secondary" onClick={() => dispatch({ type: "CLOSE_TRANSFER_TERMS" })}>Later</button>
         </div>
@@ -269,7 +287,7 @@ export default function TransferCentre() {
                       <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button> <span className="muted">{p.primary} · {p.overall}</span></td>
                       <td>{teamTag(n.toTeamId)}</td>
                       <td>{fmtFee(liveFee)}</td>
-                      <td><Pill tone={offerStatusTone(n.status)}>{offerStatusLabel(n)}</Pill>{accepted && <span className="tr-substatus">Terms Required</span>}</td>
+                      <td><Pill tone={offerStatusTone(n.status)}>{offerStatusLabel(n)}</Pill>{accepted && <span className="tr-substatus">Terms Required</span>}{(n.responseReason || n.counterReason || n.playerRejectionReason) && <div className="muted" style={{ fontSize: ".72rem", maxWidth: 260 }}>{n.playerRejectionReason || n.counterReason || n.responseReason}</div>}</td>
                       <td>{nextStepLabel(n)}</td>
                       <td>{(countered) && <input className="slot-select tr-fee-input" type="number" placeholder="k" value={counterFees[n.id] ?? ""} onChange={e => setCounterFees({ ...counterFees, [n.id]: e.target.value })} />}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
@@ -300,17 +318,18 @@ export default function TransferCentre() {
             <EmptyState title="No listed players" detail="No rival clubs have transfer-listed players right now." />
           ) : (
             <div className="ui-table-wrap"><table className="roster-table data-table">
-              <thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Age</th><th>OVR</th><th>POT</th><th>Salary</th><th>Asking</th><th>Offer (k)</th><th>Action</th></tr></thead>
+              <thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Age</th><th>OVR</th><th>POT</th><th>Club Stance</th><th>Player Interest</th><th>Difficulty</th><th>Asking</th><th>Offer (k)</th><th>Action</th></tr></thead>
               <tbody>
                 {listed.map(p => {
                   const ask = getAskingPrice(p, state);
+                  const intel = getTransferIntel(p, state, userTeamId);
                   return (
                     <tr key={p.id}>
                       <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></td>
                       <td>{teamTag(p.teamId)}</td>
                       <td><span className="role-pill ui-pill ui-pill-neutral">{p.primary}</span></td>
                       <td>{p.age}</td><td style={{ fontWeight: 700 }}>{p.overall}</td><td>{p.potential}</td>
-                      <td>{fmtFee(p.salary)}</td><td>{fmtFee(ask)}</td>
+                      <td>{intel?.clubStance ?? "—"}</td><td>{intel?.playerInterest ?? "—"}</td><td>{intel?.dealDifficulty ?? "—"}</td><td>{fmtFee(ask)}</td>
                       <td><input className="slot-select tr-fee-input" type="number" placeholder="k" value={counterFees["mk_" + p.id] ?? ""} onChange={e => setCounterFees({ ...counterFees, ["mk_" + p.id]: e.target.value })} /></td>
                       <td><button className="btn-primary-sm" disabled={!windowOpen || !(Number(counterFees["mk_" + p.id]) > 0)} onClick={() => makeOffer(p.id)}>Make Offer</button></td>
                     </tr>

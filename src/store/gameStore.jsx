@@ -21,8 +21,8 @@ import { migrateUserScouting, applyScout, toggleShortlist } from "../engine/scou
 import {
   migrateTransferMarket, isTransferWindowOpen, getWindowKey, generateIncomingOffers,
   evaluateSellResponse, evaluateBuyerCounterResponse,
-  playerWillingness, buildTransferResult, boardNudgeForTransfer, getTransferBudget,
-  isOutgoingTermsRequired,
+  buildTransferResult, boardNudgeForTransfer, getTransferBudget,
+  isOutgoingTermsRequired, evaluatePlayerTerms,
   teamTag as trTeamTag, teamName as trTeamName0, fmtFee,
 } from "../engine/transferEngine.js";
 
@@ -828,21 +828,21 @@ function reducer(state, action) {
       };
       // AI seller responds immediately.
       if (resp.decision === "accept") {
-        neg.status = "Accepted"; neg.nextAction = "player_terms"; neg.agreedFee = fee;
-        neg.history.push({ by: sellerTeamId, action: "accept", fee });
+        neg.status = "Accepted"; neg.nextAction = "player_terms"; neg.agreedFee = fee; neg.responseReason = resp.reason;
+        neg.history.push({ by: sellerTeamId, action: "accept", fee, reason: resp.reason });
         const withNeg = { ...state, transferMarket: { ...tm, negotiations: [...tm.negotiations, neg], nextId: tm.nextId + 1, pendingAcceptedOfferId: id } };
         return addNotif(withNeg, `${trTeamName0(sellerTeamId)} accepted your ${fmtFee(fee)} offer for ${player.name}. Agree player terms to complete it.`);
       }
       if (resp.decision === "counter") {
-        neg.status = "Countered"; neg.counterFee = resp.counterFee; neg.counterBy = "seller"; neg.round = 1;
-        neg.history.push({ by: sellerTeamId, action: "counter", fee: resp.counterFee });
+        neg.status = "Countered"; neg.counterFee = resp.counterFee; neg.counterBy = "seller"; neg.round = 1; neg.counterReason = resp.reason;
+        neg.history.push({ by: sellerTeamId, action: "counter", fee: resp.counterFee, reason: resp.reason });
         const withNeg = { ...state, transferMarket: { ...tm, negotiations: [...tm.negotiations, neg], nextId: tm.nextId + 1 } };
-        return addNotif(withNeg, `${trTeamName0(sellerTeamId)} countered: ${fmtFee(resp.counterFee)} for ${player.name}.`);
+        return addNotif(withNeg, `${trTeamName0(sellerTeamId)} countered at ${fmtFee(resp.counterFee)} for ${player.name}. ${resp.reason}`);
       }
-      neg.status = "Rejected";
+      neg.status = "Rejected"; neg.responseReason = resp.reason;
       neg.history.push({ by: sellerTeamId, action: "reject", reason: resp.reason });
       const withNeg = { ...state, transferMarket: { ...tm, negotiations: [...tm.negotiations, neg], nextId: tm.nextId + 1 } };
-      return addNotif(withNeg, `${trTeamName0(sellerTeamId)} rejected your offer for ${player.name} (${resp.reason}).`);
+      return addNotif(withNeg, `${trTeamName0(sellerTeamId)} rejected your offer for ${player.name}. ${resp.reason}`);
     }
 
     // ── RESPOND TO A NEGOTIATION (accept / reject / counter / withdraw / nfs) ──
@@ -908,16 +908,16 @@ function reducer(state, action) {
           const budget = getTransferBudget(state, state.userTeamId).balance;
           if (fee > budget) return addNotif(state, `Counter exceeds your transfer budget (${fmtFee(budget)}).`);
           if (resp.decision === "accept") {
-            const accepted = setNeg({ status: "Accepted", nextAction: "player_terms", fee, counterFee: null, agreedFee: fee, round: (neg.round || 0) + 1, __h: { by: neg.toTeamId, action: "accept", fee } });
+            const accepted = setNeg({ status: "Accepted", nextAction: "player_terms", fee, counterFee: null, agreedFee: fee, responseReason: resp.reason, round: (neg.round || 0) + 1, __h: { by: neg.toTeamId, action: "accept", fee, reason: resp.reason } });
             const tm2 = migrateTransferMarket(accepted.transferMarket);
             return addNotif({ ...accepted, transferMarket: { ...tm2, pendingAcceptedOfferId: negotiationId } },
               `${trTeamName0(neg.toTeamId)} accepted ${fmtFee(fee)} for ${player.name}. Agree player terms to complete the signing.`);
           }
           if (resp.decision === "counter") {
-            return addNotif(setNeg({ status: "Countered", fee, counterFee: resp.counterFee, counterBy: "seller", round: (neg.round || 0) + 1, __h: { by: neg.toTeamId, action: "counter", fee: resp.counterFee } }),
-              `${trTeamName0(neg.toTeamId)} countered at ${fmtFee(resp.counterFee)} for ${player.name}.`);
+            return addNotif(setNeg({ status: "Countered", fee, counterFee: resp.counterFee, counterBy: "seller", counterReason: resp.reason, round: (neg.round || 0) + 1, __h: { by: neg.toTeamId, action: "counter", fee: resp.counterFee, reason: resp.reason } }),
+              `${trTeamName0(neg.toTeamId)} countered at ${fmtFee(resp.counterFee)} for ${player.name}. ${resp.reason}`);
           }
-          return addNotif(setNeg({ status: "Rejected", __h: { by: neg.toTeamId, action: "reject", reason: resp.reason } }), `${trTeamName0(neg.toTeamId)} rejected your counter (${resp.reason}).`);
+          return addNotif(setNeg({ status: "Rejected", responseReason: resp.reason, __h: { by: neg.toTeamId, action: "reject", reason: resp.reason } }), `${trTeamName0(neg.toTeamId)} rejected your counter. ${resp.reason}`);
         }
       }
       // ---- ACCEPT (completes a transfer) ----
@@ -926,7 +926,7 @@ function reducer(state, action) {
         const agreedFee = neg.counterFee ?? neg.agreedFee ?? neg.fee;
         const userIsBuyer = neg.fromTeamId === state.userTeamId;
         if (userIsBuyer && neg.status === "Countered" && neg.counterBy === "seller") {
-          const accepted = setNeg({ status: "Accepted", nextAction: "player_terms", agreedFee, counterFee: null, __h: { by: state.userTeamId, action: "accept-counter", fee: agreedFee } });
+          const accepted = setNeg({ status: "Accepted", nextAction: "player_terms", agreedFee, counterFee: null, responseReason: neg.counterReason || "Counter accepted by user.", __h: { by: state.userTeamId, action: "accept-counter", fee: agreedFee } });
           const tm2 = migrateTransferMarket(accepted.transferMarket);
           return addNotif({ ...accepted, transferMarket: { ...tm2, pendingAcceptedOfferId: negotiationId } },
             `Fee accepted: ${fmtFee(agreedFee)} for ${player.name}. Agree player terms to complete the signing.`);
@@ -934,15 +934,16 @@ function reducer(state, action) {
         if (userIsBuyer && neg.status === "Accepted" && neg.nextAction && neg.nextAction !== "player_terms") {
           return addNotif(state, "This accepted offer is missing player terms context. Reopen it from the Transfer Centre.");
         }
+        const terms = { promisedRole: action.promisedRole, salary: action.salary, contractYears: action.contractYears };
         // If the user is the buyer, the player must agree personal terms.
         if (userIsBuyer) {
-          const willing = playerWillingness(player, neg.fromTeamId, neg.toTeamId, state);
-          if (willing < 0.4) {
-            return addNotif(setNeg({ status: "Rejected", __h: { by: neg.playerId, action: "reject-terms" } }),
-              `${player.name} rejected personal terms — not convinced by the move.`);
+          const termsResp = evaluatePlayerTerms(player, neg.fromTeamId, neg.toTeamId, state, terms);
+          if (!termsResp.accepted) {
+            return addNotif(setNeg({ status: "Rejected", playerRejectionReason: termsResp.reason, nextAction: "terms_rejected", __h: { by: neg.playerId, action: "reject-terms", reason: termsResp.reason } }),
+              `${player.name} rejected personal terms. ${termsResp.reason}`);
           }
         }
-        const result = buildTransferResult(state, neg, agreedFee);
+        const result = buildTransferResult(state, neg, agreedFee, terms);
         if (result.blockedReason) return addNotif(state, `Cannot complete transfer: ${result.blockedReason}`);
         // Mark this negotiation completed.
         const negotiations = result.transferMarket.negotiations.map(n =>

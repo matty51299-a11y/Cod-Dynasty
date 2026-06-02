@@ -9803,3 +9803,24 @@ body { background: #111317; }
   .transfer-modal-summary,
   .transfer-terms-grid { grid-template-columns: 1fr; }
 }
+.transfer-terms-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.transfer-terms-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.transfer-terms-controls select,
+.transfer-terms-controls input { width: 100%; }
+@media (max-width: 680px) {
+  .transfer-terms-controls { grid-template-columns: 1fr; }
+}
