@@ -4,6 +4,7 @@
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
 import { getTeamUiTheme } from "../utils/teamTheme.js";
+import { getAcceptedOutgoingTermsOffers } from "../engine/transferEngine.js";
 
 const NAV_ITEMS = [
   { id: "home",      icon: "⌂",  label: "Home" },
@@ -55,6 +56,7 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
 
   const hasDevData  = state.progressionLog?.length > 0;
   const unreadFeed  = (state.feed ?? []).filter(f => !f.read).length;
+  const transferActions = getAcceptedOutgoingTermsOffers(state).length;
   const showFreeAgency = phase === "offseason" || phase === "contracts" || !!state.offseason?.freeAgencyOpen;
   const visibleNavItems = NAV_ITEMS.filter(item => !item.offseasonOnly || showFreeAgency);
 
@@ -78,8 +80,9 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
             onClick={() => setScreen(item.id)}
           >
             <span className="sb-icon">{item.icon}</span>
-            <span className="sb-label">{item.label}</span>
+            <span className="sb-label">{item.id === "transfers" && transferActions > 0 ? `${item.label} (${transferActions})` : item.label}</span>
             {item.id === "devreport" && hasDevData && <span className="sb-dot" />}
+            {item.id === "transfers" && transferActions > 0 && <span className="sb-badge">{transferActions > 9 ? "9+" : transferActions}</span>}
           </button>
         ))}
 

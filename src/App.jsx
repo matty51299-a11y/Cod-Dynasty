@@ -35,6 +35,7 @@ import TeamHubOverlay    from "./components/TeamHubOverlay.jsx";
 import PlayerProfileOverlay from "./components/PlayerProfileOverlay.jsx";
 import SeasonAwardsOverlay from "./components/SeasonAwardsOverlay.jsx";
 import BoardReviewOverlay from "./components/BoardReviewOverlay.jsx";
+import TransferAcceptedModal from "./components/TransferAcceptedModal.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
 import { CDL_TEAMS }     from "./data/teams.js";
 import { getTeamThemeStyle } from "./utils/teamTheme.js";
@@ -150,6 +151,7 @@ export default function App() {
         <PlayerProfileOverlay />
         <SeasonAwardsOverlay />
         <BoardReviewOverlay />
+        <TransferAcceptedModal setScreen={setScreen} />
         <NotificationsFeed isOpen={showFeed} onClose={() => setShowFeed(false)} />
 
         {/* Screen content */}
