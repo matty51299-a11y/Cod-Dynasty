@@ -895,3 +895,27 @@ challengerFunds: 0                   // transfer income from selling Challenger 
 - Some secondary CDL-centric screens (Transfer Centre "My Squad", Staff, Scouting, Dev Report) are not yet fully reskinned for Challenger teams — they render CDL data or empty user panels rather than crashing. Buyout offers live on the dashboard.
 - Challenger board is display/eval only this pass — no season-end verdict/confidence-history lifecycle.
 - Buyout offers are sell-only (CDL teams buying from the user); the user cannot yet spend `challengerFunds` to buy players. Challenger staff depth is minimal.
+
+## Update 2026-06-02 (Focused bug pass — CDL + Challenger modes)
+Bug-fix pass only — no new systems, no rebalancing, no format/logic changes beyond the fixes below.
+
+### Bugs found & fixed
+- **Challenger mode phase dead-end (significant).** The phase-advance CTAs (Begin Champs, Review Contracts, Open/Run Free Agency) live only in the CDL `Dashboard`, which `ChallengerDashboard` replaces — so a Challenger user had **no way to advance past `preChamps`, `offseason`, `contracts`, or the user free-agency window** (hard stuck mid-save). Fixed by adding an "Action Required" phase-advance banner to `ChallengerDashboard` that dispatches the exact same actions (`BEGIN_CHAMPS` / `ENTER_CONTRACT_PHASE` / `ADVANCE_OFFSEASON`) using the same conditions as the CDL hub. No engine/flow change — the reducer actions are unchanged.
+- **Stale mode label in a doc comment.** `matchSim.js` `simMap` ctx comment said the third mode was `"Control"`; the engine and UI use `"Overload"`. Corrected the comment (no logic change). `SeriesDetail.jsx`'s `"CTL"` handling is intentional backward-compat for old-save match logs and was left in place.
+
+### Investigated and confirmed NOT broken (no change needed)
+- Save/load hydration: `userTeamType`, staff, board, transfer market, map profiles, scouting, ESWC/Challengers Finals slots all hydrate on old saves; CDL saves default to `userTeamType: "cdl"`.
+- Season phase order Champs → ESWC → Awards → Offseason → Contracts → User FA → AI FA → new season (no skips/dupes/stuck states).
+- CDL + Challenger roster integrity (no `Sub N` placeholders, no duplicate/dual ownership, user Challenger roster protected from AI signing).
+- Contract review / free agency (re-signed kept, let-walk leaves, league-wide market, no AI override of user signings).
+- Transfer/buyout flow — "Action Required" + "Confirm Signing" + sidebar badge surface accepted-fee/terms offers (no dead-ends).
+- Staff/board: CDL-team lookups for a Challenger `userTeamId` use optional chaining (no crash); board hard-caps respected.
+- Map pool/veto uses Hardpoint / Search & Destroy / Overload in the correct series order.
+- Awards/history/profiles persist; brackets/events complete with valid placements.
+
+### Known limitations / recommended follow-ups (not bugs; deferred to avoid feature creep)
+- Secondary CDL-centric screens (Transfer Centre "My Squad", Staff, Scouting, Dev Report, and the Market/Free Agency budget header) render CDL or empty panels for a Challenger user — functional and non-crashing, but should be reskinned for Challenger teams.
+- The Challenger offseason contract-review step is a pass-through (Challenger teams have no CDL contracts); a Challenger-specific offseason summary would be clearer.
+
+### Testing
+- `npm run build` ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseOffseasonFreeAgency`/`diagnoseOffseasonState`/`diagnoseChallengerRosterIntegrity`/`diagnosePostSeasonFlow`/`diagnoseTransferMarket` (49/49)/`diagnoseProspectScouting` (26/26)/`diagnoseChallengerManagerMode` (33/33)/`diagnoseBoardObjectives`/`diagnoseMapProfiles`/`diagnoseChallengerQualifier24`/`diagnosePostSeasonEvents` ✓ · ESLint clean on changed files (pre-existing matchSim unused-var warnings untouched).

@@ -9874,3 +9874,12 @@ body { background: #111317; }
 /* User highlighting in the Challenger Qualifier bracket */
 .cqo-bm-user { box-shadow: 0 0 0 2px var(--accent) inset; border-radius: 8px; }
 .cqo-bm-you .cqo-bm-name { color: var(--accent); font-weight: 800; }
+
+/* Challenger dashboard phase-advance action banner */
+.cd-action-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 18px; margin: 0 0 16px; border-radius: 10px;
+  background: var(--bg3); border: 1px solid var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.cd-action-banner strong { color: var(--text-head); }
