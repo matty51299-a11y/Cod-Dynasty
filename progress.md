@@ -938,3 +938,10 @@ UI/context only — no engine, gameplay, format, or diagnostic changes. Only com
 
 ### Testing
 `npm run build` ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseChallengerManagerMode` 33/33 ✓ · `diagnoseTransferMarket` 49/49 ✓ · `diagnoseProspectScouting` 26/26 ✓ · ESLint clean on changed files.
+
+## Update 2026-06-02 (User roster starter/sub controls)
+- Added explicit user-controlled CDL roster slot management around the existing `player.isSub` flag: non-sub players are starters, `isSub: true` players are bench/substitutes, and matchday team construction now orders selected starters before bench players.
+- Roster screen now separates `Starting 4` from `Bench / Substitutes`, adds Promote to Starter, Move to Bench, Swap, Swap With Starter, Release, and Auto Pick Best 4 actions for the user CDL team only, and shows an Action Required warning when fewer than four starters are selected.
+- User signings from Free Agency / Challengers now fill open starter slots by default and go to the bench when four starters already exist. Completed user transfer/buyout signings follow the same starter-open vs bench-full placement rule and notify where the player landed.
+- Matchday validation still blocks user sim/play attempts with fewer than four starters, but the warning now tells the user to promote or sign players before continuing.
+- Added `scripts/diagnoseUserRosterControls.mjs` to verify signing slot selection, promote/swap/auto-pick behavior, duplicate safety, starter-only match usage, incomplete-roster warnings, and transfer placement.

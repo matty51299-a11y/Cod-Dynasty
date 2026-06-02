@@ -100,7 +100,7 @@ export default function FreeAgency() {
       dispatch({ type: "SIGN_CHALLENGER_PLAYER", playerId });
       return;
     }
-    const slot = signAs[playerId] || "starter";
+    const slot = signAs[playerId] || (starterCount < 4 ? "starter" : "sub");
     dispatch({ type: "SIGN_PLAYER", playerId, slotType: slot });
   }
 
@@ -124,7 +124,7 @@ export default function FreeAgency() {
             <StatCard label="Market" value={filtered.length} hint={`${marketCounts.total} total`} />
             <StatCard label="Former AI" value={marketCounts.formerAi} hint={`${marketCounts.formerUser} user`} />
             <StatCard label="Starters" value={`${starterCount}/4`} tone={starterCount < 4 ? "warning" : "neutral"} />
-            <StatCard label="Sub" value={`${subCount}/1`} />
+            <StatCard label="Bench" value={subCount} />
             <StatCard label="Remaining" value={fmtMoney(remaining)} tone={remaining < 0 ? "danger" : "success"} />
           </div>
         )}
@@ -203,17 +203,13 @@ export default function FreeAgency() {
           </thead>
           <tbody>
             {filtered.map(p => {
-              const slot        = signAs[p.id] || "starter";
+              const slot        = signAs[p.id] || (starterCount < 4 ? "starter" : "sub");
               const cost        = getSigningCost(p);
               // Subs don't count against the cap — only starters need the check.
-              const overBy      = slot === "starter" ? Math.max(0, cost - remaining) : 0;
+              const overBy      = slot === "starter" && starterCount < 4 ? Math.max(0, cost - remaining) : 0;
               const disabledReason = challengerMode
                 ? (challengerStatus.count >= 4 ? "Roster full (4/4)" : null)
-                : slot === "starter" && starterCount >= 4
-                ? "Roster full"
-                : slot === "sub" && subCount >= 1
-                  ? "Sub slot full"
-                  : overBy > 0
+                : overBy > 0
                     ? `Over cap by ${fmtMoney(overBy)}`
                     : null;
               return (
