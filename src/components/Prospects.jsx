@@ -14,6 +14,7 @@ import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName } from "..
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
+import { getScoutingSummary, isScoutTarget, getAssignmentsRemaining } from "../engine/scoutingEngine.js";
 
 function ratingColor(v) {
   if (v >= 90) return "#fbbf24";
@@ -66,11 +67,10 @@ export default function Prospects() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   const [signAs, setSignAs] = useState({});
-  const [shortlist, setShortlist] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("challenger_shortlist") || "[]")); } catch { return new Set(); }
-  });
 
   if (!state) return null;
+  // Shortlist now persists in the save via userScouting (see scoutingEngine).
+  const shortlist = new Set(state.userScouting?.shortlist || []);
 
   const { prospects, userTeamId, players, challengersLog, challengerTeams, schedule, challengerTransactions } = state;
 
@@ -130,11 +130,12 @@ export default function Prospects() {
     dispatch({ type: "SIGN_PLAYER", playerId: prospectId, slotType: slot });
   }
   function toggleShortlist(id) {
-    const next = new Set(shortlist);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setShortlist(next);
-    localStorage.setItem("challenger_shortlist", JSON.stringify([...next]));
+    dispatch({ type: "TOGGLE_SHORTLIST", playerId: id });
   }
+  function scout(id, deep) {
+    dispatch({ type: "SCOUT_PLAYER", playerId: id, deep });
+  }
+  const assignmentsLeft = getAssignmentsRemaining(state);
 
   return (
     <div className="prospects-page">
@@ -270,6 +271,8 @@ export default function Prospects() {
               <th>Dev Curve</th>
               <th>OVR (est.)</th>
               <th>POT (est.)</th>
+              <th>Conf</th>
+              <th>Risk</th>
               <th>Salary</th>
               <th>Sign As</th>
               <th>Action</th>
@@ -278,8 +281,12 @@ export default function Prospects() {
           </thead>
           <tbody>
             {filtered.map(p => {
-              const ovr       = p.scouted ? p.overall : p.scoutedOverall;
-              const pot       = p.scouted ? p.potential : p.scoutedPotential;
+              const sum       = getScoutingSummary(p, state);
+              const target    = isScoutTarget(p, state);
+              const ovrText   = sum.displayOvrText;
+              const potText   = sum.displayPotText;
+              const ovrColor  = sum.displayOvr.exact ? ratingColor(sum.displayOvr.value) : "#93c5fd";
+              const potColor  = sum.displayPot.exact ? ratingColor(sum.displayPot.value) : "#c4b5fd";
               const slot      = signAs[p.id] || "starter";
               const cost      = getSigningCost(p);
               const overBy    = slot === "starter" ? Math.max(0, cost - remaining) : 0;
@@ -288,23 +295,18 @@ export default function Prospects() {
                 <tr key={p.id}>
                   <td className="player-name">
                     <button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button>
-                    {p.scouted && <span className="signed-badge"> ✓</span>}
+                    {sum.confidence >= 100 && <span className="signed-badge"> ✓</span>}
+                    {sum.hiddenGem && <span title="Hidden gem candidate"> 💎</span>}
                   </td>
                   <td>{p.age}</td>
                   <td>{p.region}</td>
                   <td><span className="role-pill ui-pill ui-pill-neutral">{p.primary}</span></td>
                   <td><span className="arch-pill ui-pill ui-pill-accent">{ARCH_LABELS[p.archetype] ?? p.archetype}</span></td>
                   <td>{p.developmentCurve}</td>
-                  <td>
-                    <span style={{ color: ratingColor(ovr), fontWeight: "bold" }}>
-                      {ovr}{!p.scouted && "~"}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ color: ratingColor(pot) }}>
-                      {pot}{!p.scouted && "~"}
-                    </span>
-                  </td>
+                  <td><span style={{ color: ovrColor, fontWeight: "bold" }}>{ovrText}</span></td>
+                  <td><span style={{ color: potColor }}>{potText}</span></td>
+                  <td><span style={{ color: sum.confidence >= 75 ? "#34d399" : sum.confidence >= 50 ? "#60a5fa" : sum.confidence >= 25 ? "#fbbf24" : "#f87171", fontWeight: 600 }}>{sum.confidence}%</span></td>
+                  <td><Pill tone="neutral">{sum.risk}</Pill></td>
                   <td className="salary">${(cost / 1000).toFixed(0)}k</td>
                   <td>
                     <select
@@ -316,8 +318,11 @@ export default function Prospects() {
                       <option value="sub">Sub</option>
                     </select>
                   </td>
-                  <td>
-                    <button className="btn-secondary" style={{ padding: "4px 8px", marginRight: 8 }} onClick={() => toggleShortlist(p.id)}>{shortlist.has(p.id) ? "★" : "☆"}</button>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {target && sum.confidence < 100 && (
+                      <button className="btn-secondary" style={{ padding: "4px 8px", marginRight: 6 }} disabled={assignmentsLeft < 1} title="Scout (1 assignment)" onClick={() => scout(p.id, false)}>Scout</button>
+                    )}
+                    <button className="btn-secondary" style={{ padding: "4px 8px", marginRight: 6 }} onClick={() => toggleShortlist(p.id)}>{shortlist.has(p.id) ? "★" : "☆"}</button>
                     {canAfford ? (
                       <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>Sign</button>
                     ) : (
