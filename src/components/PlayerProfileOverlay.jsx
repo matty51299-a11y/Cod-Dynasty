@@ -7,7 +7,7 @@ import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { isCdlTeamId } from "../utils/playerIdentity.js";
 import {
   getPlayerValuation, getAskingPrice, getTransferStatus, getTransferBudget,
-  isTransferWindowOpen, fmtFee,
+  isTransferWindowOpen, fmtFee, getTransferIntel,
 } from "../engine/transferEngine.js";
 
 function ratingColor(v) {
@@ -144,6 +144,7 @@ export default function PlayerProfileOverlay() {
             const val = getPlayerValuation(player, state);
             const status = getTransferStatus(player, state);
             const windowOpen = isTransferWindowOpen(state);
+            const intel = !isMine ? getTransferIntel(player, state, state.userTeamId) : null;
             return (
               <div className="pm-section pm-transfer-section">
                 <div className="pm-section-title">Transfer</div>
@@ -152,6 +153,11 @@ export default function PlayerProfileOverlay() {
                   <span><span className="pm-strip-lbl">{isMine ? "Asking" : "Est. Value"}</span> {fmtFee(isMine ? getAskingPrice(player, state) : val)}</span>
                   <span><span className="pm-strip-lbl">Status</span> {status}</span>
                   {isMine && <span><span className="pm-strip-lbl">Your Budget</span> {fmtFee(getTransferBudget(state, state.userTeamId).balance)}</span>}
+                  {intel && <span><span className="pm-strip-lbl">Club Stance</span> {intel.clubStance}</span>}
+                  {intel && <span><span className="pm-strip-lbl">Player Interest</span> {intel.playerInterest}</span>}
+                  {intel && <span><span className="pm-strip-lbl">Difficulty</span> {intel.dealDifficulty}</span>}
+                  {intel && <span><span className="pm-strip-lbl">Expected Role</span> {intel.expectedRole}</span>}
+                  {intel && <span><span className="pm-strip-lbl">Expected Salary</span> {fmtFee(intel.expectedSalary)}</span>}
                 </div>
                 {isMine ? (
                   <div className="pm-transfer-actions">

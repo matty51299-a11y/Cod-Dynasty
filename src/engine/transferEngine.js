@@ -24,7 +24,7 @@ export const TRANSFER_STATUSES = [
   "Open to Offers", "Transfer Listed", "Not For Sale",
   "Unsettled", "Wants Move", "Recently Signed", "Protected",
 ];
-export const OFFER_STATUSES = ["Pending", "Accepted", "Rejected", "Countered", "Withdrawn", "Expired"];
+export const OFFER_STATUSES = ["Pending", "Accepted", "Completed", "Rejected", "Countered", "Withdrawn", "Expired", "Cancelled"];
 
 // ── Tiny deterministic helpers ───────────────────────────────────────────────
 function hashStr(str) {
@@ -51,6 +51,8 @@ export function migrateTransferMarket(existing) {
     budgets: e.budgets && typeof e.budgets === "object" ? e.budgets : {},    // { [teamId]: {balance, spend, income} }
     recentlyTransferred: e.recentlyTransferred && typeof e.recentlyTransferred === "object" ? e.recentlyTransferred : {},
     cooldowns: e.cooldowns && typeof e.cooldowns === "object" ? e.cooldowns : {},
+    pendingAcceptedOfferId: e.pendingAcceptedOfferId ?? null,
+    activeTermsOfferId: e.activeTermsOfferId ?? null,
     lastWaveKey: e.lastWaveKey ?? null,
     waveNonce: e.waveNonce ?? 0,
     nextId: e.nextId ?? 1,
@@ -163,64 +165,335 @@ export function getTransferBudget(state, teamId) {
 }
 
 // Salary-cap room for a buyer to add `salary` as a starter (subs are cap-free).
-function capRoomForStarter(state, teamId, addSalary, excludePlayerId = null) {
+export function capRoomForStarter(state, teamId, addSalary, excludePlayerId = null) {
   const starters = getActiveStarters(state.players, teamId).filter(p => p.id !== excludePlayerId);
   const committed = starters.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
   return getTeamCap(teamId) - committed - addSalary;
 }
 
-// ── Player willingness to move (buyer = destination) ─────────────────────────
-// 0..1 chance the player accepts joining `buyerTeamId`. First-pass: team
-// strength delta, budget tier, GM reputation, salary uplift, age, loyalty.
-export function playerWillingness(player, buyerTeamId, sellerTeamId, state, opts = {}) {
-  if (!player) return 0;
-  const buyerOvr = calcTeamOvr(buyerTeamId, state.players) || 75;
-  const sellerOvr = calcTeamOvr(sellerTeamId, state.players) || 75;
-  let w = 0.5;
-  const delta = buyerOvr - sellerOvr;
-  w += clamp(delta / 20, -0.35, 0.35);                 // upgrade good, downgrade bad
-  w += (getTeamBudgetTier(buyerTeamId) - getTeamBudgetTier(sellerTeamId)) * 0.04;
-  w += getGmReputation(state, buyerTeamId) * 0.12;
-  // Salary uplift offered (default: keep current salary).
-  const offeredSalary = opts.salary ?? player.salary ?? getSigningCost(player);
-  const cur = player.salary ?? getSigningCost(player);
-  w += clamp((offeredSalary - cur) / Math.max(cur, 1), -0.5, 0.5) * 0.2;
-  // Joining as a substitute is unattractive for a starter-quality player.
-  if (opts.asSub) w -= 0.25;
-  // Age: veterans chase contention, youngsters chase playing time on the rise.
-  const age = player.age ?? 23;
-  if (age >= 28) w += clamp(delta / 25, -0.1, 0.15);
-  // Loyalty / leadership: settled veterans are harder to move.
-  const loyalty = ((player.leadership ?? 50) + (player.workEthic ?? 50)) / 2;
-  if (loyalty >= 78) w -= 0.1;
+function currentTeamRank(state, teamId) {
+  const table = state?.schedule?.standings || state?.schedule?.stageStandings || {};
+  const rows = Object.entries(table).sort((a, b) => (b[1]?.points ?? 0) - (a[1]?.points ?? 0) || (b[1]?.wins ?? 0) - (a[1]?.wins ?? 0));
+  const idx = rows.findIndex(([id]) => id === teamId);
+  return idx >= 0 ? idx + 1 : Math.ceil(CDL_TEAMS.length / 2);
+}
+
+function teamRecentWinScore(state, teamId) {
+  const logs = (state?.schedule?.matchLog || state?.matchLog || []).slice(-24);
+  const mine = logs.filter(m => m.winnerId === teamId || m.loserId === teamId).slice(-8);
+  if (!mine.length) return 0.5;
+  return mine.filter(m => m.winnerId === teamId).length / mine.length;
+}
+
+function recentKd(player, state) {
+  const rows = state?.playerSeasonStats?.[player?.id] || [];
+  const cur = rows.find(r => r.season === state?.season) || rows[rows.length - 1];
+  if (!cur || !cur.deaths) return null;
+  return cur.kills / cur.deaths;
+}
+
+function roleRankOnTeam(player, state) {
+  const mates = getActiveStarters(state.players || [], player.teamId).sort((a, b) => (b.overall ?? 70) - (a.overall ?? 70));
+  const idx = mates.findIndex(p => p.id === player.id);
+  return idx >= 0 ? idx + 1 : 99;
+}
+
+function replacementRisk(state, sellerTeamId, player) {
+  const starters = getActiveStarters(state.players || [], sellerTeamId);
+  if (starters.length <= 4 && starters.some(p => p.id === player.id)) return 1;
+  const bench = (state.players || []).filter(p => p.teamId === sellerTeamId && p.isSub && !isInactivePlayer(p));
+  const sameRole = bench.filter(p => p.primary === player.primary).sort((a, b) => (b.overall ?? 70) - (a.overall ?? 70))[0];
+  const bestBench = bench.sort((a, b) => (b.overall ?? 70) - (a.overall ?? 70))[0];
+  const rep = sameRole || bestBench;
+  if (!rep) return 0.9;
+  const drop = (player.overall ?? 70) - (rep.overall ?? 65);
+  return clamp(drop / 14, 0, 1);
+}
+
+export function getTeamAttractiveness(state, teamId, opts = {}) {
+  const team = CDL_TEAMS.find(t => t.id === teamId);
+  const teamOvr = calcTeamOvr(teamId, state?.players || []) || 72;
+  const ovrs = CDL_TEAMS.map(t => ({ id: t.id, ovr: calcTeamOvr(t.id, state?.players || []) || 72 })).sort((a, b) => b.ovr - a.ovr);
+  const ovrRank = ovrs.findIndex(t => t.id === teamId) + 1 || 8;
+  const standingRank = currentTeamRank(state, teamId);
+  const ownerAmbition = team?.owner?.ambition ?? 60;
+  const budgetTier = getTeamBudgetTier(teamId);
+  const gmRep = getGmReputation(state, teamId);
+  const form = teamRecentWinScore(state, teamId);
+  let score = 45;
+  score += clamp((teamOvr - 76) * 2.2, -16, 24);
+  score += clamp((7 - ovrRank) * 2.2, -12, 14);
+  score += clamp((7 - standingRank) * 1.6, -10, 10);
+  score += (budgetTier - 3) * 3.5;
+  score += clamp((ownerAmbition - 60) / 3.5, -8, 12);
+  score += gmRep * 8;
+  score += (form - 0.5) * 12;
+  if (opts.salaryBoost) score += clamp(opts.salaryBoost * 10, -5, 10);
+  if (opts.promisedRole === "Starter") score += 5;
+  if (opts.promisedRole === "Substitute") score -= 8;
+  if (opts.promisedRole === "Prospect") score -= 12;
+  return { score: clamp(score, 0, 100), teamOvr, ovrRank, standingRank, form, ownerAmbition, budgetTier };
+}
+
+export function getProtectedPlayerInfo(player, state, buyerTeamId = null) {
+  if (!player || !player.teamId) return { protected: false, level: 0, reasons: [], requiredMultiplier: 1.1 };
   const status = getTransferStatus(player, state);
-  if (status === "Wants Move" || status === "Unsettled") w += 0.2;
-  return clamp01(w);
+  const rank = roleRankOnTeam(player, state);
+  const ovr = player.overall ?? 70;
+  const pot = player.potential ?? ovr;
+  const age = player.age ?? 23;
+  const sellerTeamId = player.teamId;
+  const sellerAttr = getTeamAttractiveness(state, sellerTeamId);
+  const sellerOvr = calcTeamOvr(sellerTeamId, state.players || []) || 75;
+  const buyerOvr = buyerTeamId ? (calcTeamOvr(buyerTeamId, state.players || []) || 75) : 75;
+  const kd = recentKd(player, state);
+  const risk = replacementRisk(state, sellerTeamId, player);
+  const reasons = [];
+  let level = 0;
+  if (status === "Recently Signed") { level += 5; reasons.push("recently signed"); }
+  if (status === "Not For Sale") { level += 4; reasons.push("marked not for sale"); }
+  if (rank === 1) { level += 3; reasons.push("highest OVR player"); }
+  else if (rank === 2) { level += 2; reasons.push("top-two player"); }
+  if (ovr >= 88) { level += 3; reasons.push("elite franchise talent"); }
+  else if (ovr >= 85) { level += 2; reasons.push("star starter"); }
+  if (age <= 22 && pot >= 90) { level += 3; reasons.push("young high-potential core piece"); }
+  else if (age <= 24 && pot >= 88) { level += 2; reasons.push("high-potential core piece"); }
+  if (sellerAttr.score >= 66 && rank <= 2) { level += 2; reasons.push("contending team core"); }
+  if ((CDL_TEAMS.find(t => t.id === sellerTeamId)?.owner?.ambition ?? 60) >= 75 && rank <= 2) { level += 1.5; reasons.push("high-ambition ownership"); }
+  if (kd != null && kd >= 1.12) { level += 1.5; reasons.push("elite recent form"); }
+  if (risk >= 0.75) { level += 2; reasons.push("no credible replacement"); }
+  if (buyerTeamId && buyerOvr >= sellerOvr - 1 && sellerAttr.score >= 58 && rank <= 2) { level += 1; reasons.push("direct competitor interest"); }
+  if (status === "Transfer Listed") level -= 4;
+  if (status === "Wants Move" || status === "Unsettled") level -= 2.5;
+  if ((player.contractYears ?? 1) <= 1) level -= 1;
+  level = Math.max(0, level);
+  const requiredMultiplier = level >= 10 ? 3.4 : level >= 7 ? 2.7 : level >= 4 ? 1.9 : level >= 2 ? 1.35 : 1.05;
+  return { protected: level >= 4, level, reasons, requiredMultiplier, rank, sellerAttractiveness: sellerAttr, replacementRisk: risk };
+}
+
+export function getTransferIntel(player, state, buyerTeamId = state?.userTeamId, opts = {}) {
+  if (!player || !state) return null;
+  const status = getTransferStatus(player, state);
+  const protectedInfo = getProtectedPlayerInfo(player, state, buyerTeamId);
+  const baseAsk = getAskingPrice(player, state);
+  const sellerAttr = getTeamAttractiveness(state, player.teamId);
+  const buyerAttr = getTeamAttractiveness(state, buyerTeamId, opts);
+  const terms = buildDefaultTransferTerms(state, { fromTeamId: buyerTeamId, toTeamId: player.teamId, playerId: player.id }, opts);
+  const willingness = evaluatePlayerTerms(player, buyerTeamId, player.teamId, state, terms);
+  let clubStance = "Will sell for right price";
+  if (status === "Transfer Listed") clubStance = "Transfer listed";
+  else if (status === "Not For Sale") clubStance = "Not for sale";
+  else if (protectedInfo.level >= 7) clubStance = "Protected franchise player";
+  else if (protectedInfo.protected) clubStance = "Protected";
+  else if (status === "Unsettled" || status === "Wants Move") clubStance = "Open to offers";
+  const diffScore = protectedInfo.level * 8 + (sellerAttr.score - buyerAttr.score) * 0.55 + (willingness.willingness < 0.35 ? 18 : willingness.willingness < 0.5 ? 10 : 0);
+  const dealDifficulty = diffScore >= 86 ? "Nearly impossible" : diffScore >= 62 ? "Very difficult" : diffScore >= 38 ? "Difficult" : diffScore >= 18 ? "Possible" : "Easy";
+  return {
+    clubStance,
+    playerInterest: willingness.interestLabel,
+    dealDifficulty,
+    playerWillingness: willingness.willingness,
+    askingPrice: baseAsk,
+    expectedSalary: terms.salary,
+    expectedRole: terms.promisedRole,
+    reason: willingness.reason,
+    protectedInfo,
+    sellerAttractiveness: sellerAttr.score,
+    buyerAttractiveness: buyerAttr.score,
+  };
+}
+
+export function isOutgoingTermsRequired(neg, state) {
+  if (!neg || !state) return false;
+  if (neg.initiator !== "user" || neg.fromTeamId !== state.userTeamId) return false;
+  if (neg.status !== "Accepted") return false;
+  if (neg.nextAction && neg.nextAction !== "player_terms") return false;
+  const player = (state.players || []).find(p => p.id === neg.playerId);
+  return !!player && player.teamId === neg.toTeamId;
+}
+
+export function getAcceptedOutgoingTermsOffers(state) {
+  const tm = migrateTransferMarket(state?.transferMarket);
+  return tm.negotiations.filter(n => isOutgoingTermsRequired(n, state));
+}
+
+export function getTransferTermsPreview(state, neg, termsOverride = {}) {
+  const player = (state?.players || []).find(p => p.id === neg?.playerId);
+  if (!state || !neg || !player) return null;
+  const terms = buildDefaultTransferTerms(state, neg, termsOverride);
+  const salary = terms.salary;
+  const contractYears = terms.contractYears;
+  const promisedRole = terms.promisedRole;
+  const buyerTeamId = neg.fromTeamId;
+  const sellerTeamId = neg.toTeamId;
+  const buyerStarters = getActiveStarters(state.players, buyerTeamId);
+  const userIsBuyer = buyerTeamId === state.userTeamId;
+  let asSub = false;
+  let releaseId = null;
+  let rosterNote = "Starter slot available";
+  if (promisedRole === "Substitute" || promisedRole === "Prospect") {
+    asSub = true;
+    rosterNote = promisedRole === "Prospect" ? "Prospect/depth role promised" : "Substitute role promised";
+  } else if (buyerStarters.length >= 4) {
+    if (userIsBuyer) {
+      const subs = state.players.filter(p => p.teamId === buyerTeamId && p.isSub && !isInactivePlayer(p));
+      asSub = true;
+      rosterNote = subs.length >= 1 ? "Roster full — release a starter or your sub first" : "Will join as your sub";
+    } else {
+      const weakest = [...buyerStarters].sort((a, b) => (a.overall ?? 70) - (b.overall ?? 70))[0];
+      releaseId = weakest?.id ?? null;
+      rosterNote = releaseId ? "AI buyer will release weakest starter" : "AI buyer roster check pending";
+    }
+  }
+  const capAfter = asSub ? getTeamCap(buyerTeamId) - getActiveStarters(state.players, buyerTeamId).reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0)
+    : capRoomForStarter(state, buyerTeamId, salary, releaseId);
+  return {
+    player, buyerTeamId, sellerTeamId,
+    transferFee: neg.counterFee ?? neg.agreedFee ?? neg.fee,
+    salary, contractYears, promisedRole, asSub, releaseId, capAfter, rosterNote,
+  };
+}
+
+export function buildDefaultTransferTerms(state, neg, overrides = {}) {
+  const player = (state?.players || []).find(p => p.id === neg?.playerId);
+  const buyerTeamId = neg?.fromTeamId;
+  const buyerStarters = getActiveStarters(state?.players || [], buyerTeamId);
+  const currentSalary = player?.salary ?? getSigningCost(player || {});
+  const starterQuality = (player?.overall ?? 70) >= (calcTeamOvr(buyerTeamId, state?.players || []) || 75) - 2;
+  let promisedRole = overrides.promisedRole || overrides.role;
+  if (!promisedRole) promisedRole = buyerStarters.length < 4 || starterQuality ? "Starter" : "Substitute";
+  const roleBoost = promisedRole === "Starter" ? 1.18 : promisedRole === "Substitute" ? 1.02 : 0.92;
+  const salary = round5k(overrides.salary ?? Math.max(currentSalary, getSigningCost(player || {}) * roleBoost));
+  const contractYears = clamp(Number(overrides.contractYears ?? player?.contractYears ?? 2), 1, 3);
+  return { promisedRole, salary, contractYears };
+}
+
+function interestLabel(w) {
+  if (w < 0.22) return "No interest";
+  if (w < 0.4) return "Low";
+  if (w < 0.55) return "Unclear";
+  if (w < 0.75) return "Interested";
+  return "Very interested";
+}
+
+export function evaluatePlayerTerms(player, buyerTeamId, sellerTeamId, state, opts = {}) {
+  if (!player) return { accepted: false, willingness: 0, interestLabel: "No interest", reason: "Player no longer available." };
+  const curSalary = player.salary ?? getSigningCost(player);
+  const defaults = buildDefaultTransferTerms(state, { fromTeamId: buyerTeamId, toTeamId: sellerTeamId, playerId: player.id }, opts);
+  const cleanOpts = Object.fromEntries(Object.entries(opts || {}).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+  const terms = { ...defaults, ...cleanOpts };
+  const salaryBoost = (terms.salary - curSalary) / Math.max(curSalary, 1);
+  const buyerAttr = getTeamAttractiveness(state, buyerTeamId, { promisedRole: terms.promisedRole, salaryBoost });
+  const sellerAttr = getTeamAttractiveness(state, sellerTeamId);
+  const buyerOvr = buyerAttr.teamOvr;
+  const sellerOvr = sellerAttr.teamOvr;
+  const deltaAttr = buyerAttr.score - sellerAttr.score;
+  const deltaOvr = buyerOvr - sellerOvr;
+  const currentStarter = getActiveStarters(state.players || [], sellerTeamId).some(p => p.id === player.id);
+  const age = player.age ?? 23;
+  const ovr = player.overall ?? 70;
+  const pot = player.potential ?? ovr;
+  const loyalty = ((player.leadership ?? 50) + (player.workEthic ?? 50)) / 2;
+  const status = getTransferStatus(player, state);
+
+  let w = 0.44;
+  w += clamp(deltaAttr / 70, -0.36, 0.36);
+  w += clamp(deltaOvr / 28, -0.2, 0.2);
+  w += clamp(salaryBoost, -0.4, 1.2) * 0.24;
+  if (terms.promisedRole === "Starter") w += currentStarter ? 0.04 : 0.22;
+  if (terms.promisedRole === "Substitute") w -= currentStarter || ovr >= 80 ? 0.28 : 0.12;
+  if (terms.promisedRole === "Prospect") w -= ovr >= 76 ? 0.32 : 0.1;
+  if (age >= 28) w += clamp(deltaAttr / 100, -0.12, 0.16);
+  if (age <= 22 && terms.promisedRole === "Starter") w += 0.08;
+  if (age <= 23 && pot >= 88 && terms.promisedRole !== "Starter") w -= 0.12;
+  if (loyalty >= 78 && currentStarter && deltaAttr < 12) w -= 0.13;
+  if (status === "Wants Move" || status === "Unsettled") w += 0.22;
+  if (status === "Transfer Listed") w += 0.1;
+  if (status === "Recently Signed") w -= 0.35;
+  if ((player.contractYears ?? 1) <= 1) w += 0.06;
+  if (ovr >= 86 && deltaAttr < -8 && salaryBoost < 0.75) w -= 0.22;
+
+  w = clamp01(w);
+  let reason = "Player is open to the project if the club agreement is in place.";
+  if (status === "Recently Signed") reason = "Player has only just signed and is not ready to move again.";
+  else if (terms.promisedRole !== "Starter" && (currentStarter || ovr >= 80)) reason = "Player wants a guaranteed starting role to consider the move.";
+  else if (deltaAttr < -18 && salaryBoost < 0.65) reason = "Player has no interest in joining a weaker competitive project without a major salary premium.";
+  else if (deltaAttr < -8 && ovr >= 84) reason = "Player does not view this as a step up and wants either a stronger project or a much higher salary.";
+  else if (salaryBoost < -0.05) reason = "Player wants a higher salary to consider the move.";
+  else if (loyalty >= 78 && currentStarter && deltaAttr < 12) reason = "Player is happy at his current club and would need a clearly better project.";
+  else if (w >= 0.75) reason = "Player is very interested in the role, salary and competitive project.";
+  else if (w >= 0.55) reason = "Player is interested, provided the promised role and salary are honoured.";
+  else if (w >= 0.4) reason = "Player interest is uncertain; stronger terms may be required.";
+  else if (sellerAttr.score > buyerAttr.score) reason = "Player is waiting for offers from stronger teams.";
+
+  return { accepted: w >= 0.48, willingness: w, interestLabel: interestLabel(w), reason, buyerAttractiveness: buyerAttr.score, sellerAttractiveness: sellerAttr.score, terms };
+}
+
+// ── Player willingness to move (buyer = destination) ─────────────────────────
+// Back-compatible numeric wrapper around the richer personal-terms evaluation.
+export function playerWillingness(player, buyerTeamId, sellerTeamId, state, opts = {}) {
+  return evaluatePlayerTerms(player, buyerTeamId, sellerTeamId, state, opts).willingness;
 }
 
 // ── Seller AI response to a buy offer (buyer offers `fee`) ────────────────────
 // Returns { decision: "accept"|"reject"|"counter", counterFee, reason }.
 export function evaluateSellResponse(state, player, buyerTeamId, fee) {
+  if (!isTransferWindowOpen(state)) return { decision: "reject", reason: "Transfer window is closed and event rosters are locked." };
   const ask = getAskingPrice(player, state);
   const status = getTransferStatus(player, state);
   const sellerTeamId = player.teamId;
+  const sellerName = teamName(sellerTeamId);
+  const protectedInfo = getProtectedPlayerInfo(player, state, buyerTeamId);
+  const sellerAttr = getTeamAttractiveness(state, sellerTeamId);
+  const buyerAttr = getTeamAttractiveness(state, buyerTeamId);
+  const sellerNeg = getGmNegotiation(state, sellerTeamId);
+  const buyerOvr = calcTeamOvr(buyerTeamId, state.players || []) || 75;
+  const sellerOvr = calcTeamOvr(sellerTeamId, state.players || []) || 75;
+  const ratio = fee / Math.max(ask, 1);
+  const starters = getActiveStarters(state.players || [], sellerTeamId);
 
-  // Not For Sale: only an enormous bid from a strong org gets considered.
-  if (status === "Not For Sale") {
-    const buyerStrong = getTeamBudgetTier(buyerTeamId) >= 5 || calcTeamOvr(buyerTeamId, state.players) >= 86;
-    if (fee >= ask * (buyerStrong ? 1.1 : 1.5)) return { decision: "accept", reason: "Blown away by the bid" };
-    return { decision: "reject", reason: "Not for sale" };
+  if (starters.length <= 4 && starters.some(p => p.id === player.id) && protectedInfo.replacementRisk >= 0.9 && status !== "Transfer Listed" && status !== "Wants Move" && status !== "Unsettled" && ratio < 2.2) {
+    return { decision: "reject", reason: `${sellerName} cannot replace ${player.name} without weakening their starting roster.` };
+  }
+  if (status === "Recently Signed") {
+    return { decision: "reject", reason: `${player.name} has only just signed; ${sellerName} will not move him again this window.` };
+  }
+  if (status === "Not For Sale" && ratio < 2.4) {
+    return { decision: "reject", reason: `${sellerName} have marked ${player.name} Not For Sale and will not negotiate below an extreme premium.` };
+  }
+  if (protectedInfo.protected && ratio < protectedInfo.requiredMultiplier * 0.88) {
+    return { decision: "reject", reason: `${sellerName} consider ${player.name} vital (${protectedInfo.reasons.slice(0, 2).join(", ") || "protected player"}). Offer is far below protected-player valuation.` };
+  }
+  if (protectedInfo.rank === 1 && sellerAttr.score >= 62 && ratio < 2.6) {
+    return { decision: "reject", reason: `${sellerName} are contending and will not sell their highest OVR player unless the offer is extraordinary.` };
+  }
+  if (buyerOvr >= sellerOvr - 1 && sellerAttr.score >= 58 && protectedInfo.rank <= 2 && ratio < 2.3) {
+    return { decision: "reject", reason: `${sellerName} will not strengthen a direct competitor without a massive premium.` };
   }
 
-  // GM negotiation lets the seller hold out for a touch more.
-  const sellerNeg = getGmNegotiation(state, sellerTeamId);
-  const acceptThreshold = ask * (0.96 + sellerNeg * 0.06);     // ~0.96–1.02× asking
-  if (fee >= acceptThreshold) return { decision: "accept", reason: "Fee meets valuation" };
+  let required = 1.0 + sellerNeg * 0.08;
+  if (status === "Transfer Listed") required = 0.78 + sellerNeg * 0.04;
+  else if (status === "Wants Move" || status === "Unsettled") required = 0.92 + sellerNeg * 0.06;
+  else required += clamp(protectedInfo.level * 0.13, 0, 1.75);
+  required += clamp((sellerAttr.score - buyerAttr.score) / 150, -0.08, 0.18);
+  if ((player.contractYears ?? 1) >= 3) required += 0.12;
+  if (protectedInfo.replacementRisk > 0.55) required += protectedInfo.replacementRisk * 0.22;
+  if (status === "Not For Sale") required = Math.max(required, 2.7);
 
-  // Way too low → reject; otherwise counter toward the asking price.
-  if (fee < ask * 0.5) return { decision: "reject", reason: "Derisory bid" };
-  const counterFee = round5k(Math.max(fee * 1.15, (ask + fee) / 2 + ask * 0.05));
-  return { decision: "counter", counterFee, reason: "Below valuation — countered" };
+  if (ratio >= required) {
+    return { decision: "accept", reason: status === "Transfer Listed" ? `${sellerName} accept because ${player.name} is transfer listed and the fee meets their valuation.` : `${sellerName} accept an above-market fee that offsets ${player.name}'s importance.` };
+  }
+  if (ratio < Math.min(0.58, required * 0.45)) {
+    return { decision: "reject", reason: `${sellerName} rejected the offer. ${player.name} is valued much higher due to role importance and contract status.` };
+  }
+  if (protectedInfo.protected && ratio < required * 0.65) {
+    return { decision: "reject", reason: `${sellerName} rejected the offer. ${player.name} is a protected player and requires an extreme fee.` };
+  }
+  const counterFee = round5k(Math.max(ask * required, fee * (1.18 + sellerNeg * 0.12)));
+  const reason = protectedInfo.protected
+    ? `${sellerName} are reluctant to sell a protected player and value him at ${fmtFee(counterFee)} due to ${protectedInfo.reasons.slice(0, 2).join(" and ") || "his importance"}.`
+    : `${sellerName} are open to selling but value the player at ${fmtFee(counterFee)} due to contract length, role importance and replacement cost.`;
+  return { decision: "counter", counterFee, reason };
 }
 
 // ── Buyer (AI) response when the user counters an incoming offer ─────────────
@@ -249,6 +522,8 @@ export function aiInterestInPlayer(state, buyerTeamId, player) {
   if (!player || player.teamId === buyerTeamId) return null;
   if (isInactivePlayer(player)) return null;
   if (getTransferStatus(player, state) === "Recently Signed") return null;
+  const protection = getProtectedPlayerInfo(player, state, buyerTeamId);
+  if (protection.protected && protection.level >= 7) return null;
 
   const buyerOvr = calcTeamOvr(buyerTeamId, state.players) || 75;
   const sellerOvr = calcTeamOvr(player.teamId, state.players) || 75;
@@ -270,12 +545,15 @@ export function aiInterestInPlayer(state, buyerTeamId, player) {
   if (age <= 23 && pot >= 86) score += 0.2;                  // young upside
   if (getTransferStatus(player, state) === "Transfer Listed") score += 0.25;
   if (getTransferStatus(player, state) === "Wants Move") score += 0.2;
+  if (protection.protected) score -= 0.25;
   // Ambition of the buying owner.
   const owner = CDL_TEAMS.find(t => t.id === buyerTeamId)?.owner;
   if (owner) score += clamp((owner.ambition - 60) / 200, -0.1, 0.15);
   // GM scouting/negotiation sharpens recruitment.
   score += getGmNegotiation(state, buyerTeamId) * 0.1;
 
+  const termsInterest = evaluatePlayerTerms(player, buyerTeamId, player.teamId, state, { promisedRole: "Starter" });
+  if (!termsInterest.accepted && termsInterest.willingness < 0.42) return null;
   if (score < 0.45) return null;
 
   // Affordability: transfer budget for the fee + cap room for wages (AI frees a slot).
@@ -355,21 +633,26 @@ export function generateIncomingOffers(state) {
 // ── Apply a completed transfer (player moves buyer←seller) ───────────────────
 // Returns { players, transferMarket, feed, notif, blockedReason }. Does not run
 // integrity itself (the reducer runs ensureCdlRosterIntegrity afterwards).
-export function buildTransferResult(state, neg, agreedFee) {
+export function buildTransferResult(state, neg, agreedFee, terms = {}) {
   const buyerTeamId = neg.fromTeamId;
   const sellerTeamId = neg.toTeamId;
   const player = state.players.find(p => p.id === neg.playerId);
   if (!player || player.teamId !== sellerTeamId) {
     return { blockedReason: "Player is no longer available." };
   }
-  const salary = player.salary ?? getSigningCost(player);
+  const agreedTerms = buildDefaultTransferTerms(state, neg, terms);
+  const salary = agreedTerms.salary;
+  const contractYears = agreedTerms.contractYears;
+  const promisedRole = agreedTerms.promisedRole;
   const userIsBuyer = buyerTeamId === state.userTeamId;
 
   // Determine destination slot.
   const buyerStarters = getActiveStarters(state.players, buyerTeamId);
   let asSub = false;
   let releaseId = null;
-  if (buyerStarters.length >= 4) {
+  if (promisedRole === "Substitute" || promisedRole === "Prospect") {
+    asSub = true;
+  } else if (buyerStarters.length >= 4) {
     if (userIsBuyer) {
       const subs = state.players.filter(p => p.teamId === buyerTeamId && p.isSub && !isInactivePlayer(p));
       if (subs.length >= 1) {
@@ -404,8 +687,8 @@ export function buildTransferResult(state, neg, agreedFee) {
         ? hist : [...hist, { season: state.season, teamId: buyerTeamId }];
       return {
         ...p, teamId: buyerTeamId, challengerTeamId: null, status: "cdl", circuit: "cdl",
-        isSub: asSub, contractYears: Math.max(1, p.contractYears ?? 2), teamHistory,
-        previousTeamId: sellerTeamId,
+        isSub: asSub, salary, contractYears: Math.max(1, contractYears), teamHistory,
+        previousTeamId: sellerTeamId, promisedRole,
       };
     }
     if (p.id === releaseId) {

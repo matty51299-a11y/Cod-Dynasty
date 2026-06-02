@@ -9715,3 +9715,112 @@ body { background: #111317; }
 .tr-btn { padding: 3px 8px !important; margin-left: 5px; font-size: .76rem; }
 .transfer-centre .roster-table td, .transfer-centre .roster-table th { vertical-align: middle; }
 .pm-transfer-section .pm-transfer-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+
+/* ── Transfer accepted / terms-required UX ───────────────────────────────── */
+.tr-action-banner,
+.tr-action-required {
+  border: 1px solid rgba(251, 191, 36, 0.42);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.16), rgba(96, 165, 250, 0.08));
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  box-shadow: var(--shadow);
+}
+.tr-action-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tr-action-banner strong,
+.tr-action-required h4 { color: var(--text-head); }
+.tr-action-banner span,
+.tr-action-required span { display: block; color: var(--text-dim); font-size: 0.82rem; margin-top: 2px; }
+.tr-action-required-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.tr-action-required-head h4 { margin: 0; font-size: 0.95rem; letter-spacing: 0.02em; }
+.tr-substatus { display: block; color: var(--yellow); font-size: 0.72rem; font-weight: 700; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.transfer-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 9, 18, 0.72);
+  backdrop-filter: blur(4px);
+}
+.transfer-modal {
+  width: min(560px, 96vw);
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  border-top: 4px solid var(--yellow);
+  border-radius: 18px;
+  background: var(--bg2);
+  color: var(--text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  padding: 22px;
+}
+.transfer-modal-kicker {
+  color: var(--yellow);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 6px;
+}
+.transfer-modal h2 { margin: 0 0 10px; color: var(--text-head); font-size: 1.45rem; }
+.transfer-modal p { margin: 0 0 14px; color: var(--text-dim); line-height: 1.45; }
+.transfer-modal-summary,
+.transfer-terms-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+.transfer-modal-summary span,
+.transfer-terms-grid span {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg3);
+  padding: 9px 10px;
+  color: var(--text);
+}
+.transfer-modal-summary strong,
+.transfer-terms-grid strong {
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+.transfer-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.tr-impact-good { color: var(--green) !important; }
+.tr-impact-bad { color: var(--red) !important; }
+.tr-modal-warning { margin: 4px 0 12px; }
+@media (max-width: 680px) {
+  .tr-action-banner { align-items: flex-start; flex-direction: column; }
+  .transfer-modal-summary,
+  .transfer-terms-grid { grid-template-columns: 1fr; }
+}
+.transfer-terms-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.transfer-terms-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.transfer-terms-controls select,
+.transfer-terms-controls input { width: 100%; }
+@media (max-width: 680px) {
+  .transfer-terms-controls { grid-template-columns: 1fr; }
+}

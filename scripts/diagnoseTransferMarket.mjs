@@ -21,6 +21,8 @@ import {
   migrateTransferMarket, isTransferWindowOpen, getWindowKey, generateIncomingOffers,
   getPlayerValuation, getAskingPrice, evaluateSellResponse, evaluateBuyerCounterResponse,
   buildTransferResult, getTransferBudget, getTransferStatus, getLeagueTransferListed,
+  getAcceptedOutgoingTermsOffers, getTransferTermsPreview, isOutgoingTermsRequired,
+  getProtectedPlayerInfo, evaluatePlayerTerms, getTransferIntel,
 } from "../src/engine/transferEngine.js";
 
 let pass = 0, fail = 0;
@@ -182,21 +184,45 @@ function noDuplicateOwnership(state) {
   }
 }
 
-// ── 6. Outgoing offer: seller response logic ─────────────────────────────────
+// ── 6. Outgoing offer realism: protected, listed, reasons ───────────────────
 {
   const s = newGame("boston");
-  const target = s.players.filter(p => p.teamId === "g2" && !p.isSub)[0];
-  const ask = getAskingPrice(target, s);
-  const lowResp = evaluateSellResponse(s, target, "boston", Math.round(ask * 0.3));
-  check("outgoing: derisory bid rejected", lowResp.decision === "reject", lowResp.decision);
-  const midResp = evaluateSellResponse(s, target, "boston", Math.round(ask * 0.8));
-  check("outgoing: mid bid countered", midResp.decision === "counter" && midResp.counterFee > ask * 0.8, midResp.decision);
-  const fullResp = evaluateSellResponse(s, target, "boston", Math.round(ask * 1.05));
-  check("outgoing: full bid accepted", fullResp.decision === "accept", fullResp.decision);
-  // Not-for-sale rejects normal bids.
-  const nfs = { ...s, transferMarket: { ...s.transferMarket, status: { [target.id]: { transferStatus: "Not For Sale" } } } };
-  const nfsResp = evaluateSellResponse(nfs, target, "boston", getAskingPrice(target, s));
-  check("outgoing: NFS rejects a normal bid", nfsResp.decision === "reject", nfsResp.decision);
+  const elite = s.players.filter(p => p.teamId && p.teamId !== "boston" && !p.isSub).sort((a, b) => b.overall - a.overall || b.potential - a.potential)[0];
+  const eliteAsk = getAskingPrice(elite, s);
+  const eliteInfo = getProtectedPlayerInfo(elite, s, "boston");
+  const normalEliteResp = evaluateSellResponse(s, elite, "boston", Math.round(eliteAsk * 1.05));
+  check("realism: protected elite normal offer rejected", eliteInfo.protected && normalEliteResp.decision === "reject", `${elite.name} ${normalEliteResp.decision}: ${normalEliteResp.reason}`);
+  check("realism: protected rejection reason recorded", /protected|vital|highest|replace|contending|competitor/i.test(normalEliteResp.reason), normalEliteResp.reason);
+  const extremeEliteResp = evaluateSellResponse(s, elite, "boston", Math.round(eliteAsk * 3.25));
+  check("realism: protected elite needs extreme fee or still refuses", ["accept", "counter", "reject"].includes(extremeEliteResp.decision) && extremeEliteResp.reason, extremeEliteResp.reason || extremeEliteResp.decision);
+
+  const listedTarget = s.players.filter(p => p.teamId === "g2" && !p.isSub).sort((a, b) => (a.overall ?? 70) - (b.overall ?? 70))[0];
+  const listedState = { ...s, transferMarket: { ...s.transferMarket, status: { [listedTarget.id]: { transferStatus: "Transfer Listed" } } } };
+  const listedAsk = getAskingPrice(listedTarget, listedState);
+  const listedResp = evaluateSellResponse(listedState, listedTarget, "boston", Math.round(listedAsk * 0.9));
+  check("realism: transfer-listed player easier to buy", ["accept", "counter"].includes(listedResp.decision), `${listedResp.decision}: ${listedResp.reason}`);
+
+  const weakBuyer = "cloud9";
+  const star = s.players.filter(p => p.teamId !== weakBuyer && p.teamId && !p.isSub).sort((a, b) => b.overall - a.overall)[0];
+  const weakTerms = evaluatePlayerTerms(star, weakBuyer, star.teamId, { ...s, userTeamId: weakBuyer }, { promisedRole: "Substitute", salary: star.salary ?? getSigningCost(star), contractYears: 1 });
+  check("realism: weak/poor terms cannot easily sign elite star", !weakTerms.accepted, `${weakTerms.interestLabel}: ${weakTerms.reason}`);
+  check("realism: player rejection reason is recorded", /role|weaker|step up|salary|stronger|current club/i.test(weakTerms.reason), weakTerms.reason);
+
+  const weakerCurrent = s.players.filter(p => p.teamId && !p.isSub).sort((a, b) => (calcSafeTeamOvr(s, a.teamId) - calcSafeTeamOvr(s, b.teamId)) || b.overall - a.overall)[0];
+  const strongBuyer = "riyadh";
+  const strongTerms = evaluatePlayerTerms(weakerCurrent, strongBuyer, weakerCurrent.teamId, s, { promisedRole: "Starter", salary: (weakerCurrent.salary ?? getSigningCost(weakerCurrent)) * 1.35, contractYears: 2 });
+  check("realism: player on weaker current team more open to strong project", strongTerms.willingness >= weakTerms.willingness, `${strongTerms.interestLabel}: ${strongTerms.reason}`);
+
+  const thinResp = evaluateSellResponse(s, elite, "boston", Math.round(eliteAsk * 1.4));
+  check("realism: selling team refuses if replacement/roster impact is bad", /replace|weakening|vital|protected|highest|contending/i.test(thinResp.reason), thinResp.reason);
+
+  const intel = getTransferIntel(elite, s, "boston");
+  check("realism: transfer intel exposes stance/interest/difficulty", !!intel?.clubStance && !!intel?.playerInterest && !!intel?.dealDifficulty, JSON.stringify(intel));
+}
+
+function calcSafeTeamOvr(state, teamId) {
+  const starters = getActiveStarters(state.players, teamId);
+  return starters.length ? starters.reduce((sum, p) => sum + (p.overall ?? 70), 0) / starters.length : 70;
 }
 
 // ── 7. Transfer budget + league-listed selector ──────────────────────────────
@@ -216,6 +242,35 @@ function noDuplicateOwnership(state) {
   check("hydrate: structure", tm && Array.isArray(tm.negotiations) && typeof tm.budgets === "object");
   check("hydrate: status read defaults to Open to Offers", getTransferStatus(s.players.find(p => p.teamId), { ...s, transferMarket: tm }) === "Open to Offers");
   check("hydrate: window key derivable", typeof getWindowKey({ ...s, transferMarket: tm }) === "string");
+}
+
+// ── 9. Accepted outgoing offer requires terms, then completes cleanly ────────
+{
+  const s = newGame("boston");
+  const target = s.players.filter(p => p.teamId === "g2" && !p.isSub).sort((a, b) => b.overall - a.overall)[0];
+  const fee = getPlayerValuation(target, s);
+  const accepted = {
+    id: "tr_terms", fromTeamId: "boston", toTeamId: "g2", playerId: target.id,
+    offerType: "buyout", fee, agreedFee: fee, status: "Accepted", nextAction: "player_terms",
+    initiator: "user", history: [{ by: "boston", action: "offer", fee }, { by: "g2", action: "accept", fee }],
+  };
+  const pendingState = { ...s, transferMarket: { ...s.transferMarket, negotiations: [accepted], pendingAcceptedOfferId: accepted.id } };
+  check("terms: accepted outgoing offer is action-required", isOutgoingTermsRequired(accepted, pendingState));
+  check("terms: selector finds accepted outgoing terms offer", getAcceptedOutgoingTermsOffers(pendingState).length === 1);
+  const preview = getTransferTermsPreview(pendingState, accepted);
+  check("terms: preview includes fee/salary/contract/cap", !!preview && preview.transferFee === fee && preview.salary > 0 && preview.contractYears > 0 && typeof preview.capAfter === "number");
+  const badTerms = evaluatePlayerTerms(target, "boston", "g2", pendingState, { promisedRole: "Substitute", salary: target.salary ?? getSigningCost(target), contractYears: 1 });
+  check("terms: accepted club fee can still fail at player terms", !badTerms.accepted && !!badTerms.reason, `${badTerms.interestLabel}: ${badTerms.reason}`);
+  const result = buildTransferResult(pendingState, accepted, fee);
+  check("terms: confirm transfer result is not blocked", !result.blockedReason, result.blockedReason || "");
+  if (!result.blockedReason) {
+    const negotiations = result.transferMarket.negotiations.map(n => n.id === accepted.id ? { ...n, status: "Completed", nextAction: "done", agreedFee: fee } : n);
+    const completed = ensureCdlRosterIntegrity({ ...pendingState, players: result.players, transferMarket: { ...result.transferMarket, negotiations } }, { windowType: "transfer" });
+    check("terms: player moves to user team", completed.players.find(p => p.id === target.id)?.teamId === "boston");
+    check("terms: player leaves selling team", !completed.players.some(p => p.id === target.id && p.teamId === "g2"));
+    check("terms: negotiation becomes completed", completed.transferMarket.negotiations.find(n => n.id === accepted.id)?.status === "Completed");
+    check("terms: no duplicate ownership after completion", noDuplicateOwnership(completed));
+  }
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
