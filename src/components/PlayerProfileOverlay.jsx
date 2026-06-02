@@ -4,6 +4,11 @@ import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import TeamLogo from "./TeamLogo.jsx";
 import { buildPlayerHistory, findPlayerEverywhere, getPlayerCurrentStatus, kdText } from "../utils/historyProfiles.js";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { isCdlTeamId } from "../utils/playerIdentity.js";
+import {
+  getPlayerValuation, getAskingPrice, getTransferStatus, getTransferBudget,
+  isTransferWindowOpen, fmtFee,
+} from "../engine/transferEngine.js";
 
 function ratingColor(v) {
   if (v >= 90) return "#166534";
@@ -29,9 +34,10 @@ function stockLabel(player) {
 }
 
 export default function PlayerProfileOverlay() {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const { openPlayerRef, closePlayerProfile } = usePlayerProfile();
   const [tab, setTab] = useState(null);
+  const [offerK, setOfferK] = useState("");
   const player = useMemo(() => findPlayerEverywhere(state, openPlayerRef), [state, openPlayerRef]);
   const history = useMemo(() => buildPlayerHistory(state, player), [state, player]);
 
@@ -132,6 +138,37 @@ export default function PlayerProfileOverlay() {
               <ProfileStat label="Best CQ" value={summary.bestCQ || "Not tracked"} />
             </div>
           </div>
+
+          {player && player.teamId && isCdlTeamId(player.teamId) && (() => {
+            const isMine = player.teamId === state.userTeamId;
+            const val = getPlayerValuation(player, state);
+            const status = getTransferStatus(player, state);
+            const windowOpen = isTransferWindowOpen(state);
+            return (
+              <div className="pm-section pm-transfer-section">
+                <div className="pm-section-title">Transfer</div>
+                <div className="pm-info-strip">
+                  <span><span className="pm-strip-lbl">Club</span> {resolveTeamDisplay(player.teamId, state.schedule)?.name ?? player.teamId}</span>
+                  <span><span className="pm-strip-lbl">{isMine ? "Asking" : "Est. Value"}</span> {fmtFee(isMine ? getAskingPrice(player, state) : val)}</span>
+                  <span><span className="pm-strip-lbl">Status</span> {status}</span>
+                  {isMine && <span><span className="pm-strip-lbl">Your Budget</span> {fmtFee(getTransferBudget(state, state.userTeamId).balance)}</span>}
+                </div>
+                {isMine ? (
+                  <div className="pm-transfer-actions">
+                    <button className="btn-secondary tr-btn" disabled={status === "Recently Signed"} onClick={() => dispatch({ type: "SET_TRANSFER_STATUS", playerId: player.id, status: "Transfer Listed" })}>Transfer List</button>
+                    <button className="btn-secondary tr-btn" disabled={status === "Recently Signed"} onClick={() => dispatch({ type: "SET_TRANSFER_STATUS", playerId: player.id, status: "Open to Offers" })}>Open to Offers</button>
+                    <button className="btn-danger-sm" disabled={status === "Recently Signed"} onClick={() => dispatch({ type: "SET_TRANSFER_STATUS", playerId: player.id, status: "Not For Sale" })}>Not For Sale</button>
+                  </div>
+                ) : (
+                  <div className="pm-transfer-actions">
+                    <input className="slot-select tr-fee-input" type="number" placeholder={`${(val / 1000).toFixed(0)}k`} value={offerK} onChange={e => setOfferK(e.target.value)} disabled={!windowOpen} />
+                    <button className="btn-primary-sm" disabled={!windowOpen || !(Number(offerK) > 0)} onClick={() => { dispatch({ type: "MAKE_TRANSFER_OFFER", playerId: player.id, fee: Number(offerK) * 1000 }); setOfferK(""); }}>Make Offer</button>
+                    {!windowOpen && <span className="muted" style={{ fontSize: ".75rem" }}>Window closed during live events</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="pm-section">
             <div className="pm-section-title">Season {season.season}</div>

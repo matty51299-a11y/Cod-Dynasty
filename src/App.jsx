@@ -24,6 +24,7 @@ import BoardObjectives   from "./components/BoardObjectives.jsx";
 import FreeAgency        from "./components/FreeAgency.jsx";
 import Prospects         from "./components/Prospects.jsx";
 import Scouting          from "./components/Scouting.jsx";
+import TransferCentre    from "./components/TransferCentre.jsx";
 import MatchLog          from "./components/MatchLog.jsx";
 import StaffPanel        from "./components/StaffPanel.jsx";
 import MajorEntryOverlay    from "./components/MajorEntryOverlay.jsx";
@@ -162,6 +163,7 @@ export default function App() {
           {screen === "fa"        && <FreeAgency />}
           {screen === "prospects" && <Prospects />}
           {screen === "scouting"  && <Scouting />}
+          {screen === "transfers" && <TransferCentre />}
           {screen === "devreport" && <OffseasonReport />}
           {screen === "staff"     && <StaffPanel />}
           {screen === "log"       && <MatchLog />}

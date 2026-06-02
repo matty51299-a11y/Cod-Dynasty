@@ -27,6 +27,8 @@ const FEED_META = {
   kd_leader:      { icon: "↑", color: "var(--accent)" },
   top4_climb:     { icon: "▲", color: "var(--green)" },
   out_top8:       { icon: "▼", color: "var(--red)" },
+  transfer_offer: { icon: "⇄", color: "#fbbf24" },
+  transfer_done:  { icon: "⇄", color: "var(--accent)" },
 };
 
 // Maps feed type → filter category
@@ -45,6 +47,8 @@ const TYPE_CATEGORY = {
   retirement:     "transfers",
   roster_move:    "transfers",
   prospect_class: "transfers",
+  transfer_offer: "transfers",
+  transfer_done:  "transfers",
   kd_leader:      "performance",
   standout_perf:  "performance",
   win_streak:     "performance",
