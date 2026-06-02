@@ -9,6 +9,7 @@ import { isInactivePlayer } from "../utils/playerIdentity.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
+import { getScoutingSummary, isScoutTarget } from "../engine/scoutingEngine.js";
 
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
@@ -191,8 +192,18 @@ export default function FreeAgency() {
                   <td>{p.age}</td>
                   <td><span className="role-pill ui-pill ui-pill-neutral">{p.primary}</span></td>
                   <td>{p.previousTeamId ? (resolveTeamDisplay(p.previousTeamId, state.schedule)?.tag || p.previousTeamId) : "Unsigned"}</td>
-                  <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
-                  <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
+                  {(() => {
+                    const target = isScoutTarget(p, state);
+                    if (!target) return (<>
+                      <td><span style={{ color: ratingColor(p.overall), fontWeight: "bold" }}>{p.overall}</span></td>
+                      <td><span style={{ color: ratingColor(p.potential) }}>{p.potential}</span></td>
+                    </>);
+                    const sum = getScoutingSummary(p, state);
+                    return (<>
+                      <td><span style={{ color: "#93c5fd", fontWeight: "bold" }} title={`Scout confidence ${sum.confidence}%`}>{sum.displayOvrText}</span></td>
+                      <td><span style={{ color: "#c4b5fd" }} title={`Scout confidence ${sum.confidence}%`}>{sum.displayPotText}</span></td>
+                    </>);
+                  })()}
                   <td style={{ color: ratingColor(p.gunny) }}>{p.gunny}</td>
                   <td style={{ color: ratingColor(p.clutch) }}>{p.clutch}</td>
                   <td style={{ color: ratingColor(p.searchIQ) }}>{p.searchIQ}</td>

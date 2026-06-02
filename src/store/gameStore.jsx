@@ -17,6 +17,7 @@ import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from ".
 import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "../engine/staffEngine.js";
 import { migrateBoardState, buildBoardObjectives, objectivesNeedRegen, BOARD_OBJ_VERSION, nudgeConfidenceAfterMajor, runBoardReview } from "../engine/boardEngine.js";
 import { ensureTeamMapProfiles } from "../engine/mapProfile.js";
+import { migrateUserScouting, applyScout, toggleShortlist } from "../engine/scoutingEngine.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
@@ -243,6 +244,7 @@ function createInitialGameState(userTeamId) {
     staff: ensureTeamStaff(migrateStaff([])),
     boardState: migrateBoardState(null),
     pendingBoardReview: null,
+    userScouting: migrateUserScouting(null),
   };
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
@@ -323,6 +325,9 @@ function reducer(state, action) {
       }
       // Map pool: hydrate profiles for old saves; rebuild if stale (new season).
       cleaned.teamMapProfiles = ensureTeamMapProfiles(cleaned);
+      // Prospect Scouting 2.0: hydrate the scouting visibility layer. Missing on
+      // old saves → empty structure; estimates are derived lazily on view.
+      cleaned.userScouting = migrateUserScouting(cleaned.userScouting);
       return isValidGameState(cleaned) ? cleaned : null;
     }
 
@@ -711,6 +716,29 @@ function reducer(state, action) {
           ? `${player.name} released. ${getRosterIncompleteMessage({ ...state, players: state.players.filter(p => p.id !== action.playerId) }) ?? ""}`.trim()
           : `${player.name} released.`),
         [feedItem]
+      );
+    }
+
+    // ── SCOUT PLAYER (Prospect Scouting 2.0) ──────────────────────────────────
+    case "SCOUT_PLAYER": {
+      const result = applyScout(state, action.playerId, { deep: !!action.deep });
+      if (!result.ok) return addNotif(state, result.reason);
+      const verb = action.deep ? "Deep scouted" : "Scouted";
+      return addNotif(
+        { ...state, userScouting: result.scouting },
+        `${verb} ${result.player.name} (+${result.gain}) — confidence ${result.confidence}%`
+      );
+    }
+
+    // ── SHORTLIST TOGGLE ──────────────────────────────────────────────────────
+    case "TOGGLE_SHORTLIST": {
+      const { scouting, added } = toggleShortlist(state, action.playerId);
+      const p = (state.prospects || []).find(x => x.id === action.playerId)
+        || (state.players || []).find(x => x.id === action.playerId);
+      const name = p?.name || "Player";
+      return addNotif(
+        { ...state, userScouting: scouting },
+        added ? `${name} added to shortlist.` : `${name} removed from shortlist.`
       );
     }
 

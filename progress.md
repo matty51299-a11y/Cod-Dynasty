@@ -743,3 +743,53 @@ These are spec-aligned with the prior Challenger-integrity work ("run repair at 
 - Between events a Challenger team can transiently carry a CDL-shadowed reference until the next event-entry repair (reported as a warning, not a failure; never reaches a match). The diagnostic's gameplay guarantee is "no placeholder/Sub in any event match", which holds.
 - CDL duplicate-name resolution runs at the season rollover; a duplicate created mid-season by an AI roster window would persist until the next season start (none observed reaching a match in 72 season-runs).
 - The diagnostic simulates a competent user (keeps roster ≥4); a passive user can still play a thin roster in-game (the UI blocks simming with <4, by design).
+
+## Update 2026-06-02 (Prospect Scouting 2.0 — uncertainty / visibility layer)
+- Added a scouting visibility layer so prospects and young/unknown players are no longer fully obvious. Instead of always showing exact OVR/POT, the user sees **estimated ranges + a scout-confidence score** that tightens as they invest scouting assignments. True OVR/POT remain untouched on the player objects and stay the source of truth for match sim, progression, roster AI, awards, contracts, free agency, board and map logic — none of which were changed.
+
+### Where scouting data is stored (`state.userScouting`)
+```js
+userScouting: {
+  version: 1,
+  players: { [playerId]: { applied, reportLevel, lastSeason, lastStage, deepUsed } },
+  shortlist: [playerId, ...],        // persists in save (replaces old localStorage shortlist)
+  assignmentsUsed: { [`${season}:${stageIdx}`]: count },
+}
+```
+- Hydrates safely: missing on old saves → empty structure via `migrateUserScouting`. Only stores user-applied scouting; all estimates/ranges/risk/notes are **derived lazily on view**, nothing baked into the save.
+
+### New engine: `src/engine/scoutingEngine.js` (pure, deterministic, no rating mutation)
+- **Who is obscured** — `isEstablishedPlayer` (exact ratings): user-owned, active non-prospect on any CDL roster, ≥36 CDL maps of sample, or older former-pro free agents. `isScoutTarget` = everyone else (prospects, young unsigned, low-sample challengers, yearly pool).
+- **Confidence** — `getBaseConfidence` (intrinsic floor from staff power + sample + age + per-player jitter) + stored `applied` from user scouting, clamped 0–100. Established → 100. Bands: 0–24 Unknown · 25–49 Basic · 50–74 Detailed · 75–99 Advanced · 100 Fully Scouted.
+- **Estimated ranges** — `getDisplayOvr`/`getDisplayPot` return `{exact:true,value}` or `{exact:false,min,max}`. Width = `round((1-conf/100)*maxHalf)` (OVR 9, POT 11), plus a small deterministic per-player **bias** (±4, shrinks with confidence) so some prospects read overrated and some as hidden gems ("scouts can be wrong"). Width never collapses to an exact number until conf=100, so exact ratings are never exposed early.
+- **Risk** — `computeRisk` blends potential gap, ego, composure, tilt resistance, age and scouting uncertainty → Low / Medium / High / Boom/Bust / High Ceiling / Safe Floor. De-escalates as confidence rises (matches the spec example).
+- **Hidden gem / bust** — `analystHunch` correlates with the true potential gap but is degraded into noise by a weak Analyst, so strong analysts reliably surface real gems (`isHiddenGemCandidate`) and flag `isBustRiskCandidate`. Used only to *recommend who to investigate* — never reveals the number.
+- **Progressive report** — `getScoutingSummary` reveals more strengths/weaknesses/traits by band (0 at Unknown → all at Fully Scouted). Helpers: `getDisplayOvr/Pot`, `getScoutingSummary`, `getPlayerScoutingConfidence`, `formatDisplayRating`, `getConfidenceBand`.
+
+### How staff affects scouting
+- `getStaffScoutPower(state, teamId)` → 0..1 from the user team's **Assistant GM** (scouting/reputation/negotiation — identification & efficiency), **Analyst** (scouting/tactical/discipline — accuracy & gem detection, weighted highest) and **Head Coach** (development/tactical — smaller dev-projection signal). Higher power → higher base confidence, bigger `scoutGain` per action, and +1/+2 scouting assignments per stage.
+
+### Scouting actions (reducer in `gameStore.jsx`)
+- `SCOUT_PLAYER {playerId, deep}` → `applyScout`: basic scout = 1 assignment, +20–35 conf (staff-scaled); Deep = 2 assignments, +40–60. Caps at 100, reveals more at each band.
+- `TOGGLE_SHORTLIST {playerId}` → `toggleShortlist`: add/remove, persists in save.
+- **Assignments**: base 5 + staff bonus per stage, tracked by `assignmentsUsed[`${season}:${stageIdx}`]`, so they **refresh automatically at each stage start** (key changes) with zero migration.
+
+### Screens updated
+- **New "Scouting" sidebar tab → `src/components/Scouting.jsx`** (Prospect Hub): overview (assignments remaining, GM/Analyst scout ratings, shortlist count, scout power, hidden-gem count), tabbed pool (Prospect Pool / Recommended / Shortlist) with estimated OVR/POT ranges + confidence bar + risk + revealed traits + Scout/Deep/Shortlist actions, and a sticky **Scout Report** aside (ranges, confidence, strengths/weaknesses, traits, recommendation, hidden-gem/bust flags, sign cost).
+- **Challengers (`Prospects.jsx`)**: pool table now uses scouting estimates (range OVR/POT), confidence %, risk, a 💎 hidden-gem marker, an inline **Scout** button, and the state-backed shortlist (old localStorage shortlist removed).
+- **Free Agency (`FreeAgency.jsx`)**: young/unknown free-agent scout targets show estimated OVR/POT (with confidence tooltip); established former pros still show exact ratings.
+
+### Save compatibility
+- `migrateUserScouting` runs in `createInitialGameState` and `LOAD_GAME`. Old saves load with no userScouting → empty structure, estimates generated on view. No rosters/stats/history/contracts/FA/staff/board/map data touched. Established CDL players and user-owned players always show exact ratings, so core screens are unaffected.
+
+### Diagnostics
+- Added `scripts/diagnoseProspectScouting.mjs` (26 checks): hydration of a save missing `userScouting`, pool produces summaries, confidence always 0–100, estimates plausible vs true rating, scouting raises confidence + narrows range + reveals more, established players show exact ratings, assignments cap + stage-refresh, shortlist add/remove, better staff → bigger gains/base, and **true internal OVR/POT never mutated** (fully-scouted reveals the exact true value).
+
+### Testing
+- `npm run build` ✓ · `diagnoseProspectScouting` 26/26 ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseOffseasonFreeAgency`/`diagnoseOffseasonState`/`diagnoseChallengerRosterIntegrity`/`diagnosePostSeasonFlow`/`diagnoseChallengerQualifier24`/`test:rookie-awards` ✓ · ESLint clean on new/changed files.
+
+### Known limitations
+- Free Agency still shows exact per-attribute columns (Gunny/Clutch/S.IQ/T.Work) for scout targets — only OVR/POT are ranged there; the dedicated Scouting/Challengers screens are the intended scouting surfaces. Most FAs are established former pros anyway.
+- AI continues to use true ratings internally (by design); AI scouting uncertainty is future work.
+- Assignment limits refresh per stage only; no separate per-Major refresh. Deep Scout has no hard per-stage cap beyond the shared assignment pool.
+- Player Profile overlay still shows stored values; it was not converted to the scouting layer this pass (the spec deferred broad rating replacement to avoid breaking core screens).

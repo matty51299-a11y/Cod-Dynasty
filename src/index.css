@@ -9677,3 +9677,35 @@ body { background: #111317; }
   filter: brightness(1.12);
   opacity: 1;
 }
+
+/* ── Prospect Scouting 2.0 ───────────────────────────────────────────────── */
+.scouting-layout { display: flex; gap: 16px; align-items: flex-start; }
+.scouting-main { flex: 1; min-width: 0; }
+.scouting-aside { width: 320px; flex-shrink: 0; position: sticky; top: 12px; display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 1080px) {
+  .scouting-layout { flex-direction: column; }
+  .scouting-aside { width: 100%; position: static; }
+}
+.scout-table th, .scout-table td { vertical-align: middle; }
+.scout-row-sel { background: rgba(96,165,250,0.12) !important; }
+.scout-conf { display: flex; align-items: center; gap: 6px; min-width: 86px; }
+.scout-conf-track { flex: 1; height: 6px; border-radius: 4px; background: var(--bg3, rgba(0,0,0,.18)); overflow: hidden; }
+.scout-conf-track > div { height: 100%; border-radius: 4px; transition: width .2s; }
+.scout-conf span { font-size: .72rem; font-weight: 700; min-width: 30px; text-align: right; }
+.scout-traits { display: flex; flex-wrap: wrap; gap: 4px; }
+.scout-trait-chip { font-size: .68rem; padding: 1px 6px; border-radius: 10px; background: rgba(96,165,250,0.16); border: 1px solid rgba(96,165,250,0.32); color: var(--accent); white-space: nowrap; }
+.scout-btn { padding: 3px 7px !important; margin-right: 5px; font-size: .74rem; }
+.scout-report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-bottom: 6px; }
+.scout-report-grid > div { display: flex; flex-direction: column; gap: 2px; }
+.scout-report-grid .muted { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; }
+.scout-report-line { margin: 4px 0 8px; font-size: .82rem; color: var(--text-dim); }
+.scout-block { margin: 8px 0; }
+.scout-block h5 { margin: 0 0 4px; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); }
+.scout-block ul { margin: 0; padding-left: 18px; font-size: .82rem; }
+.scout-block li { margin-bottom: 2px; }
+.scout-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.scout-reco-list { list-style: none; margin: 0; padding: 0; }
+.scout-reco-list li { display: flex; flex-direction: column; gap: 1px; padding: 6px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.scout-reco-list li:hover { background: rgba(96,165,250,0.08); }
+.scout-reco-list .reco-name { font-weight: 600; font-size: .84rem; }
+.scout-reco-list .muted { font-size: .72rem; }

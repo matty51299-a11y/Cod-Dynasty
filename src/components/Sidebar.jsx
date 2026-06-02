@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { id: "roster",    icon: "♟",  label: "Roster" },
   { id: "board",     icon: "⚖",  label: "Board" },
   { id: "fa",        icon: "$",  label: "Free Agency", offseasonOnly: true },
+  { id: "scouting",  icon: "◎",  label: "Scouting" },
   { id: "prospects", icon: "◉",  label: "Challengers" },
   { id: "devreport", icon: "⬡",  label: "Dev Report" },
   { id: "staff",     icon: "✦",  label: "Staff" },
