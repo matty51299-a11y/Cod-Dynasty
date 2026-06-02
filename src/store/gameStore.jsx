@@ -18,6 +18,12 @@ import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "
 import { migrateBoardState, buildBoardObjectives, objectivesNeedRegen, BOARD_OBJ_VERSION, nudgeConfidenceAfterMajor, runBoardReview } from "../engine/boardEngine.js";
 import { ensureTeamMapProfiles } from "../engine/mapProfile.js";
 import { migrateUserScouting, applyScout, toggleShortlist } from "../engine/scoutingEngine.js";
+import {
+  migrateTransferMarket, isTransferWindowOpen, getWindowKey, generateIncomingOffers,
+  evaluateSellResponse, evaluateBuyerCounterResponse,
+  playerWillingness, buildTransferResult, boardNudgeForTransfer, getTransferBudget,
+  teamTag as trTeamTag, teamName as trTeamName0, fmtFee,
+} from "../engine/transferEngine.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
@@ -245,6 +251,7 @@ function createInitialGameState(userTeamId) {
     boardState: migrateBoardState(null),
     pendingBoardReview: null,
     userScouting: migrateUserScouting(null),
+    transferMarket: migrateTransferMarket(null),
   };
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
@@ -328,6 +335,8 @@ function reducer(state, action) {
       // Prospect Scouting 2.0: hydrate the scouting visibility layer. Missing on
       // old saves → empty structure; estimates are derived lazily on view.
       cleaned.userScouting = migrateUserScouting(cleaned.userScouting);
+      // Transfer / buyout negotiation layer: hydrate safely on old saves.
+      cleaned.transferMarket = migrateTransferMarket(cleaned.transferMarket);
       return isValidGameState(cleaned) ? cleaned : null;
     }
 
@@ -740,6 +749,202 @@ function reducer(state, action) {
         { ...state, userScouting: scouting },
         added ? `${name} added to shortlist.` : `${name} removed from shortlist.`
       );
+    }
+
+    // ── TRANSFER WAVE (AI generates incoming offers for user players) ─────────
+    // Guarded by a window key so it runs once per transfer window (never every
+    // render). `force` bumps a nonce for an explicit user "Scan Market".
+    case "RUN_TRANSFER_WAVE": {
+      if (!isTransferWindowOpen(state)) return state;
+      const tm = migrateTransferMarket(state.transferMarket);
+      const windowKey = getWindowKey(state);
+      if (!action.force && tm.lastWaveKey === windowKey) return state;
+      const seededTm = action.force ? { ...tm, waveNonce: (tm.waveNonce || 0) + 1 } : tm;
+      const offers = generateIncomingOffers({ ...state, transferMarket: seededTm });
+      const nextTm = {
+        ...seededTm,
+        negotiations: [...seededTm.negotiations, ...offers],
+        nextId: seededTm.nextId + offers.length,
+        lastWaveKey: windowKey,
+      };
+      let next = { ...state, transferMarket: nextTm };
+      if (offers.length) {
+        const phase = state.schedule?.phase ?? "stage";
+        const feedItems = offers.map(o => {
+          const p = state.players.find(pl => pl.id === o.playerId);
+          return mkFeed("transfer_offer", `${trTeamTag(o.fromTeamId)} table a ${fmtFee(o.fee)} buyout offer for ${p?.name ?? "your player"}`, state.season, phase);
+        });
+        next = pushFeed(next, feedItems);
+        const first = offers[0];
+        const fp = state.players.find(pl => pl.id === first.playerId);
+        next = addNotif(next, `${trTeamName0(first.fromTeamId)} have offered ${fmtFee(first.fee)} for ${fp?.name ?? "your player"}.`);
+      }
+      return next;
+    }
+
+    // ── SET TRANSFER STATUS / ASKING PRICE for a user player ──────────────────
+    case "SET_TRANSFER_STATUS": {
+      const { playerId, status, askingPrice } = action;
+      const player = state.players.find(p => p.id === playerId);
+      if (!player || player.teamId !== state.userTeamId) return addNotif(state, "You can only set status for your own players.");
+      const tm = migrateTransferMarket(state.transferMarket);
+      const prev = tm.status[playerId] || {};
+      const nextEntry = { ...prev };
+      if (status != null) nextEntry.transferStatus = status;
+      if (askingPrice != null) nextEntry.askingPrice = Math.max(0, Math.round(askingPrice));
+      return addNotif(
+        { ...state, transferMarket: { ...tm, status: { ...tm.status, [playerId]: nextEntry } } },
+        `${player.name}: ${status ?? "asking price updated"}${askingPrice != null ? ` · ${fmtFee(askingPrice)}` : ""}`
+      );
+    }
+
+    // ── USER MAKES AN OFFER for another team's contracted player ──────────────
+    case "MAKE_TRANSFER_OFFER": {
+      if (!isTransferWindowOpen(state)) return addNotif(state, "Transfer window is closed during live events.");
+      const { playerId, fee } = action;
+      const player = state.players.find(p => p.id === playerId);
+      if (!player || !player.teamId || !isCdlTeamId(player.teamId)) return addNotif(state, "Player is not available to approach.");
+      if (player.teamId === state.userTeamId) return addNotif(state, "That player is already on your roster.");
+      if (!(fee > 0)) return addNotif(state, "Enter a valid offer fee.");
+      const tm = migrateTransferMarket(state.transferMarket);
+      const budget = getTransferBudget(state, state.userTeamId).balance;
+      if (fee > budget) return addNotif(state, `Offer exceeds your transfer budget (${fmtFee(budget)}).`);
+      if (tm.negotiations.some(n => n.status === "Pending" && n.playerId === playerId && n.fromTeamId === state.userTeamId)) {
+        return addNotif(state, "You already have a live offer for this player.");
+      }
+      const sellerTeamId = player.teamId;
+      const windowKey = getWindowKey(state);
+      const id = `tr_${tm.nextId}`;
+      const resp = evaluateSellResponse(state, player, state.userTeamId, fee);
+      const neg = {
+        id, fromTeamId: state.userTeamId, toTeamId: sellerTeamId, playerId,
+        offerType: "buyout", fee, includedPlayerIds: [],
+        status: "Pending", counterFee: null, counterBy: null, round: 0,
+        initiator: "user", reason: "User enquiry",
+        season: state.season, stageIdx: state.schedule?.stageIdx ?? 0, phase: state.schedule?.phase,
+        createdKey: windowKey, expiresKey: windowKey,
+        history: [{ by: state.userTeamId, action: "offer", fee }],
+      };
+      // AI seller responds immediately.
+      if (resp.decision === "accept") {
+        neg.status = "Accepted"; neg.agreedFee = fee;
+        neg.history.push({ by: sellerTeamId, action: "accept", fee });
+        const withNeg = { ...state, transferMarket: { ...tm, negotiations: [...tm.negotiations, neg], nextId: tm.nextId + 1 } };
+        return addNotif(withNeg, `${trTeamName0(sellerTeamId)} accepted your ${fmtFee(fee)} offer for ${player.name}. Confirm the signing to complete it.`);
+      }
+      if (resp.decision === "counter") {
+        neg.status = "Countered"; neg.counterFee = resp.counterFee; neg.counterBy = "seller"; neg.round = 1;
+        neg.history.push({ by: sellerTeamId, action: "counter", fee: resp.counterFee });
+        const withNeg = { ...state, transferMarket: { ...tm, negotiations: [...tm.negotiations, neg], nextId: tm.nextId + 1 } };
+        return addNotif(withNeg, `${trTeamName0(sellerTeamId)} countered: ${fmtFee(resp.counterFee)} for ${player.name}.`);
+      }
+      neg.status = "Rejected";
+      neg.history.push({ by: sellerTeamId, action: "reject", reason: resp.reason });
+      const withNeg = { ...state, transferMarket: { ...tm, negotiations: [...tm.negotiations, neg], nextId: tm.nextId + 1 } };
+      return addNotif(withNeg, `${trTeamName0(sellerTeamId)} rejected your offer for ${player.name} (${resp.reason}).`);
+    }
+
+    // ── RESPOND TO A NEGOTIATION (accept / reject / counter / withdraw / nfs) ──
+    case "RESPOND_TRANSFER_OFFER": {
+      const { negotiationId, action: act, fee } = action;
+      const tm = migrateTransferMarket(state.transferMarket);
+      const neg = tm.negotiations.find(n => n.id === negotiationId);
+      if (!neg) return state;
+      if (!["Pending", "Countered", "Accepted"].includes(neg.status)) return addNotif(state, "This offer is no longer active.");
+      const player = state.players.find(p => p.id === neg.playerId);
+      if (!player) return addNotif(state, "Player no longer available.");
+      const userIsSeller = neg.toTeamId === state.userTeamId;
+      const phase = state.schedule?.phase ?? "stage";
+      const setNeg = (patch) => ({ ...state, transferMarket: { ...tm, negotiations: tm.negotiations.map(n => n.id === negotiationId ? { ...n, ...patch, history: [...(n.history || []), patch.__h].filter(Boolean) } : n) } });
+
+      // ---- WITHDRAW (user's own outgoing offer) ----
+      if (act === "withdraw") {
+        return addNotif(setNeg({ status: "Withdrawn", __h: { by: state.userTeamId, action: "withdraw" } }), `Offer for ${player.name} withdrawn.`);
+      }
+      // ---- MARK NOT FOR SALE (incoming) ----
+      if (act === "nfs") {
+        const withStatus = setNeg({ status: "Rejected", __h: { by: state.userTeamId, action: "reject-nfs" } });
+        const tm2 = migrateTransferMarket(withStatus.transferMarket);
+        return addNotif(
+          { ...withStatus, transferMarket: { ...tm2, status: { ...tm2.status, [player.id]: { ...(tm2.status[player.id] || {}), transferStatus: "Not For Sale" } } } },
+          `${player.name} marked Not For Sale; offer rejected.`
+        );
+      }
+      // ---- REJECT ----
+      if (act === "reject") {
+        const cdKey = `${neg.fromTeamId}:${neg.playerId}`;
+        const rejected = setNeg({ status: "Rejected", __h: { by: state.userTeamId, action: "reject" } });
+        const tm2 = migrateTransferMarket(rejected.transferMarket);
+        return addNotif({ ...rejected, transferMarket: { ...tm2, cooldowns: { ...tm2.cooldowns, [cdKey]: getWindowKey(state) } } }, `Offer for ${player.name} rejected.`);
+      }
+      // ---- COUNTER ----
+      if (act === "counter") {
+        if (!(fee > 0)) return addNotif(state, "Enter a valid counter fee.");
+        if (userIsSeller) {
+          // User (seller) counters the AI buyer; AI decides.
+          const resp = evaluateBuyerCounterResponse(state, player, neg.fromTeamId, fee);
+          if (resp.decision === "accept") {
+            return addNotif(setNeg({ status: "Accepted", counterFee: fee, counterBy: "seller", agreedFee: fee, round: (neg.round || 0) + 1, __h: { by: neg.fromTeamId, action: "accept", fee } }),
+              `${trTeamName0(neg.fromTeamId)} accepted your ${fmtFee(fee)} valuation for ${player.name}. Accept to complete the sale.`);
+          }
+          if (resp.decision === "counter") {
+            return pushFeed(addNotif(setNeg({ status: "Countered", counterFee: resp.counterFee, counterBy: "buyer", round: (neg.round || 0) + 1, __h: { by: neg.fromTeamId, action: "counter", fee: resp.counterFee } }),
+              `${trTeamName0(neg.fromTeamId)} came back with ${fmtFee(resp.counterFee)} for ${player.name}.`), []);
+          }
+          const cdKey = `${neg.fromTeamId}:${neg.playerId}`;
+          const rj = setNeg({ status: "Rejected", __h: { by: neg.fromTeamId, action: "reject", reason: resp.reason } });
+          const tm2 = migrateTransferMarket(rj.transferMarket);
+          return addNotif({ ...rj, transferMarket: { ...tm2, cooldowns: { ...tm2.cooldowns, [cdKey]: getWindowKey(state) } } }, `${trTeamName0(neg.fromTeamId)} walked away (${resp.reason}).`);
+        } else {
+          // User (buyer) counters the AI seller; AI decides.
+          const resp = evaluateSellResponse(state, player, state.userTeamId, fee);
+          const budget = getTransferBudget(state, state.userTeamId).balance;
+          if (fee > budget) return addNotif(state, `Counter exceeds your transfer budget (${fmtFee(budget)}).`);
+          if (resp.decision === "accept") {
+            return addNotif(setNeg({ status: "Accepted", fee, counterFee: null, agreedFee: fee, round: (neg.round || 0) + 1, __h: { by: neg.toTeamId, action: "accept", fee } }),
+              `${trTeamName0(neg.toTeamId)} accepted ${fmtFee(fee)} for ${player.name}. Confirm to complete the signing.`);
+          }
+          if (resp.decision === "counter") {
+            return addNotif(setNeg({ status: "Countered", fee, counterFee: resp.counterFee, counterBy: "seller", round: (neg.round || 0) + 1, __h: { by: neg.toTeamId, action: "counter", fee: resp.counterFee } }),
+              `${trTeamName0(neg.toTeamId)} countered at ${fmtFee(resp.counterFee)} for ${player.name}.`);
+          }
+          return addNotif(setNeg({ status: "Rejected", __h: { by: neg.toTeamId, action: "reject", reason: resp.reason } }), `${trTeamName0(neg.toTeamId)} rejected your counter (${resp.reason}).`);
+        }
+      }
+      // ---- ACCEPT (completes a transfer) ----
+      if (act === "accept") {
+        // Agreed fee: the most recent figure on the table.
+        const agreedFee = neg.counterFee ?? neg.agreedFee ?? neg.fee;
+        const userIsBuyer = neg.fromTeamId === state.userTeamId;
+        // If the user is the buyer, the player must agree personal terms.
+        if (userIsBuyer) {
+          const willing = playerWillingness(player, neg.fromTeamId, neg.toTeamId, state);
+          if (willing < 0.4) {
+            return addNotif(setNeg({ status: "Rejected", __h: { by: neg.playerId, action: "reject-terms" } }),
+              `${player.name} rejected personal terms — not convinced by the move.`);
+          }
+        }
+        const result = buildTransferResult(state, neg, agreedFee);
+        if (result.blockedReason) return addNotif(state, result.blockedReason);
+        // Mark this negotiation completed.
+        const negotiations = result.transferMarket.negotiations.map(n =>
+          n.id === negotiationId ? { ...n, status: "Accepted", agreedFee, history: [...(n.history || []), { by: state.userTeamId, action: "complete", fee: agreedFee }] } : n
+        );
+        let next = { ...state, players: result.players, transferMarket: { ...result.transferMarket, negotiations } };
+        // Board reaction (user team only).
+        next = { ...next, boardState: boardNudgeForTransfer(next.boardState, { userIsSeller, player, fee: agreedFee, state }) };
+        // Roster integrity: repair AI teams that dropped below 4; rebuild map profiles.
+        next = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(next), { windowType: "transfer" });
+        next.transferMarket = migrateTransferMarket(next.transferMarket);
+        next.teamMapProfiles = ensureTeamMapProfiles(next, { force: true });
+        const buyTag = trTeamTag(result.buyerTeamId);
+        next = pushFeed(next, [mkFeed("transfer_done", `${buyTag} complete ${fmtFee(agreedFee)} buyout for ${player.name}`, state.season, phase)]);
+        const msg = userIsSeller
+          ? `${player.name} sold to ${trTeamName0(result.buyerTeamId)} for ${fmtFee(agreedFee)}.`
+          : `${player.name} signed for ${fmtFee(agreedFee)}!`;
+        return addNotif(next, msg);
+      }
+      return state;
     }
 
     // ── HIRE STAFF ────────────────────────────────────────────────────────────

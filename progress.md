@@ -793,3 +793,59 @@ userScouting: {
 - AI continues to use true ratings internally (by design); AI scouting uncertainty is future work.
 - Assignment limits refresh per stage only; no separate per-Major refresh. Deep Scout has no hard per-stage cap beyond the shared assignment pool.
 - Player Profile overlay still shows stored values; it was not converted to the scouting layer this pass (the spec deferred broad rating replacement to avoid breaking core screens).
+
+## Update 2026-06-02 (Transfer / Buyout negotiation system)
+- Added in-contract player movement (buyouts) on top of the existing contract, budget, roster-integrity, staff/GM and board systems. No change to match sim, ratings, brackets, points, awards, map/veto or profile-history logic. True ratings and the salary cap are untouched; transfer fees use a **separate transfer budget**.
+
+### Where transfer data is stored (`state.transferMarket`)
+```js
+transferMarket: {
+  version: 1,
+  negotiations: [ { id, fromTeamId(buyer), toTeamId(seller), playerId, offerType:"buyout",
+                    fee, counterFee, counterBy, status, round, initiator:"ai"|"user",
+                    reason, agreedFee, createdKey, expiresKey, history:[...] } ],
+  status: { [playerId]: { transferStatus, askingPrice } },   // user-set, keyed by id (player objects untouched)
+  budgets: { [teamId]: { balance, spend, income } },         // separate from salary cap
+  recentlyTransferred: { [playerId]: windowKey },            // post-move protection
+  cooldowns: { [`${buyerTeam}:${playerId}`]: windowKey },    // anti-spam
+  lastWaveKey, waveNonce, nextId,
+}
+```
+Hydrated by `migrateTransferMarket` in `createInitialGameState` and `LOAD_GAME`; old saves get an empty structure, statuses default to "Open to Offers", buyout values derive on demand.
+
+### New engine: `src/engine/transferEngine.js` (pure, deterministic)
+- **Valuation/buyout** — `getPlayerValuation` builds on `getSigningCost` and inflates for contract years (×1.16/yr), age, potential, recent form, the selling owner's ambition and transfer status (Not For Sale ×2.3, Transfer Listed ×0.7, Unsettled/Wants Move ×0.85). `getAskingPrice` uses the user's set price if any, else valuation.
+- **Transfer budget** — `getTransferBudget` (separate pot, lazy default ≈ 0.6 × salary cap); buyouts debit the buyer / credit the seller. Salary cap still applies to the player's wage after the move.
+- **Windows** — `isTransferWindowOpen`: open in stage / preChamps / offseason / contracts; closed during Major / Champs / ESWC / qualifier (event rosters baked). `getWindowKey` keys waves/cooldowns per `season:stage|phase`.
+- **AI interest** — `aiInterestInPlayer` scores role need, team upgrade, bigger-team-eyes-weaker, youth upside, transfer status, owner ambition and GM negotiation; gated by transfer budget. `generateIncomingOffers` produces a *calm* wave (≤1 mid-stage, ≤2 in offseason) with anti-spam cooldowns and dedupe.
+- **Responses** — `evaluateSellResponse` (AI seller: accept/reject/counter vs asking, NFS needs a huge bid), `evaluateBuyerCounterResponse` (AI buyer weighs the user's counter vs valuation tolerance + budget). `playerWillingness` (user buys): team strength delta, budget tier, GM reputation, wage uplift, sub demotion, loyalty.
+- **Movement** — `buildTransferResult` moves the player (carries contract/salary), debits/credits transfer budgets, frees the AI buyer's weakest starter (or signs the user's pick as a cap-free sub when the XI is full), blocks the user on cap/roster overflow, marks the player "Recently Signed" (protected), withdraws competing offers. `boardNudgeForTransfer` applies a small clamped confidence swing (sell a star cheap −4, statement signing +4, etc.).
+
+### Reducer actions (`gameStore.jsx`)
+- `RUN_TRANSFER_WAVE` (auto-dispatched once per open window from the Transfer Centre via a window-key guard — never every render; `force` allows a manual re-scan) → generates AI incoming offers + feed/notification.
+- `SET_TRANSFER_STATUS {playerId, status, askingPrice}` → user sets own player's availability/price.
+- `MAKE_TRANSFER_OFFER {playerId, fee}` → user outgoing offer; AI seller responds synchronously (accept/reject/counter).
+- `RESPOND_TRANSFER_OFFER {negotiationId, action, fee}` → `accept` / `reject` / `counter` / `withdraw` / `nfs`. Accept runs `buildTransferResult` → `ensureCdlRosterIntegrity` (AI teams repaired; user team may go thin and the existing roster-lock blocks simming) → `cleanupDuplicateActiveAssignments` → map-profile rebuild → board nudge → feed + notification.
+
+### UI added
+- **New "Transfers" sidebar tab → `src/components/TransferCentre.jsx`**: budget/window header; tabs for **Incoming Offers** (accept/counter/reject/NFS + confirm sale), **Outgoing Offers** (accept counter / re-counter / withdraw / complete signing), **Transfer Listed** around the league (make offer), and **My Squad** (valuation, set asking price, set status). Compact FM-style tables, team-accent action buttons.
+- **Player Profile**: new Transfer section — for own players, quick Transfer-List / Open to Offers / Not For Sale + asking/value/budget; for rival CDL players, current club + estimated value + a Make Offer field (disabled when the window is closed).
+
+### Popups / feed stories
+- Notifications: incoming offer received, AI counter, accept-to-confirm, sold/ signed, rejection.
+- League Feed (`transfer_offer`, `transfer_done`, categorised under "transfers" with ⇄ icons): "TEAM table a $Xk buyout offer for PLAYER", "TEAM complete $Xk buyout for PLAYER". Failed/spam offers are not feed-spammed.
+
+### Save compatibility
+- Missing `transferMarket` → empty structure on load. No change to contracts, rosters, stats, history, FA, staff, board or map data. Stability diagnostics call engine functions directly (the AI wave only runs through the reducer/UI), so the full-season and roster-integrity flows are unaffected.
+
+### Diagnostics added
+- `scripts/diagnoseTransferMarket.mjs` (35 checks): valuations generate & are sensible (NFS > base > listed; star ≥ signing cost), window timing, well-formed incoming offers, reject keeps player, accept moves player cleanly (old team loses / new team gains, income & spend recorded, AI buyer ends on 4, user seller intentionally left thin), AI→AI buyout repairs the AI seller, salary-cap handling on user buys (cap-free sub when full; over-cap starter blocked / within-cap when completed), seller response tiers (derisory→reject, mid→counter, full→accept, NFS→reject), transfer budget, league-listed selector, and safe hydration of saves missing the field.
+
+### Testing
+- `npm run build` ✓ · `diagnoseTransferMarket` 35/35 ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseOffseasonFreeAgency`/`diagnoseOffseasonState`/`diagnoseChallengerRosterIntegrity`/`diagnosePostSeasonFlow`/`diagnoseProspectScouting` ✓ · ESLint clean on new/changed files.
+
+### Known limitations
+- Buyouts only (priority per spec); player-for-player **trades/swaps** are scaffolded in the data model (`offerType`, `includedPlayerIds`) but not yet implemented — left as TODO.
+- AI↔AI transfers happen only through the in-game reducer wave (not in headless diagnostics) and currently arrive as offers to the user / are completed via `buildTransferResult`; a fully autonomous AI↔AI market each window is future work.
+- Transfer budgets are a separate accounting pot (display + affordability); they don't yet roll over or refill on a schedule.
+- Counter negotiations are capped to a couple of rounds for simplicity; no agent/personality depth beyond `playerWillingness`.
