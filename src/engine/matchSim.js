@@ -356,7 +356,7 @@ function updateForm(player, won, rng) {
  *
  * ctx = {
  *   mapIdx:            number        — 0-based map index in series
- *   mode:              string        — "Hardpoint" | "Search & Destroy" | "Control"
+ *   mode:              string        — "Hardpoint" | "Search & Destroy" | "Overload"
  *   tiltedIds:         Set<string>   — player IDs with active tilt penalty
  *   lastMapKDByPlayer: object        — { [playerId]: kd } from previous map
  *   extraBoosts:       object        — { gunny, awareness, teamwork } flat boosts

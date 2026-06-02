@@ -49,6 +49,17 @@ export default function ChallengerDashboard({ setScreen }) {
   const phase = schedule.phase;
   const offers = (state.challengerOffers || []).filter(o => o.status === "pending");
 
+  // Phase-advance action. The CDL Dashboard owns these CTAs in CDL mode; the
+  // Challenger dashboard replaces it, so it must surface the same controls or
+  // the Challenger user dead-ends at preChamps / offseason / contracts.
+  const freeAgencyOpen = !!state.offseason?.freeAgencyOpen;
+  const phaseAction =
+    phase === "preChamps" ? { label: "Begin Champs →", hint: "Start the CDL Championship.", type: "BEGIN_CHAMPS" }
+    : phase === "contracts" ? { label: "Open Free Agency →", hint: "Process expiring contracts; AI waits while you shop the market.", type: "ADVANCE_OFFSEASON" }
+    : (phase === "offseason" && freeAgencyOpen) ? { label: `Run AI Free Agency → Season ${state.season + 1}`, hint: "Sign players first; AI bids after this click.", type: "ADVANCE_OFFSEASON" }
+    : phase === "offseason" ? { label: "Review Contracts →", hint: "Advance the offseason before the market opens.", type: "ENTER_CONTRACT_PHASE" }
+    : null;
+
   // Qualifier position (live event).
   const qual = schedule.currentChallengerQualifier;
   const userRow = (qual?.field || []).find(r => r.teamId === state.userTeamId);
@@ -98,6 +109,16 @@ export default function ChallengerDashboard({ setScreen }) {
           </div>
         )}
       />
+
+      {phaseAction && (
+        <div className="cd-action-banner">
+          <div>
+            <strong>Action Required</strong>
+            <span className="muted"> · {phaseAction.hint}</span>
+          </div>
+          <button className="btn-cta" onClick={() => dispatch({ type: phaseAction.type })}>{phaseAction.label}</button>
+        </div>
+      )}
 
       {!status.valid && (
         <div className="roster-warning" role="status">
