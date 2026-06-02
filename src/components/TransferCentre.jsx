@@ -15,8 +15,141 @@ import {
   teamName, getAcceptedOutgoingTermsOffers, getTransferTermsPreview, evaluatePlayerTerms, getTransferIntel,
 } from "../engine/transferEngine.js";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
+import { isChallengerMode, getChallengerRosterPlayers, getUserChallengerTeam } from "../utils/userTeam.js";
+import { isChallengerMarketOpen } from "../engine/challengerMarket.js";
+import { getSigningCost } from "../engine/rosterAI.js";
 
 const SETTABLE_STATUSES = ["Open to Offers", "Transfer Listed", "Not For Sale", "Unsettled"];
+
+const k = (n) => `$${Math.round((n || 0) / 1000)}k`;
+
+// Estimated buyout interest for a developing Challenger player (display only —
+// the real fee is computed in the reducer when an offer is generated).
+function devValue(player) {
+  const base = getSigningCost(player);
+  const pot = player.potential ?? player.overall ?? 70;
+  const ageMod = (player.age ?? 24) <= 21 ? 1.35 : (player.age ?? 24) <= 24 ? 1.15 : 1.0;
+  const potMod = 1 + Math.max(0, pot - (player.overall ?? 70)) * 0.03;
+  return Math.round((base * 1.8 * ageMod * potMod) / 1000) * 1000;
+}
+
+function buyoutRisk(player) {
+  const ovr = player.overall ?? 0;
+  const pot = player.potential ?? ovr;
+  if (pot >= 86 || ovr >= 76) return { label: "High", tone: "danger" };
+  if (ovr >= 70 || pot >= 82) return { label: "Medium", tone: "warning" };
+  return { label: "Low", tone: "neutral" };
+}
+
+// ── Challenger Transfer Centre ────────────────────────────────────────────────
+// Reuses the existing challenger buyout flow (state.challengerOffers /
+// RESPOND_CHALLENGER_OFFER) and the Challenger roster. No engine changes.
+function ChallengerTransferCentre() {
+  const { state, dispatch } = useGame();
+  const { openPlayerProfile } = usePlayerProfile();
+  const [tab, setTab] = useState("interest");
+  if (!state) return null;
+
+  const team = getUserChallengerTeam(state);
+  const roster = getChallengerRosterPlayers(state).sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+  const offers = state.challengerOffers || [];
+  const pending = offers.filter(o => o.status === "pending");
+  const resolved = offers.filter(o => o.status !== "pending").slice(-6).reverse();
+  const windowOpen = isChallengerMarketOpen(state);
+  const offerByPlayer = new Set(pending.map(o => o.playerId));
+
+  const TABS = [
+    ["interest", `CDL Interest (${pending.length})`],
+    ["squad", "My Challenger Squad"],
+  ];
+
+  return (
+    <div className="transfer-centre">
+      <PageHeader
+        eyebrow="Recruitment — Road to CDL"
+        title="Transfer Centre"
+        subtitle="CDL teams buy out your best Challenger talent. Sell for transfer income, or hold on and keep developing. Develop players, but bigger teams will come calling."
+        accent={team?.color}
+        meta={(
+          <div className="ui-stat-grid compact">
+            <StatCard label="Transfer Funds" value={k(state.challengerFunds)} tone={state.challengerFunds ? "success" : "neutral"} />
+            <StatCard label="Open Offers" value={pending.length} tone={pending.length ? "warning" : "neutral"} />
+            <StatCard label="Window" value={windowOpen ? "Open" : "Closed"} tone={windowOpen ? "success" : "warning"} hint={windowOpen ? "CDL teams can make offers" : "Closed during live events"} />
+          </div>
+        )}
+      />
+
+      <div className="cm-tabs ui-tabs">
+        {TABS.map(([key, label]) => <button key={key} className={`filter-btn ${tab === key ? "active" : ""}`} onClick={() => setTab(key)}>{label}</button>)}
+      </div>
+
+      {tab === "interest" && (
+        <SectionCard title="CDL Interest" subtitle="Buyout offers from CDL teams for your players. Accept for transfer income, or reject to keep developing them.">
+          {pending.length === 0 ? (
+            <EmptyState title="No live offers" detail="Transfer activity will appear here when CDL teams make offers for your players. Strong qualifier and Major runs attract more interest." />
+          ) : (
+            <div className="ui-table-wrap"><table className="roster-table data-table">
+              <thead><tr><th>CDL Team</th><th>Player</th><th>Buyout Fee</th><th>Actions</th></tr></thead>
+              <tbody>
+                {pending.map(o => {
+                  const buyer = CDL_TEAMS.find(t => t.id === o.fromCdlTeamId);
+                  const p = roster.find(x => x.id === o.playerId);
+                  return (
+                    <tr key={o.id}>
+                      <td><span style={{ color: buyer?.color, fontWeight: 600 }}>{buyer?.name ?? o.fromCdlTeamId}</span></td>
+                      <td className="player-name">{p ? <button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{o.playerName}</button> : o.playerName}{p && <span className="muted"> {p.primary} · {p.overall}</span>}</td>
+                      <td style={{ color: "#34d399", fontWeight: 700 }}>{k(o.fee)}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="btn-primary-sm" onClick={() => dispatch({ type: "RESPOND_CHALLENGER_OFFER", offerId: o.id, decision: "accept" })}>Accept</button>
+                        <button className="btn-secondary tr-btn" onClick={() => dispatch({ type: "RESPOND_CHALLENGER_OFFER", offerId: o.id, decision: "reject" })}>Reject</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table></div>
+          )}
+          {resolved.length > 0 && (
+            <details style={{ marginTop: 10 }}><summary className="muted">Recent decisions</summary>
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: ".82rem" }}>
+                {resolved.map(o => <li key={o.id}>{CDL_TEAMS.find(t => t.id === o.fromCdlTeamId)?.tag ?? o.fromCdlTeamId} — {o.playerName} — <span className="muted">{o.status === "accepted" ? `sold ${k(o.fee)}` : "rejected"}</span></li>)}
+              </ul>
+            </details>
+          )}
+        </SectionCard>
+      )}
+
+      {tab === "squad" && (
+        <SectionCard title="My Challenger Squad" subtitle="Your developing roster. Buyout risk rises as players improve — a sale brings transfer income but opens a roster hole to fill.">
+          {roster.length === 0 ? (
+            <EmptyState title="No players signed" detail="Sign players from the Market screen to build your Challenger roster." />
+          ) : (
+            <div className="ui-table-wrap"><table className="roster-table data-table">
+              <thead><tr><th>Player</th><th>Role</th><th>Age</th><th>OVR</th><th>POT</th><th>Development Value</th><th>Buyout Risk</th><th>CDL Interest</th></tr></thead>
+              <tbody>
+                {roster.map(p => {
+                  const risk = buyoutRisk(p);
+                  return (
+                    <tr key={p.id}>
+                      <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button></td>
+                      <td><span className="role-pill ui-pill ui-pill-neutral">{p.primary}</span></td>
+                      <td>{p.age}</td>
+                      <td style={{ fontWeight: 700 }}>{p.overall}</td>
+                      <td>{p.potential}</td>
+                      <td style={{ color: "#60a5fa", fontWeight: 600 }}>{k(devValue(p))}</td>
+                      <td><Pill tone={risk.tone}>{risk.label}</Pill></td>
+                      <td>{offerByPlayer.has(p.id) ? <Pill tone="warning">Offer in</Pill> : <span className="muted">—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table></div>
+          )}
+        </SectionCard>
+      )}
+    </div>
+  );
+}
 
 function feeColor(fee, val) {
   if (val <= 0) return "var(--text)";
@@ -119,6 +252,8 @@ export default function TransferCentre() {
   }, [windowKey, state?.transferMarket?.lastWaveKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!state) return null;
+  // Challenger manager mode uses a dedicated buyout-focused view.
+  if (isChallengerMode(state)) return <ChallengerTransferCentre />;
   const { players, userTeamId } = state;
   const windowOpen = isTransferWindowOpen(state);
 

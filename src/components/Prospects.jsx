@@ -15,6 +15,8 @@ import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { useTeamHub } from "../store/teamHubContext.jsx";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 import { getScoutingSummary, isScoutTarget, getAssignmentsRemaining } from "../engine/scoutingEngine.js";
+import { isChallengerMode } from "../utils/userTeam.js";
+import { getChallengerRosterStatus } from "../utils/rosterValidation.js";
 
 function ratingColor(v) {
   if (v >= 90) return "#fbbf24";
@@ -83,6 +85,8 @@ export default function Prospects() {
   const myRoster = players.filter(p => p.teamId === userTeamId);
   const starterCount = myRoster.filter(p => !p.isSub).length;
   const subCount = myRoster.filter(p => p.isSub).length;
+  const challengerMode = isChallengerMode(state);
+  const challengerStatus = challengerMode ? getChallengerRosterStatus(state) : null;
 
   // ── Budget calc ─────────────────────────────────────────────────────────
   const myStarters  = myRoster.filter(p => !p.isSub);
@@ -144,9 +148,11 @@ export default function Prospects() {
   return (
     <div className="prospects-page">
       <PageHeader
-        eyebrow="Challengers Circuit"
-        title="Scouting & Pro-Am Market"
-        subtitle="Track challenger teams, qualifier history, latest moves and available player pool."
+        eyebrow={challengerMode ? "Challenger Market — Road to CDL" : "Challengers Circuit"}
+        title={challengerMode ? "Recruitment Market" : "Scouting & Pro-Am Market"}
+        subtitle={challengerMode
+          ? "Sign affordable talent, hidden gems and players with a route back to CDL. Replace players poached by CDL teams and build toward Pro-Am Majors."
+          : "Track challenger teams, qualifier history, latest moves and available player pool."}
         meta={(
           <div className="ui-stat-grid compact">
             <StatCard label="Available" value={available.length} />
@@ -162,8 +168,17 @@ export default function Prospects() {
           <Pill>CDL Veterans <strong>{stats.vets}</strong></Pill>
           <Pill>Prospects <strong>{stats.prospectsCount}</strong></Pill>
           <Pill tone="success">Pro-Am Eligible <strong>{stats.proAmEligible}</strong></Pill>
-          <Pill>Roster <strong>{starterCount}/4</strong> + <strong>{subCount}/1</strong></Pill>
+          {challengerMode
+            ? <Pill tone={challengerStatus.valid ? "success" : "danger"}>Squad <strong>{challengerStatus.count}/4</strong></Pill>
+            : <Pill>Roster <strong>{starterCount}/4</strong> + <strong>{subCount}/1</strong></Pill>}
         </div>
+        {challengerMode ? (
+          <div className="cm-chip-row">
+            {stats.top && <Pill tone="accent">Top Available <button className="link-button player-link" onClick={() => openPlayerProfile(stats.top)}>{stats.top.name}</button></Pill>}
+            {stats.topPot && <Pill tone="gold">Highest Potential <button className="link-button player-link" onClick={() => openPlayerProfile(stats.topPot)}>{stats.topPot.name}</button></Pill>}
+            <Pill>Sign players who will play Challengers and have a route back to CDL</Pill>
+          </div>
+        ) : (<>
         <div className="cm-chip-row">
           <Pill>Cap <strong>${(teamCap / 1000).toFixed(0)}k</strong></Pill>
           <Pill>Committed <strong>${(committed / 1000).toFixed(0)}k</strong></Pill>
@@ -172,6 +187,7 @@ export default function Prospects() {
           {stats.topPot && <Pill tone="gold">Highest Potential <button className="link-button player-link" onClick={() => openPlayerProfile(stats.topPot)}>{stats.topPot.name}</button></Pill>}
         </div>
         <div className="cm-budget-bar"><div style={{ width: `${budgetPct}%`, background: budgetColor }} /></div>
+        </>)}
       </div>
       <p className="muted scout-note">
         ⚠ Ratings shown are <em>scouted estimates</em> – true values revealed on signing.
@@ -294,7 +310,7 @@ export default function Prospects() {
               const slot      = signAs[p.id] || "starter";
               const cost      = getSigningCost(p);
               const overBy    = slot === "starter" ? Math.max(0, cost - remaining) : 0;
-              const canAfford = overBy === 0;
+              const canAfford = challengerMode ? (challengerStatus.count < 4) : (overBy === 0);
               return (
                 <tr key={p.id}>
                   <td className="player-name">

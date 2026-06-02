@@ -10,6 +10,8 @@ import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 import { getScoutingSummary, isScoutTarget } from "../engine/scoutingEngine.js";
+import { isChallengerMode } from "../utils/userTeam.js";
+import { getChallengerRosterStatus } from "../utils/rosterValidation.js";
 
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
@@ -45,6 +47,8 @@ export default function FreeAgency() {
   if (!state) return null;
 
   const { players, userTeamId } = state;
+  const challengerMode = isChallengerMode(state);
+  const challengerStatus = challengerMode ? getChallengerRosterStatus(state) : null;
 
   // ── Budget calc ─────────────────────────────────────────────────────────
   const myStarters  = players.filter(p => p.teamId === userTeamId && !p.isSub);
@@ -103,10 +107,19 @@ export default function FreeAgency() {
   return (
     <div className="fa-page">
       <PageHeader
-        eyebrow="Recruitment"
+        eyebrow={challengerMode ? "Recruitment — Road to CDL" : "Recruitment"}
         title="Free Agency"
-        subtitle="Open-market players, salary demands, role fit and roster-slot controls."
-        meta={(
+        subtitle={challengerMode
+          ? "Recruit free agents to your Challenger roster — released CDL players willing to drop down, veterans, prospects and regional talent."
+          : "Open-market players, salary demands, role fit and roster-slot controls."}
+        meta={challengerMode ? (
+          <div className="ui-stat-grid compact">
+            <StatCard label="Market" value={filtered.length} hint={`${marketCounts.total} total`} />
+            <StatCard label="Former CDL" value={marketCounts.veterans} />
+            <StatCard label="Challenger Roster" value={`${challengerStatus.count}/4`} tone={challengerStatus.valid ? "success" : "danger"} />
+            <StatCard label="Transfer Funds" value={fmtMoney(state.challengerFunds || 0)} tone={state.challengerFunds ? "success" : "neutral"} />
+          </div>
+        ) : (
           <div className="ui-stat-grid compact">
             <StatCard label="Market" value={filtered.length} hint={`${marketCounts.total} total`} />
             <StatCard label="Former AI" value={marketCounts.formerAi} hint={`${marketCounts.formerUser} user`} />
@@ -116,7 +129,17 @@ export default function FreeAgency() {
           </div>
         )}
       />
-      {state.offseason?.freeAgencyOpen && <div className="ui-warning-banner"><strong>User free-agency window is open.</strong> AI teams will not bid until you click <strong>Run AI Free Agency</strong> from the Offseason Hub.</div>}
+      {state.offseason?.freeAgencyOpen && <div className="ui-warning-banner"><strong>{challengerMode ? "Free-agency window is open." : "User free-agency window is open."}</strong> AI teams will not bid until you click <strong>Run AI Free Agency</strong>{challengerMode ? " from the dashboard." : " from the Offseason Hub."}</div>}
+      {challengerMode ? (
+        <div className="cm-hero ui-budget-panel">
+          <div className="cm-chip-row">
+            <Pill>{marketCounts.veterans} former CDL</Pill>
+            <Pill>{marketCounts.formerAi} former AI</Pill>
+            <Pill tone={challengerStatus.valid ? "success" : "danger"}>{challengerStatus.count}/4 signed</Pill>
+            <Pill>Sign players who will play Challengers and have a route back to CDL</Pill>
+          </div>
+        </div>
+      ) : (
       <div className="cm-hero ui-budget-panel">
         <div className="cm-chip-row">
           <Pill>Cap {fmtMoney(teamCap)}</Pill>
@@ -128,6 +151,7 @@ export default function FreeAgency() {
         </div>
         <div className="cm-budget-bar"><div style={{ width: `${budgetPct}%`, background: budgetColor }} /></div>
       </div>
+      )}
 
       <div className="filters">
         <div className="filter-group">
@@ -183,7 +207,9 @@ export default function FreeAgency() {
               const cost        = getSigningCost(p);
               // Subs don't count against the cap — only starters need the check.
               const overBy      = slot === "starter" ? Math.max(0, cost - remaining) : 0;
-              const disabledReason = slot === "starter" && starterCount >= 4
+              const disabledReason = challengerMode
+                ? (challengerStatus.count >= 4 ? "Roster full (4/4)" : null)
+                : slot === "starter" && starterCount >= 4
                 ? "Roster full"
                 : slot === "sub" && subCount >= 1
                   ? "Sub slot full"

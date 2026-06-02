@@ -120,6 +120,22 @@ export default function ChallengerDashboard({ setScreen }) {
         </div>
       )}
 
+      {(phase === "offseason" || phase === "contracts") && (
+        <SectionCard title="Offseason — Challenger Review" subtitle="Season recap and priorities for your Road to CDL.">
+          <div className="ui-stat-grid compact">
+            <StatCard label="Circuit Finish" value={`${rank}/${total}`} hint={`${team?.circuitPoints ?? 0} pts`} />
+            <StatCard label="Majors Qualified" value={(team?.qualifiedMajorIdxs || []).length} />
+            <StatCard label="Players Sold to CDL" value={(state.challengerOffers || []).filter(o => o.status === "accepted").length} />
+            <StatCard label="Transfer Funds" value={k(state.challengerFunds)} tone={state.challengerFunds ? "success" : "neutral"} />
+          </div>
+          <p className="muted" style={{ marginTop: 10 }}>
+            {phase === "contracts"
+              ? "Your Challenger contracts have been reviewed. Focus now shifts to recruitment, development and protecting key players from CDL interest — open free agency to add talent before the new season."
+              : "Season complete. Priorities: replace any players bought out by CDL teams, develop your prospects toward CDL readiness, and build circuit points for better qualifier seeding."}
+          </p>
+        </SectionCard>
+      )}
+
       {!status.valid && (
         <div className="roster-warning" role="status">
           <strong>Roster incomplete</strong> — {meta?.name} have {status.count}/{status.required} starters.

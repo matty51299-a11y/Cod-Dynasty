@@ -14,6 +14,7 @@ import {
   isShortlisted, isHiddenGemCandidate, formatDisplayRating, getConfidenceBand,
 } from "../engine/scoutingEngine.js";
 import { buildCdlRosterNameSet, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
+import { isChallengerMode } from "../utils/userTeam.js";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 
 const ROLES = ["All", "Entry SMG", "Slayer SMG", "Flex", "Main AR", "Objective", "Search Specialist"];
@@ -44,6 +45,7 @@ function RangeCell({ disp, tone }) {
 
 export default function Scouting() {
   const { state, dispatch } = useGame();
+  const challengerMode = isChallengerMode(state);
   const { openPlayerProfile } = usePlayerProfile();
   const [tab, setTab] = useState("pool");
   const [roleFilter, setRoleFilter] = useState("All");
@@ -96,9 +98,11 @@ export default function Scouting() {
   return (
     <div className="scouting-page">
       <PageHeader
-        eyebrow="Recruitment"
-        title="Prospect Hub"
-        subtitle="Estimated ratings tighten as you scout. Spend assignments to uncover hidden gems and avoid busts."
+        eyebrow={challengerMode ? "Recruitment — Road to CDL" : "Recruitment"}
+        title="Prospect Scouting"
+        subtitle={challengerMode
+          ? "Find affordable talent, hidden gems and players with a route back to CDL. CDL-ready prospects you develop may attract buyout interest if they perform."
+          : "Estimated ratings tighten as you scout. Spend assignments to uncover hidden gems and avoid busts."}
         meta={(
           <div className="ui-stat-grid compact">
             <StatCard label="Assignments" value={`${remaining}/${maxAssign}`} tone={remaining > 0 ? "success" : "warning"} hint="per stage" />
