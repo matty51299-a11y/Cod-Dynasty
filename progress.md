@@ -849,3 +849,49 @@ Hydrated by `migrateTransferMarket` in `createInitialGameState` and `LOAD_GAME`;
 - AI↔AI transfers happen only through the in-game reducer wave (not in headless diagnostics) and currently arrive as offers to the user / are completed via `buildTransferResult`; a fully autonomous AI↔AI market each window is future work.
 - Transfer budgets are a separate accounting pot (display + affordability); they don't yet roll over or refill on a schedule.
 - Counter negotiations are capped to a couple of rounds for simplicity; no agent/personality depth beyond `playerWillingness`.
+
+## Update 2026-06-02 (Challenger Manager Mode — foundation / "Road to CDL")
+- Added the foundation for managing a **Challenger team** as an alternative career to the CDL manager mode. The CDL season, ratings, match sim, contracts, budgets, free agency, awards, staff, owner/board, map/veto, brackets, points, profile history and logos are unchanged; the existing 24-team Challenger ecosystem is reused. Existing CDL saves are never migrated into Challenger mode.
+
+### User team type (`state.userTeamType`)
+```js
+userTeamType: "cdl" | "challenger"   // defaults to "cdl"; challenger → userTeamId is a Challenger team id
+challengerOffers: []                 // pending CDL buyout offers for the user's Challenger players
+challengerFunds: 0                   // transfer income from selling Challenger players
+```
+- Old saves with no `userTeamType` default to `"cdl"` on load (`LOAD_GAME`) and are never flipped.
+- New helper module `src/utils/userTeam.js`: `getUserTeamType`, `isChallengerMode`, `getUserChallengerTeam`, `resolveUserTeamMeta` (uniform `{id,name,tag,color,logo,region}` for either mode), `getChallengerRosterPlayers`, `isUserChallengerPlayer`.
+- Validation (`gameValidation.js`): `isValidUserTeam` accepts a Challenger user whose id resolves in `state.challengerTeams`; `isValidGameState` / `findPhaseInvariantViolations` updated.
+
+### New game setup
+- `TeamSelect.jsx` now has two paths: **Manage CDL Team** (12 franchises) and **Manage Challenger Team** (24 teams). The Challenger picker shows name, region, tag/logo and an **Est. OVR** computed from a stable seed via the new exported `buildChallengerPreview(seed)`; the same seed is passed to `NEW_GAME` so the started save's rosters match the preview.
+- `NEW_GAME` accepts `{ teamId, teamType, seed }`; `createInitialGameState(userTeamId, userTeamType, seedOverride)` sets `userTeamType`, validates the Challenger id against the built teams, and uses a neutral (unused) CDL `boardState` for Challenger teams.
+
+### Roster integrity / protection (the user's Challenger roster is hand-managed)
+- `ensureChallengerTeams` and `repairChallengerRosters` (`seasonEngine.js`) **skip the user's Challenger team** for auto-fill, seed-aware poaching (as donor or recipient) and emergency padding — the user signs their own players and the sim gate blocks events while < 4.
+- `rosterAI.js` computes a locked-id set at each AI entry (`ensureCdlRosterIntegrity`, roster windows, free agency) and **excludes the user's Challenger players from every CDL candidate pool**, so CDL AI can never silently sign them. `refillAllChallengerRosters` skips the user team.
+- Mode-aware roster gating: `rosterValidation.js` adds `getChallengerRosterStatus` / `getUserRosterStatus`; `isUserRosterPlayable` and `getRosterIncompleteMessage` resolve the user's Challenger roster (4 valid players) so the existing "Roster incomplete — sign N more" block applies to Challenger teams too.
+
+### Dashboard / Roster / Standings / Board / Matchday
+- **`ChallengerDashboard.jsx`** (shown for Challenger users): club banner (region, tier, roster OVR, circuit points, circuit rank, transfer funds), current roster, owner objectives + confidence, qualifier position/seed, route context, player development, latest moves, **CDL buyout offers (accept/reject)**, and a compact CDL league panel.
+- **Roster** screen is mode-aware: leads with the user's Challenger team (sign via Market / release via `RELEASE_CHALLENGER_PLAYER`, 4-man block) and keeps CDL rosters viewable read-only.
+- **Standings** defaults Challenger users to a **Challenger Circuit** table (circuit points / form / best qualifier / OVR) with a toggle to the CDL league.
+- **Board** screen routes to **`ChallengerBoard.jsx`** with Challenger-appropriate objectives (no CDL Champs/top-6 goals). Objectives + confidence are derived live in `src/engine/challengerBoard.js` (tiered weak/mid/strong/elite: win a qualifier match, reach top 8/4, win a qualifier, qualify for Majors, reach Finals, develop a prospect, build circuit points).
+- **Matchday**: `NextMatchControl` shows **"Sim to Qualifier"** (SIM_STAGE) during the stage for Challenger users (the CDL season sims in the background). The **Challenger Qualifier overlay** highlights the user team in the field/bracket and adds **"Play Your Match"** (`SIM_USER_CHALLENGER_QUALIFIER_MATCH` → `simUserChallengerQualifierMatch`). Because a qualified Challenger team's id flows directly into the Major bracket seeds, the existing Major Tournament overlay highlights and plays the user team with no extra wiring.
+- Sidebar adapts labels in Challenger mode (Standings→Circuit, Transfers→Buyouts, Challengers→Market) and resolves the team badge via `resolveUserTeamMeta`.
+
+### Transfers / buyouts (CDL teams poach the user's players)
+- New `src/engine/challengerMarket.js`: `generateChallengerBuyoutOffers` (deterministic per window for poach-worthy players), `applyChallengerBuyout` (moves the player to the CDL buyer as a sub if their XI is full, credits transfer income, removes from the user roster), `buildBuyoutTransaction`.
+- Reducer actions: `GENERATE_CHALLENGER_OFFERS` (window-keyed, auto-dispatched once per window from the dashboard), `RESPOND_CHALLENGER_OFFER {accept|reject}`, `SIGN_CHALLENGER_PLAYER`, `RELEASE_CHALLENGER_PLAYER`. Players never move without an explicit user decision; CDL board lifecycle (nudge / review / mandate feed) is skipped for Challenger users.
+
+### Diagnostics
+- Added **`scripts/diagnoseChallengerManagerMode.mjs`** (33 checks): new save starts as Challenger with `userTeamType` challenger + 4 valid players + no placeholders/dupes + Challenger objectives; released slots are not auto-filled; AI windows do not poach user players; buyout flow moves a player + pays income; a full multi-season flow across 5 seeds verifies qualifier-field presence, "Play your match", top-4 Major qualification → user in Major bracket, background CDL standings, ESWC route, offseason without crash, no dup ownership; and CDL-save default-to-cdl.
+
+### Testing
+- `npm run build` ✓ · `diagnoseChallengerManagerMode` 33/33 ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseChallengerRosterIntegrity` ✓ · `diagnosePostSeasonFlow` ✓ · ESLint clean on new/changed files.
+
+### Known limitations
+- Interactive Match Center for a qualified Challenger team in a **Pro-Am Major** is wired through the shared overlay (the team id is a real bracket seed) but was validated primarily via the Sim controls; the "Play Your Match" path in Majors may need polish.
+- Some secondary CDL-centric screens (Transfer Centre "My Squad", Staff, Scouting, Dev Report) are not yet fully reskinned for Challenger teams — they render CDL data or empty user panels rather than crashing. Buyout offers live on the dashboard.
+- Challenger board is display/eval only this pass — no season-end verdict/confidence-history lifecycle.
+- Buyout offers are sell-only (CDL teams buying from the user); the user cannot yet spend `challengerFunds` to buy players. Challenger staff depth is minimal.

@@ -7,10 +7,25 @@ export function isValidTeamId(teamId) {
   return CDL_TEAMS.some(t => t.id === teamId);
 }
 
+// The user team may be a CDL team (default) or a Challenger team. A Challenger
+// user is valid when userTeamType === "challenger" and the id resolves against
+// the save's challengerTeams list.
+export function isChallengerUser(state) {
+  return state?.userTeamType === "challenger";
+}
+
+export function isValidUserTeam(state) {
+  if (isChallengerUser(state)) {
+    return Array.isArray(state?.challengerTeams)
+      && state.challengerTeams.some(t => t.id === state.userTeamId);
+  }
+  return isValidTeamId(state?.userTeamId);
+}
+
 export function isValidGameState(state) {
   return Boolean(
     state &&
-    isValidTeamId(state.userTeamId) &&
+    isValidUserTeam(state) &&
     state.schedule &&
     VALID_PHASES.has(state.schedule.phase) &&
     Array.isArray(state.schedule.stages) &&
@@ -32,7 +47,7 @@ export function findPhaseInvariantViolations(state) {
   const { schedule, userTeamId } = state;
   const { phase, majorIdx, stageIdx } = schedule;
 
-  if (!isValidTeamId(userTeamId)) {
+  if (!isValidUserTeam(state)) {
     problems.push(`Invalid userTeamId: ${String(userTeamId)}`);
   }
 

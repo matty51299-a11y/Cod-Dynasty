@@ -126,6 +126,10 @@ export default function Prospects() {
   const teamMap = Object.fromEntries((challengerTeams || []).map(t => [t.id, t]));
 
   function handleSign(prospectId) {
+    if (state.userTeamType === "challenger") {
+      dispatch({ type: "SIGN_CHALLENGER_PLAYER", playerId: prospectId });
+      return;
+    }
     const slot = signAs[prospectId] || "starter";
     dispatch({ type: "SIGN_PLAYER", playerId: prospectId, slotType: slot });
   }

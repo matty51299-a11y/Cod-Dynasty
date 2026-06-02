@@ -9824,3 +9824,53 @@ body { background: #111317; }
 @media (max-width: 680px) {
   .transfer-terms-controls { grid-template-columns: 1fr; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Challenger Manager Mode
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Team-select mode tabs */
+.ts-mode-tabs { display: flex; gap: 12px; justify-content: center; margin: 0 0 22px; flex-wrap: wrap; }
+.ts-mode-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 14px 26px; border-radius: 12px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--border); color: var(--text);
+  font-weight: 700; font-size: 15px; transition: all .15s ease;
+}
+.ts-mode-tab:hover { border-color: var(--accent); }
+.ts-mode-tab.active { border-color: var(--accent); background: var(--bg3); box-shadow: 0 0 0 1px var(--accent) inset; }
+.ts-mode-sub { font-size: 11px; font-weight: 500; color: var(--text-dim); }
+.ts-challenger-note { max-width: 760px; margin: 0 auto 18px; text-align: center; color: var(--text-dim); font-size: 13px; }
+.ts-challenger-grid .team-card { position: relative; }
+.ts-challenger-meta { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+.ts-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--bg3); border: 1px solid var(--border); color: var(--text-dim); }
+
+/* Challenger dashboard grid */
+.cd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px; }
+.cd-board { display: flex; flex-direction: column; gap: 8px; }
+.cd-confidence { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.cd-confidence strong { font-size: 18px; }
+.cd-moves { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.cd-dev-list { display: flex; flex-direction: column; gap: 6px; }
+
+/* Buyout offers */
+.cd-offers { display: flex; flex-direction: column; gap: 8px; }
+.cd-offer-row {
+  display: grid; grid-template-columns: 1.4fr 1.4fr 0.8fr auto; gap: 10px; align-items: center;
+  padding: 10px 12px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--border);
+}
+.cd-offer-player { font-weight: 700; }
+.cd-offer-buyer { font-size: 13px; }
+.cd-offer-fee { font-weight: 700; color: var(--green); }
+.cd-offer-actions { display: flex; gap: 6px; }
+
+/* Objective rows (board + dashboard) */
+.cb-obj-list { display: flex; flex-direction: column; gap: 8px; }
+.cb-obj-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.cb-obj-row:last-child { border-bottom: none; }
+.cb-obj-label { font-weight: 600; color: var(--text); }
+.cb-obj-progress { font-size: 12px; color: var(--text-dim); }
+
+/* User highlighting in the Challenger Qualifier bracket */
+.cqo-bm-user { box-shadow: 0 0 0 2px var(--accent) inset; border-radius: 8px; }
+.cqo-bm-you .cqo-bm-name { color: var(--accent); font-weight: 800; }

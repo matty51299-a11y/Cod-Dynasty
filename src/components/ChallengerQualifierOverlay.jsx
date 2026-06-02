@@ -31,33 +31,35 @@ function scoreFor(match, teamId) {
   return "";
 }
 
-function MatchTeamLine({ row, seed, score, winner, schedule, onTeam }) {
+function MatchTeamLine({ row, seed, score, winner, schedule, onTeam, isUser }) {
   if (!row) return <div className="cqo-bm-team empty"><span>TBD</span></div>;
   const display = resolveTeamDisplay(row.teamId, schedule);
   return (
-    <div className={`cqo-bm-team ${winner ? "winner" : ""}`}>
+    <div className={`cqo-bm-team ${winner ? "winner" : ""} ${isUser ? "cqo-bm-you" : ""}`}>
       <TeamLogo team={display} size={18} />
       <span className="cqo-bm-seed">#{seed ?? row.seed}</span>
       <span className="cqo-bm-name" onClick={(e) => { e.stopPropagation(); onTeam?.(row.teamId); }}>{display.name ?? row.teamName}</span>
+      {isUser && <span className="you-badge">YOU</span>}
       <strong>{score}</strong>
     </div>
   );
 }
 
-function BracketMatch({ match, fieldMap, isNext, onClick, schedule, onTeam }) {
+function BracketMatch({ match, fieldMap, isNext, onClick, schedule, onTeam, userTeamId }) {
   const a = fieldMap[match.a];
   const b = fieldMap[match.b];
   const winnerId = match.result?.winnerId;
   const clickable = !!(a && b);
+  const userInvolved = match.a === userTeamId || match.b === userTeamId;
   return (
     <button
       type="button"
-      className={`cqo-bm ${match.played ? "played" : ""} ${isNext ? "next" : ""} ${clickable ? "clickable" : ""}`}
+      className={`cqo-bm ${match.played ? "played" : ""} ${isNext ? "next" : ""} ${clickable ? "clickable" : ""} ${userInvolved ? "cqo-bm-user" : ""}`}
       onClick={clickable ? onClick : undefined}
       disabled={!clickable}
     >
-      <MatchTeamLine row={a} seed={match.seedA} score={scoreFor(match, match.a)} winner={winnerId === match.a} schedule={schedule} onTeam={onTeam} />
-      <MatchTeamLine row={b} seed={match.seedB} score={scoreFor(match, match.b)} winner={winnerId === match.b} schedule={schedule} onTeam={onTeam} />
+      <MatchTeamLine row={a} seed={match.seedA} score={scoreFor(match, match.a)} winner={winnerId === match.a} schedule={schedule} onTeam={onTeam} isUser={match.a === userTeamId} />
+      <MatchTeamLine row={b} seed={match.seedB} score={scoreFor(match, match.b)} winner={winnerId === match.b} schedule={schedule} onTeam={onTeam} isUser={match.b === userTeamId} />
     </button>
   );
 }
@@ -223,6 +225,9 @@ export default function ChallengerQualifierOverlay() {
           <div className="cqo-cs-actions">
             {!completed ? (
               <>
+                {state.userTeamType === "challenger" && fieldRows.some(r => r.teamId === state.userTeamId) && (
+                  <button className="btn-cta" onClick={() => dispatch({ type: "SIM_USER_CHALLENGER_QUALIFIER_MATCH" })}>Play Your Match</button>
+                )}
                 <button className="btn-secondary" onClick={() => dispatch({ type: "SIM_NEXT_CHALLENGER_QUALIFIER_MATCH" })}>Sim Next Match</button>
                 <button className="btn-secondary" onClick={() => dispatch({ type: "SIM_CHALLENGER_QUALIFIER_ROUND" })}>Sim Round</button>
                 <button className="btn-cta" onClick={() => dispatch({ type: "SIM_CHALLENGER_QUALIFIER" })}>Finish Qualifier</button>
@@ -269,6 +274,7 @@ export default function ChallengerQualifierOverlay() {
                     isNext={nextMatch?.roundIdx === roundIdx && nextMatch?.matchIdx === matchIdx}
                     onClick={() => setSelectedKey(`${roundIdx}:${matchIdx}`)}
                     schedule={schedule}
+                    userTeamId={state.userTeamId}
                   />
                 )) : <div className="cqo-round-empty">Awaiting results</div>}
               </div>

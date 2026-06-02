@@ -16,11 +16,13 @@ import Sidebar           from "./components/Sidebar.jsx";
 import NextMatchControl  from "./components/NextMatchControl.jsx";
 import NextMatchOverlay  from "./components/NextMatchOverlay.jsx";
 import Dashboard         from "./components/Dashboard.jsx";
+import ChallengerDashboard from "./components/ChallengerDashboard.jsx";
 import Standings         from "./components/Standings.jsx";
 import Schedule          from "./components/Schedule.jsx";
 import KDLeaders         from "./components/KDLeaders.jsx";
 import Roster            from "./components/Roster.jsx";
 import BoardObjectives   from "./components/BoardObjectives.jsx";
+import ChallengerBoard   from "./components/ChallengerBoard.jsx";
 import FreeAgency        from "./components/FreeAgency.jsx";
 import Prospects         from "./components/Prospects.jsx";
 import Scouting          from "./components/Scouting.jsx";
@@ -37,8 +39,8 @@ import SeasonAwardsOverlay from "./components/SeasonAwardsOverlay.jsx";
 import BoardReviewOverlay from "./components/BoardReviewOverlay.jsx";
 import TransferAcceptedModal from "./components/TransferAcceptedModal.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
-import { CDL_TEAMS }     from "./data/teams.js";
 import { getTeamThemeStyle } from "./utils/teamTheme.js";
+import { resolveUserTeamMeta, isChallengerMode } from "./utils/userTeam.js";
 
 export default function App() {
   const { state, dispatch } = useGame();
@@ -80,8 +82,9 @@ export default function App() {
     );
   }
 
-  const team         = CDL_TEAMS.find(t => t.id === state.userTeamId);
+  const team         = resolveUserTeamMeta(state);
   const teamThemeStyle = getTeamThemeStyle(team);
+  const challengerMode = isChallengerMode(state);
   const notification = state.notifications?.[0];
 
   function handleNewGame() {
@@ -102,7 +105,7 @@ export default function App() {
       {/* ── Top bar ── */}
       <header className="topbar">
         <div className="topbar-left">
-          <span className="app-title">CDL MANAGER</span>
+          <span className="app-title">{challengerMode ? "CHALLENGER MANAGER" : "CDL MANAGER"}</span>
           <span className="season-badge">S{state.season}</span>
           {team && (
             <span className="user-team-badge" style={{ color: "var(--shell-text)" }}>
@@ -156,12 +159,12 @@ export default function App() {
 
         {/* Screen content */}
         <main className="main-content">
-          {screen === "home"      && <Dashboard setScreen={setScreen} />}
+          {screen === "home"      && (challengerMode ? <ChallengerDashboard setScreen={setScreen} /> : <Dashboard setScreen={setScreen} />)}
           {screen === "standings" && <Standings />}
           {screen === "schedule"  && <Schedule />}
           {screen === "kdleaders" && <KDLeaders />}
-          {screen === "roster"    && <Roster />}
-          {screen === "board"     && <BoardObjectives />}
+          {screen === "roster"    && <Roster setScreen={setScreen} />}
+          {screen === "board"     && (challengerMode ? <ChallengerBoard /> : <BoardObjectives />)}
           {screen === "fa"        && <FreeAgency />}
           {screen === "prospects" && <Prospects />}
           {screen === "scouting"  && <Scouting />}
