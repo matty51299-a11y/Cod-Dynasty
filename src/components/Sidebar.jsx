@@ -2,9 +2,9 @@
 // Left sidebar navigation — replaces the horizontal nav-tabs bar.
 
 import { useGame } from "../store/gameStore.jsx";
-import { CDL_TEAMS } from "../data/teams.js";
 import { getTeamUiTheme } from "../utils/teamTheme.js";
 import { getAcceptedOutgoingTermsOffers } from "../engine/transferEngine.js";
+import { resolveUserTeamMeta, isChallengerMode } from "../utils/userTeam.js";
 
 const NAV_ITEMS = [
   { id: "home",      icon: "⌂",  label: "Home" },
@@ -22,14 +22,22 @@ const NAV_ITEMS = [
   { id: "log",       icon: "▤",  label: "Match Log" },
 ];
 
+// Labels that read differently when managing a Challenger team.
+const CHALLENGER_LABELS = {
+  standings: "Circuit",
+  transfers: "Buyouts",
+  prospects: "Market",
+};
+
 export default function Sidebar({ screen, setScreen, onOpenFeed }) {
   const { state } = useGame();
   if (!state) return null;
 
-  const { schedule, userTeamId } = state;
-  const team  = CDL_TEAMS.find(t => t.id === userTeamId);
+  const { schedule } = state;
+  const team  = resolveUserTeamMeta(state);
   const teamTheme = getTeamUiTheme(team);
   const phase = schedule.phase;
+  const challengerMode = isChallengerMode(state);
 
   // Phase pill text
   const stageIdx  = schedule.stageIdx ?? 0;
@@ -80,7 +88,10 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
             onClick={() => setScreen(item.id)}
           >
             <span className="sb-icon">{item.icon}</span>
-            <span className="sb-label">{item.id === "transfers" && transferActions > 0 ? `${item.label} (${transferActions})` : item.label}</span>
+            <span className="sb-label">{(() => {
+              const label = (challengerMode && CHALLENGER_LABELS[item.id]) || item.label;
+              return item.id === "transfers" && transferActions > 0 ? `${label} (${transferActions})` : label;
+            })()}</span>
             {item.id === "devreport" && hasDevData && <span className="sb-dot" />}
             {item.id === "transfers" && transferActions > 0 && <span className="sb-badge">{transferActions > 9 ? "9+" : transferActions}</span>}
           </button>

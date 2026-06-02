@@ -7,9 +7,11 @@ import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, beginEswc, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, beginEswc, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, simUserChallengerQualifierMatch, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { generateMajorFeed, generateChallengerQualFeed, generateRosterMoveFeed, generateOffseasonFeed } from "../engine/feedGenerator.js";
 import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
+import { isChallengerMode, getChallengerRosterPlayers, getUserChallengerTeam } from "../utils/userTeam.js";
+import { generateChallengerBuyoutOffers, applyChallengerBuyout, buildBuyoutTransaction, isChallengerMarketOpen, getChallengerWindowKey } from "../engine/challengerMarket.js";
 import { canAffordStarterResign } from "../utils/contractBudget.js";
 import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/rosterValidation.js";
 import { CDL_TEAMS } from "../data/teams.js";
@@ -211,10 +213,19 @@ function cleanupDuplicateActiveAssignments(state) {
 }
 
 // ── Initial state factory ─────────────────────────────────────────────────────
-function createInitialGameState(userTeamId) {
-  if (!isValidTeamId(userTeamId)) return null;
+// userTeamType: "cdl" (manage a CDL franchise) | "challenger" (manage a
+// Challenger team — a "Road to CDL" career). For challenger mode userTeamId is
+// a Challenger team id and is validated against the freshly-built rosters.
+function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride = null) {
+  const challengerMode = userTeamType === "challenger";
+  if (!challengerMode && !isValidTeamId(userTeamId)) return null;
   const players  = buildInitialRoster().map(applyChallengerRatingOverride);
-  const rawProspects = generateProspects(Date.now() % 999983).map(applyChallengerRatingOverride);
+  // When a seed is supplied (Challenger team-select preview), use it for the
+  // prospect pool too so the previewed roster OVRs match the started save.
+  const prospectSeed = seedOverride != null
+    ? ((seedOverride % 999983) + 999983) % 999983
+    : Date.now() % 999983;
+  const rawProspects = generateProspects(prospectSeed).map(applyChallengerRatingOverride);
   const seen = new Set();
   const prospects = rawProspects.filter((p) => {
     const key = normalizePlayerName(p.name);
@@ -226,9 +237,12 @@ function createInitialGameState(userTeamId) {
   // Two bits of entropy: milliseconds and a secondary counter derived from the
   // prospect generation seed, so rapid successive new-games still differ.
   const t = Date.now();
-  const challengerDraftSeed = ((t % 999983) * 1009 + (t % 97) * 37 + 1) | 0;
+  const challengerDraftSeed = seedOverride != null
+    ? (seedOverride | 0) || 1
+    : ((t % 999983) * 1009 + (t % 97) * 37 + 1) | 0;
   const state = {
     userTeamId,
+    userTeamType: challengerMode ? "challenger" : "cdl",
     season: 1,
     players,      // all pro players + any signed prospects (Roster reads from here)
     prospects,    // unsigned challengers pool only
@@ -253,11 +267,19 @@ function createInitialGameState(userTeamId) {
     pendingBoardReview: null,
     userScouting: migrateUserScouting(null),
     transferMarket: migrateTransferMarket(null),
+    challengerOffers: [],   // CDL buyout offers for the user's Challenger players
+    challengerFunds: 0,     // transfer income earned selling Challenger players
   };
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
+  // For Challenger mode, the chosen team id must resolve against the built teams.
+  if (challengerMode && !(state.challengerTeams || []).some(team => team.id === userTeamId)) return null;
   const finalState = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
-  finalState.boardState = regenBoardObjectives(finalState, finalState.boardState);
+  // Board objectives: CDL franchises use the Owner Expectations engine; Challenger
+  // teams keep a neutral CDL boardState (unused) and read Challenger objectives live.
+  finalState.boardState = challengerMode
+    ? migrateBoardState(null)
+    : regenBoardObjectives(finalState, finalState.boardState);
   // CDL 2026 map pool: generate every team's map/mode profile once at new game.
   finalState.teamMapProfiles = ensureTeamMapProfiles(finalState, { force: true });
   return finalState;
@@ -273,6 +295,7 @@ function regenBoardObjectives(state, boardState) {
 
 // ── Board nudge helper — applies after a Major completes ──────────────────────
 function withMajorBoardNudge(beforeState, afterState, majorIdx) {
+  if (afterState?.userTeamType === "challenger") return afterState; // CDL board only
   if (majorIdx == null || majorIdx > 3 || majorIdx < 0) return afterState;
   if (!afterState.boardState) return afterState;
   const wasCompleted = beforeState.schedule?.majors?.[majorIdx]?.completed ?? true;
@@ -292,7 +315,7 @@ function reducer(state, action) {
       return null;
 
     case "NEW_GAME":
-      return createInitialGameState(action.teamId);
+      return createInitialGameState(action.teamId, action.teamType, action.seed);
 
     case "LOAD_GAME": {
       if (!action.state || !isValidGameState(action.state)) return null;
@@ -300,6 +323,9 @@ function reducer(state, action) {
       // Backfill `feed` for saves that predate this feature
       const loaded = {
         ...action.state,
+        // Existing saves are CDL manager saves — default to "cdl", never migrate
+        // a CDL save into Challenger mode.
+        userTeamType: action.state?.userTeamType === "challenger" ? "challenger" : "cdl",
         feed: action.state?.feed ?? [],
         seasonHistory: action.state?.seasonHistory ?? [],
         playerCareerHistory: action.state?.playerCareerHistory ?? [],
@@ -328,7 +354,8 @@ function reducer(state, action) {
       // that replaces clearly-invalid legacy objectives. Placement/Major/Champs
       // objectives evaluate from current standings, so regenerating mid-season is safe.
       cleaned.boardState = migrateBoardState(cleaned.boardState);
-      if (objectivesNeedRegen(cleaned.boardState)) {
+      // CDL franchises only — Challenger teams read their own objectives live.
+      if (cleaned.userTeamType !== "challenger" && objectivesNeedRegen(cleaned.boardState)) {
         cleaned.boardState = regenBoardObjectives(cleaned, cleaned.boardState);
       }
       // Map pool: hydrate profiles for old saves; rebuild if stale (new season).
@@ -338,6 +365,9 @@ function reducer(state, action) {
       cleaned.userScouting = migrateUserScouting(cleaned.userScouting);
       // Transfer / buyout negotiation layer: hydrate safely on old saves.
       cleaned.transferMarket = migrateTransferMarket(cleaned.transferMarket);
+      // Challenger manager mode: buyout offers + transfer income (empty on CDL saves).
+      cleaned.challengerOffers = Array.isArray(cleaned.challengerOffers) ? cleaned.challengerOffers : [];
+      cleaned.challengerFunds = Number.isFinite(cleaned.challengerFunds) ? cleaned.challengerFunds : 0;
       return isValidGameState(cleaned) ? cleaned : null;
     }
 
@@ -463,6 +493,9 @@ function reducer(state, action) {
     case "SIM_CHALLENGER_QUALIFIER_ROUND":
       return runIfUserRosterValid(state, () => simChallengerQualifierRound({ ...state }));
 
+    case "SIM_USER_CHALLENGER_QUALIFIER_MATCH":
+      return runIfUserRosterValid(state, () => simUserChallengerQualifierMatch({ ...state }));
+
     case "CONTINUE_FROM_CHALLENGER_QUALIFIER": {
       return runIfUserRosterValid(state, () => {
         const event = state.schedule?.currentChallengerQualifier;
@@ -493,9 +526,14 @@ function reducer(state, action) {
         ? [...new Set([...(state.seenAwardsSeasons || []).map(Number), season])]
         : (state.seenAwardsSeasons || []);
       const baseState = { ...state, pendingSeasonAwards: null, seenAwardsSeasons, enteredMajorIdx: null };
-      const currentBoard = migrateBoardState(baseState.boardState);
-      const { newBoardState, pendingBoardReview } = runBoardReview(currentBoard, baseState);
-      const reviewedState = { ...baseState, boardState: newBoardState, pendingBoardReview };
+      // CDL franchises get a board review; Challenger teams have no CDL board.
+      const reviewedState = state.userTeamType === "challenger"
+        ? baseState
+        : (() => {
+            const currentBoard = migrateBoardState(baseState.boardState);
+            const { newBoardState, pendingBoardReview } = runBoardReview(currentBoard, baseState);
+            return { ...baseState, boardState: newBoardState, pendingBoardReview };
+          })();
       return reviewedState.schedule?.pendingPostChampsEswc ? beginEswc(reviewedState) : reviewedState;
     }
 
@@ -516,24 +554,28 @@ function reducer(state, action) {
       // New season → regenerate every team's map profile from the updated rosters.
       newState.teamMapProfiles = ensureTeamMapProfiles(newState, { force: true });
 
-      // Build new objectives for the incoming season (carries confidence/history forward)
-      const newBoardState = {
-        ...regenBoardObjectives(newState, newState.boardState),
-        verdict: null,
-      };
-      const tag = CDL_TEAMS.find(t => t.id === newState.userTeamId)?.tag ?? "Owner";
-      const primObj = newBoardState.objectives.find(o => o.weight === "primary");
-      const secObjs = newBoardState.objectives.filter(o => o.weight === "secondary");
-      const boardFeed = mkFeed(
-        "board_mandate",
-        `${tag} owner sets Season ${newState.season} mandate — ${primObj?.label ?? ""}${secObjs.length ? "; " + secObjs.map(o => o.label).join(", ") : ""}`,
-        newState.season,
-        "stage"
-      );
-      const stateWithBoard = { ...newState, boardState: newBoardState };
+      const challengerMode = newState.userTeamType === "challenger";
+      // CDL franchises: build new owner objectives + a mandate feed item.
+      // Challenger teams: no CDL board; objectives are derived live each render.
+      const stateWithBoard = challengerMode
+        ? newState
+        : { ...newState, boardState: { ...regenBoardObjectives(newState, newState.boardState), verdict: null } };
+      const boardFeedItems = [];
+      if (!challengerMode) {
+        const tag = CDL_TEAMS.find(t => t.id === newState.userTeamId)?.tag ?? "Owner";
+        const bs = stateWithBoard.boardState;
+        const primObj = bs.objectives.find(o => o.weight === "primary");
+        const secObjs = bs.objectives.filter(o => o.weight === "secondary");
+        boardFeedItems.push(mkFeed(
+          "board_mandate",
+          `${tag} owner sets Season ${newState.season} mandate — ${primObj?.label ?? ""}${secObjs.length ? "; " + secObjs.map(o => o.label).join(", ") : ""}`,
+          newState.season,
+          "stage"
+        ));
+      }
 
       return pushFeed(stateWithBoard, [
-        boardFeed,
+        ...boardFeedItems,
         ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, stateWithBoard, season),
         ...generateRosterMoveFeed(stateWithBoard, prevMovesLen),
       ]);
@@ -727,6 +769,130 @@ function reducer(state, action) {
           : `${player.name} released.`),
         [feedItem]
       );
+    }
+
+    // ── SIGN A PLAYER TO THE USER'S CHALLENGER TEAM ───────────────────────────
+    case "SIGN_CHALLENGER_PLAYER": {
+      if (!isChallengerMode(state)) return addNotif(state, "Only available in Challenger manager mode.");
+      const team = getUserChallengerTeam(state);
+      if (!team) return addNotif(state, "Your Challenger team could not be resolved.");
+      if (getChallengerRosterPlayers(state).length >= 4) {
+        return addNotif(state, "Challenger roster is full (4/4). Release a player first.");
+      }
+      const target = (state.prospects || []).find(p => p.id === action.playerId)
+        || (state.players || []).find(p => p.id === action.playerId);
+      if (!target || isInactivePlayer(target)) return addNotif(state, "Player is not available to sign.");
+      if (target.teamId && isCdlTeamId(target.teamId)) return addNotif(state, `${target.name} is signed to a CDL team.`);
+      if (target.challengerTeamId === state.userTeamId) return addNotif(state, `${target.name} is already on your roster.`);
+
+      const tag = team.tag ?? "CHA";
+      const phase = state.schedule?.phase ?? "stage";
+      const setTeamId = (p) => p.id === target.id
+        ? { ...p, challengerTeamId: state.userTeamId, status: "challengers", teamId: null, isSub: false, region: p.region ?? team.region }
+        : p;
+      return pushFeed(
+        addNotif({
+          ...state,
+          players: (state.players || []).map(setTeamId),
+          prospects: (state.prospects || []).map(setTeamId),
+          challengerTeams: (state.challengerTeams || []).map(t => {
+            if (t.id === state.userTeamId) {
+              return { ...t, playerIds: [...new Set([...(t.playerIds || []), target.id])].slice(0, 4) };
+            }
+            // Remove from any other Challenger team that listed them.
+            return (t.playerIds || []).includes(target.id)
+              ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) }
+              : t;
+          }),
+          challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
+            type: "CHALLENGER_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.challengerTeamId ?? null, toTeamId: state.userTeamId,
+            note: `${team.name} signed ${target.name}`,
+          }),
+        }, `${target.name} signed to ${team.name}.`),
+        [mkFeed("signing", `${tag} sign ${target.name}`, state.season, phase)]
+      );
+    }
+
+    // ── RELEASE A PLAYER FROM THE USER'S CHALLENGER TEAM ──────────────────────
+    case "RELEASE_CHALLENGER_PLAYER": {
+      if (!isChallengerMode(state)) return addNotif(state, "Only available in Challenger manager mode.");
+      const team = getUserChallengerTeam(state);
+      const player = (state.prospects || []).find(p => p.id === action.playerId)
+        || (state.players || []).find(p => p.id === action.playerId);
+      if (!team || !player) return state;
+      if (player.challengerTeamId !== state.userTeamId) return addNotif(state, `${player.name} is not on your roster.`);
+      const clear = (p) => p.id === player.id ? { ...p, challengerTeamId: null, isSub: false } : p;
+      const after = {
+        ...state,
+        players: (state.players || []).map(clear),
+        prospects: (state.prospects || []).map(clear),
+        challengerTeams: (state.challengerTeams || []).map(t =>
+          t.id === state.userTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== player.id) } : t
+        ),
+        challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
+          type: "CHALLENGER_RELEASE", playerId: player.id, playerName: player.name, fromTeamId: state.userTeamId, toTeamId: null,
+          note: `${team.name} released ${player.name}`,
+        }),
+      };
+      const warn = getRosterIncompleteMessage(after) ?? "";
+      return addNotif(after, `${player.name} released.${warn ? " " + warn : ""}`.trim());
+    }
+
+    // ── GENERATE CDL BUYOUT OFFERS for the user's Challenger players ───────────
+    // Guarded by a window key so it runs once per open window (never every render).
+    case "GENERATE_CHALLENGER_OFFERS": {
+      if (!isChallengerMode(state) || !isChallengerMarketOpen(state)) return state;
+      const windowKey = getChallengerWindowKey(state);
+      if (!action.force && state.lastChallengerOfferKey === windowKey) return state;
+      const fresh = generateChallengerBuyoutOffers(state, state.challengerOffers || []);
+      const next = {
+        ...state,
+        challengerOffers: [...(state.challengerOffers || []), ...fresh],
+        lastChallengerOfferKey: windowKey,
+      };
+      if (!fresh.length) return next;
+      const phase = state.schedule?.phase ?? "stage";
+      const feedItems = fresh.map(o => {
+        const buyer = CDL_TEAMS.find(t => t.id === o.fromCdlTeamId);
+        return mkFeed("transfer_offer", `${buyer?.tag ?? o.fromCdlTeamId} table a $${Math.round(o.fee / 1000)}k buyout for ${o.playerName}`, state.season, phase);
+      });
+      const first = fresh[0];
+      const firstBuyer = CDL_TEAMS.find(t => t.id === first.fromCdlTeamId);
+      return addNotif(pushFeed(next, feedItems), `${firstBuyer?.name ?? "A CDL team"} have offered $${Math.round(first.fee / 1000)}k for ${first.playerName}.`);
+    }
+
+    // ── RESPOND TO A CDL BUYOUT OFFER (accept = sell for income / reject) ──────
+    case "RESPOND_CHALLENGER_OFFER": {
+      if (!isChallengerMode(state)) return state;
+      const offer = (state.challengerOffers || []).find(o => o.id === action.offerId);
+      if (!offer || offer.status !== "pending") return addNotif(state, "This offer is no longer active.");
+      const markOffer = (st, status) => ({
+        ...st,
+        challengerOffers: (st.challengerOffers || []).map(o => o.id === offer.id ? { ...o, status } : o),
+      });
+
+      if (action.decision === "reject") {
+        return addNotif(markOffer(state, "rejected"), `Rejected ${CDL_TEAMS.find(t => t.id === offer.fromCdlTeamId)?.name ?? "the"} offer for ${offer.playerName}.`);
+      }
+      // accept
+      const result = applyChallengerBuyout(state, offer);
+      if (result.blocked) return addNotif(state, result.blocked);
+      let next = markOffer({
+        ...state,
+        players: result.players,
+        prospects: result.prospects,
+        challengerTeams: result.challengerTeams,
+        challengerFunds: (state.challengerFunds || 0) + result.fee,
+        challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, buildBuyoutTransaction(state, offer)),
+      }, "accepted");
+      // Repair the buyer roster (and any duplicates) without touching the user team.
+      next = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(next), { windowType: "challenger_buyout" });
+      next.teamMapProfiles = ensureTeamMapProfiles(next, { force: true });
+      const buyer = CDL_TEAMS.find(t => t.id === offer.fromCdlTeamId);
+      const phase = state.schedule?.phase ?? "stage";
+      next = pushFeed(next, [mkFeed("transfer_done", `${buyer?.tag ?? offer.fromCdlTeamId} sign ${offer.playerName} from Challengers ($${Math.round(offer.fee / 1000)}k)`, state.season, phase)]);
+      const warn = getRosterIncompleteMessage(next) ?? "";
+      return addNotif(next, `${offer.playerName} sold to ${buyer?.name ?? "a CDL team"} for $${Math.round(offer.fee / 1000)}k.${warn ? " " + warn : ""}`.trim());
     }
 
     // ── SCOUT PLAYER (Prospect Scouting 2.0) ──────────────────────────────────
@@ -1120,6 +1286,31 @@ export function GameProvider({ children }) {
 
 export function useGame() {
   return useContext(GameContext);
+}
+
+// ── Challenger team-select preview ────────────────────────────────────────────
+// Builds the 24 Challenger teams for a given seed and returns lightweight
+// identity + roster OVR estimates for the new-game team picker. Passing the
+// same seed to NEW_GAME yields a save whose rosters match this preview.
+export function buildChallengerPreview(seed) {
+  const players = buildInitialRoster().map(applyChallengerRatingOverride);
+  const prospectSeed = (((seed % 999983) + 999983) % 999983) | 0;
+  const rawProspects = generateProspects(prospectSeed).map(applyChallengerRatingOverride);
+  const seen = new Set();
+  const prospects = rawProspects.filter((p) => {
+    const key = normalizePlayerName(p.name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const temp = { players, prospects, challengerTeams: [] };
+  buildChallengerRostersForNewGame(temp, (seed | 0) || 1);
+  const byId = new Map([...players, ...prospects].map(p => [p.id, p]));
+  return (temp.challengerTeams || []).map(t => {
+    const roster = (t.playerIds || []).map(id => byId.get(id)).filter(Boolean);
+    const ovr = roster.length ? Math.round(roster.reduce((s, p) => s + (p.overall ?? 60), 0) / roster.length) : 0;
+    return { id: t.id, name: t.name, tag: t.tag, color: t.color, logo: t.logo, region: t.region, ovr, players: roster.length };
+  }).sort((a, b) => b.ovr - a.ovr || a.name.localeCompare(b.name));
 }
 
 // ── localStorage helpers ──────────────────────────────────────────────────────

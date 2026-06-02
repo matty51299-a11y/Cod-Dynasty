@@ -113,6 +113,13 @@ function withCdlRosterIntegrity(gameState, windowType) {
   return ensureCdlRosterIntegrity(gameState, { windowType });
 }
 
+// In Challenger manager mode the user's own Challenger team is hand-managed:
+// it must NOT be silently auto-filled, poached from, or cannibalized by the
+// repair/fill passes. Returns the protected team id, or null in CDL mode.
+function userChallengerTeamId(gameState) {
+  return gameState?.userTeamType === "challenger" ? gameState.userTeamId : null;
+}
+
 function standingsRank(standings, teamId) {
   const sorted = Object.entries(standings || {}).sort((a, b) => (b[1]?.points || 0) - (a[1]?.points || 0));
   const idx = sorted.findIndex(([id]) => id === teamId);
@@ -904,6 +911,37 @@ export function simNextChallengerQualifierMatch(gameState) {
   return { ...gameState, schedule: { ...schedule } };
 }
 
+// Sim qualifier matches in order until the user's Challenger team has played
+// its next match (or the event completes). Lets a Challenger user "Play your
+// match" without manually clicking through every other match in the round.
+export function simUserChallengerQualifierMatch(gameState) {
+  const schedule = gameState.schedule;
+  if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
+  const userId = gameState.userTeamId;
+  repairChallengerRosters(gameState);
+  let current = schedule.currentChallengerQualifier ?? createChallengerQualifierEvent(gameState, schedule);
+  if (current.completed) return { ...gameState, schedule: { ...schedule, currentChallengerQualifier: current } };
+  current = { ...current, bracket: current.bracket ?? buildChallengerQualifierBracket(current.field || []), matchLog: [...(current.matchLog || [])] };
+  let safety = 0;
+  while (!current.bracket?.champion && safety++ < 120) {
+    const next = findNextBracketMatch(current.bracket);
+    if (!next) break;
+    const involvesUser = next.match.a === userId || next.match.b === userId;
+    const { allComplete } = _simOneChallengerQualifierMatch(current, gameState, schedule);
+    if (involvesUser) break;
+    if (allComplete) break;
+    // If the user has no remaining matches (eliminated/not in field), stop after
+    // simming one match so the UI stays responsive rather than finishing silently.
+    const stillAlive = (current.field || []).some(r => r.teamId === userId)
+      && (current.matchLog || []).filter(m => m.loserId === userId).length < 2;
+    if (!stillAlive) break;
+  }
+  schedule.currentChallengerQualifier = current.bracket?.champion
+    ? finalizeChallengerQualifier(gameState, schedule, current)
+    : current;
+  return { ...gameState, schedule: { ...schedule } };
+}
+
 export function simChallengerQualifierRound(gameState) {
   const schedule = gameState.schedule;
   if (!schedule || schedule.phase !== "challengerQualifier") return gameState;
@@ -1162,7 +1200,9 @@ export function ensureChallengerTeams(gameState) {
   const free = (gameState.prospects || [])
     .filter(p => !p.teamId && !isInactivePlayer(p))
     .sort((a,b)=>(b.overall??0)-(a.overall??0));
+  const protectedTeamId = userChallengerTeamId(gameState);
   for (const team of merged) {
+    if (team.id === protectedTeamId) continue; // user manages this roster manually
     if (team.playerIds.length >= 4) continue;
     const need = 4 - team.playerIds.length;
     const same = free.filter(p => !shouldExcludeFromChallengers(p, cdlNames, used, usedNames) && ((p.region || team.region) === team.region)).slice(0, need);
@@ -1307,8 +1347,13 @@ export function repairChallengerRosters(gameState, options = {}) {
     return candidatePool.splice(idx, 1)[0];
   };
 
+  // The user-managed Challenger team is hand-curated — never auto-fill, poach
+  // from, or emergency-pad it. The sim gate blocks events while it is < 4.
+  const protectedTeamId = userChallengerTeamId(gameState);
+
   // Step 3a: fill every team from the real pool, highest priority first.
   for (const team of order) {
+    if (team.id === protectedTeamId) continue;
     while (rosterLen(team) < 4) {
       const pick = takeFromPool(team.region);
       if (!pick) break;
@@ -1323,12 +1368,14 @@ export function repairChallengerRosters(gameState, options = {}) {
   // so only the very bottom teams can reach the emergency fallback.
   const rankIndex = new Map(order.map((t, i) => [t.id, i]));
   for (const team of order) {
+    if (team.id === protectedTeamId) continue;
     let guard = 0;
     while (rosterLen(team) < 4 && guard++ < 64) {
       let donor = null;
       for (let i = order.length - 1; i >= 0; i--) {
         const d = order[i];
         if (d.id === team.id) continue;
+        if (d.id === protectedTeamId) continue; // never poach the user's players
         if (rankIndex.get(d.id) <= rankIndex.get(team.id)) continue; // must be lower priority
         if (rosterLen(d) < 1) continue;
         donor = d;
@@ -1353,6 +1400,7 @@ export function repairChallengerRosters(gameState, options = {}) {
   if (allowEmergency) {
     const avoid = new Set([...usedNames, ...cdlNames]);
     for (const team of order) {
+      if (team.id === protectedTeamId) continue; // user signs their own players
       while (rosterLen(team) < 4) {
         const slot = rosterLen(team);
         const emergency = makeEmergencyChallengerPlayer(team.id, slot, gameState.season ?? gameState.schedule?.season ?? 1, avoid);

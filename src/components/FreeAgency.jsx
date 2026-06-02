@@ -92,6 +92,10 @@ export default function FreeAgency() {
   const subCount = myRoster.filter(p => p.isSub).length;
 
   function handleSign(playerId) {
+    if (state.userTeamType === "challenger") {
+      dispatch({ type: "SIGN_CHALLENGER_PLAYER", playerId });
+      return;
+    }
     const slot = signAs[playerId] || "starter";
     dispatch({ type: "SIGN_PLAYER", playerId, slotType: slot });
   }

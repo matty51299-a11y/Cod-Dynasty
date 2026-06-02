@@ -5,6 +5,25 @@ import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 
 const PHILOSOPHIES = ["win_now", "youth_upside", "chemistry_stability", "balanced_value", "high_risk_gamble"];
 
+// ── User Challenger team protection ───────────────────────────────────────────
+// In Challenger manager mode the user's Challenger roster must not be silently
+// signed/poached by CDL AI teams — those players are only available through the
+// explicit buyout offer flow. We compute the protected id-set once per AI entry
+// point (synchronous, non-reentrant) and exclude them from every candidate pool.
+let _lockedChallengerIds = new Set();
+function computeLockedChallengerIds(state) {
+  const ids = new Set();
+  if (state?.userTeamType === "challenger" && state.userTeamId) {
+    for (const p of [...(state.players || []), ...(state.prospects || [])]) {
+      if (p?.challengerTeamId === state.userTeamId) ids.add(p.id);
+    }
+  }
+  return ids;
+}
+function isLockedChallengerCandidate(candidate) {
+  return !!candidate && _lockedChallengerIds.has(candidate.id);
+}
+
 // ── 1. Budget system ──────────────────────────────────────────────────────────
 // Each franchise has a budgetTier (2–6) defined in teams.js.
 // BUDGET_CAPS is the maximum combined signing cost for a 4-player starting lineup.
@@ -848,7 +867,7 @@ function pushTx(transactions, gameState, entry) {
   return transactions.some(existing => txKey(existing) === txKey(tx)) ? transactions : [...transactions, tx];
 }
 
-function refillAllChallengerRosters(challengerTeams, players, prospects) {
+function refillAllChallengerRosters(challengerTeams, players, prospects, protectedTeamId = null) {
   const teams = (challengerTeams || []).map(t => ({ ...t, playerIds: [...(t.playerIds || [])] }));
   const cdlNames = buildCdlRosterNameSet(players);
   const byId = new Map([...players, ...prospects].map(p => [p.id, p]));
@@ -869,6 +888,7 @@ function refillAllChallengerRosters(challengerTeams, players, prospects) {
   const allPool = [...players.filter(p => !p.teamId && p.status !== "freeAgent" && !isInactivePlayer(p)), ...prospects.filter(p => !p.teamId && !isInactivePlayer(p))]
     .sort((a, b) => ((b.overall ?? 0) + (b.potential ?? 0) * 0.35) - ((a.overall ?? 0) + (a.potential ?? 0) * 0.35));
   for (const team of teams) {
+    if (team.id === protectedTeamId) continue; // user manages this roster manually
     while (team.playerIds.length < 4) {
       const sameRegion = allPool.find(p => !shouldExcludeFromChallengers(p, cdlNames, assigned, usedNames) && (p.challengerTeamId == null) && (p.region === team.region));
       const fallback = allPool.find(p => !shouldExcludeFromChallengers(p, cdlNames, assigned, usedNames) && (p.challengerTeamId == null));
@@ -967,6 +987,7 @@ function fillMinimumRoster(teamId, players, prospects, rosterMovesLog, season, w
       ...cur.prospects.filter(p => !p.teamId),
     ]
       .filter(c => !isInactivePlayer(c))
+      .filter(c => !isLockedChallengerCandidate(c))
       .filter(c => !cdlNames.has(normalizePlayerName(c.name)));
 
     // Preferred: best affordable candidate.
@@ -1055,6 +1076,7 @@ function candidatePoolForIntegrity(players, prospects, teamId, usedIds, usedName
     ...players.filter(p => !p.teamId),
     ...prospects.filter(p => !p.teamId),
   ].filter(c => c && !isInactivePlayer(c))
+    .filter(c => !isLockedChallengerCandidate(c))
     .filter(c => !usedIds.has(c.id))
     .filter(c => {
       const key = normalizePlayerName(c.name);
@@ -1084,6 +1106,7 @@ function appendIntegrityTx(transactions, state, team, player, source, overCap) {
 
 export function ensureCdlRosterIntegrity(gameState, options = {}) {
   const state = gameState || {};
+  _lockedChallengerIds = computeLockedChallengerIds(state);
   let players = [...(state.players || [])];
   let prospects = [...(state.prospects || [])];
   let challengerTeams = (state.challengerTeams || []).map(t => ({ ...t, playerIds: [...(t.playerIds || [])] }));
@@ -1179,6 +1202,7 @@ export function ensureCdlRosterIntegrity(gameState, options = {}) {
 }
 
 function runRosterWindow(gameState, { windowType, majorIdx }) {
+  _lockedChallengerIds = computeLockedChallengerIds(gameState);
   const teamContexts = ensureContexts(gameState);
   let players = [...(gameState.players || [])];
   let prospects = [...(gameState.prospects || [])];
@@ -1324,6 +1348,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
         ...players.filter(p => p.teamId == null),
         ...prospects,
       ].filter(c => !isInactivePlayer(c))
+        .filter(c => !isLockedChallengerCandidate(c))
         .filter(c => !cdlNames.has(normalizePlayerName(c.name)))
         .filter(c => !players.some(p => p.id !== c.id && p.teamId && isCdlTeamId(p.teamId) && normalizePlayerName(p.name) === normalizePlayerName(c.name)))
         .filter(c => getSigningCost(c) <= budgetLeft);
@@ -1400,7 +1425,7 @@ function runRosterWindow(gameState, { windowType, majorIdx }) {
     players   = result.players;
     prospects = result.prospects;
   }
-  challengerTeams = refillAllChallengerRosters(challengerTeams, players, prospects);
+  challengerTeams = refillAllChallengerRosters(challengerTeams, players, prospects, gameState.userTeamType === "challenger" ? gameState.userTeamId : null);
 
   return ensureCdlRosterIntegrity({
     ...gameState,
@@ -1440,6 +1465,7 @@ function teamNeedForFreeAgent(teamPlayers, candidate) {
 }
 
 export function runAIFreeAgencyMarket(gameState, options = {}) {
+  _lockedChallengerIds = computeLockedChallengerIds(gameState);
   const teamContexts = ensureContexts(gameState);
   let players = [...(gameState.players || [])];
   let prospects = [...(gameState.prospects || [])];
@@ -1547,7 +1573,7 @@ export function runAIFreeAgencyMarket(gameState, options = {}) {
 
   // Immediately fill any open Challenger slots with newly-added Challengers prospects
   // so released CDL players get team assignments without waiting for the next qualifier.
-  challengerTeams = refillAllChallengerRosters(challengerTeams, players, prospects);
+  challengerTeams = refillAllChallengerRosters(challengerTeams, players, prospects, gameState.userTeamType === "challenger" ? gameState.userTeamId : null);
 
   diagnostics.rosterSizes = CDL_TEAMS.map(t => ({ teamId: t.id, count: players.filter(p => p.teamId === t.id && !p.isSub && !isInactivePlayer(p)).length }));
   rosterMovesLog.push({ season, windowType: "freeAgency", moveCount: diagnostics.signings.length, philosophy: "open_market", diagnostics });

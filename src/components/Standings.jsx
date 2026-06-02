@@ -10,15 +10,29 @@ import { useTeamHub } from "../store/teamHubContext.jsx";
 import { calcTeamOvr } from "../engine/teamOvr.js";
 import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
+import { isChallengerMode, getChallengerRosterPlayers } from "../utils/userTeam.js";
 
 export default function Standings() {
   const { state } = useGame();
   const { openTeamHub } = useTeamHub();
   const [showCumulative, setShowCumulative] = useState(false);
+  // Challenger users default to the Circuit standings; they can flip to CDL.
+  const [view, setView] = useState(isChallengerMode(state) ? "circuit" : "cdl");
   if (!state) return null;
 
   const { schedule, userTeamId, players } = state;
   const phase = schedule.phase;
+  const challengerMode = isChallengerMode(state);
+
+  if (challengerMode && view === "circuit") {
+    return (
+      <ChallengerCircuit
+        state={state}
+        openTeamHub={openTeamHub}
+        onSwitch={() => setView("cdl")}
+      />
+    );
+  }
 
   // During stage/major: default to per-stage standings; toggle to season total.
   // During preChamps/offseason: always use cumulative.
@@ -49,8 +63,11 @@ export default function Standings() {
     <div className="standings-page">
       <div className="standings-header-row">
         <div>
-          <h2>League Standings – Season {state.season}</h2>
-          <p className="muted">Phase: {phaseLabel}</p>
+          <h2>CDL League Standings – Season {state.season}</h2>
+          <p className="muted">Phase: {phaseLabel}{challengerMode ? " · CDL season runs in the background" : ""}</p>
+          {challengerMode && (
+            <button className="link-button" onClick={() => setView("circuit")}>‹ Back to Challenger Circuit</button>
+          )}
         </div>
         {isStagePhase && (
           <div className="standings-toggle">
@@ -128,6 +145,58 @@ export default function Standings() {
         if (!major.bracket) return null;
         return <MajorBracketSummary key={i} major={major} />;
       })}
+    </div>
+  );
+}
+
+function ChallengerCircuit({ state, openTeamHub, onSwitch }) {
+  const teams = state.challengerTeams || [];
+  const rows = teams
+    .map(t => {
+      const roster = getChallengerRosterPlayers(state, t.id);
+      const ovr = roster.length ? Math.round(roster.reduce((s, p) => s + (p.overall ?? 60), 0) / roster.length) : 0;
+      return {
+        id: t.id, name: t.name, tag: t.tag, color: t.color, region: t.region,
+        circuitPoints: t.circuitPoints ?? 0, form: t.form ?? 0,
+        lastQualifierPlacement: t.lastQualifierPlacement, ovr,
+      };
+    })
+    .sort((a, b) => b.circuitPoints - a.circuitPoints || b.ovr - a.ovr);
+
+  return (
+    <div className="standings-page">
+      <div className="standings-header-row">
+        <div>
+          <h2>Challenger Circuit Standings – Season {state.season}</h2>
+          <p className="muted">Ranked by circuit points. Top teams seed the qualifiers, Challengers Finals and ESWC.</p>
+        </div>
+        <div className="standings-toggle">
+          <button className="stg-toggle-btn active">Circuit</button>
+          <button className="stg-toggle-btn" onClick={onSwitch}>CDL League</button>
+        </div>
+      </div>
+
+      <table className="standings-table">
+        <thead>
+          <tr><th>#</th><th>Team</th><th>Region</th><th>Circuit Pts</th><th>Form</th><th>Best Qual</th><th>OVR</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.id} className={r.id === state.userTeamId ? "user-row" : ""}>
+              <td style={{ borderLeft: `3px solid ${r.color}`, borderRadius: "6px 0 0 6px", paddingLeft: 8 }}>{i + 1}</td>
+              <td className="standings-team-cell">
+                <span className="team-link" style={{ color: r.color }} onClick={() => openTeamHub(r.id)}>{r.name}</span>
+                {r.id === state.userTeamId && <span className="you-badge"> YOU</span>}
+              </td>
+              <td>{r.region}</td>
+              <td className="pts">{r.circuitPoints}</td>
+              <td>{r.form > 0 ? `+${r.form}` : r.form}</td>
+              <td>{r.lastQualifierPlacement ? `${r.lastQualifierPlacement}` : "—"}</td>
+              <td className="pts">{r.ovr}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
