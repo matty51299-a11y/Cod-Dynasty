@@ -134,7 +134,7 @@ export default function Prospects() {
       dispatch({ type: "SIGN_CHALLENGER_PLAYER", playerId: prospectId });
       return;
     }
-    const slot = signAs[prospectId] || "starter";
+    const slot = signAs[prospectId] || (starterCount < 4 ? "starter" : "sub");
     dispatch({ type: "SIGN_PLAYER", playerId: prospectId, slotType: slot });
   }
   function toggleShortlist(id) {
@@ -170,7 +170,7 @@ export default function Prospects() {
           <Pill tone="success">Pro-Am Eligible <strong>{stats.proAmEligible}</strong></Pill>
           {challengerMode
             ? <Pill tone={challengerStatus.valid ? "success" : "danger"}>Squad <strong>{challengerStatus.count}/4</strong></Pill>
-            : <Pill>Roster <strong>{starterCount}/4</strong> + <strong>{subCount}/1</strong></Pill>}
+            : <Pill>Roster <strong>{starterCount}/4</strong> + <strong>{subCount}</strong> bench</Pill>}
         </div>
         {challengerMode ? (
           <div className="cm-chip-row">
@@ -307,9 +307,9 @@ export default function Prospects() {
               const potText   = sum.displayPotText;
               const ovrColor  = sum.displayOvr.exact ? ratingColor(sum.displayOvr.value) : "#93c5fd";
               const potColor  = sum.displayPot.exact ? ratingColor(sum.displayPot.value) : "#c4b5fd";
-              const slot      = signAs[p.id] || "starter";
+              const slot      = signAs[p.id] || (starterCount < 4 ? "starter" : "sub");
               const cost      = getSigningCost(p);
-              const overBy    = slot === "starter" ? Math.max(0, cost - remaining) : 0;
+              const overBy    = slot === "starter" && starterCount < 4 ? Math.max(0, cost - remaining) : 0;
               const canAfford = challengerMode ? (challengerStatus.count < 4) : (overBy === 0);
               return (
                 <tr key={p.id}>

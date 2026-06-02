@@ -650,15 +650,13 @@ export function buildTransferResult(state, neg, agreedFee, terms = {}) {
   const buyerStarters = getActiveStarters(state.players, buyerTeamId);
   let asSub = false;
   let releaseId = null;
-  if (promisedRole === "Substitute" || promisedRole === "Prospect") {
+  if (userIsBuyer && buyerStarters.length < 4) {
+    asSub = false; // user signings fill open starter slots by default
+  } else if (promisedRole === "Substitute" || promisedRole === "Prospect") {
     asSub = true;
   } else if (buyerStarters.length >= 4) {
     if (userIsBuyer) {
-      const subs = state.players.filter(p => p.teamId === buyerTeamId && p.isSub && !isInactivePlayer(p));
-      if (subs.length >= 1) {
-        return { blockedReason: "Roster full — release a starter or your sub to make room." };
-      }
-      asSub = true; // user signs as sub
+      asSub = true; // full user lineups place new arrivals on the bench
     } else {
       // AI frees its weakest starter (not the target's slot) to FA.
       const weakest = [...buyerStarters].sort((a, b) => (a.overall ?? 70) - (b.overall ?? 70))[0];

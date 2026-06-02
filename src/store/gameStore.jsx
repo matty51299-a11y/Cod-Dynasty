@@ -14,6 +14,7 @@ import { isChallengerMode, getChallengerRosterPlayers, getUserChallengerTeam } f
 import { generateChallengerBuyoutOffers, applyChallengerBuyout, buildBuyoutTransaction, isChallengerMarketOpen, getChallengerWindowKey } from "../engine/challengerMarket.js";
 import { canAffordStarterResign } from "../utils/contractBudget.js";
 import { getRosterIncompleteMessage, getTeamRosterStatus } from "../utils/rosterValidation.js";
+import { STARTER_LIMIT, autoPickStarterIds, getStarters, resolveSigningSlot } from "../utils/rosterSlots.js";
 import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "../engine/staffEngine.js";
@@ -614,37 +615,30 @@ function reducer(state, action) {
       const { playerId, slotType } = action;
       const userTeam  = state.userTeamId;
       const rosterNow = state.players.filter(p => p.teamId === userTeam);
-
-      if (slotType === "starter" && rosterNow.filter(p => !p.isSub).length >= 4) {
-        return addNotif(state, "Starter roster is full (4/4). Release a player first.");
-      }
-      if (slotType === "sub" && rosterNow.filter(p => p.isSub).length >= 1) {
-        return addNotif(state, "Sub slot is full (1/1). Release your sub first.");
-      }
-
-      // Hard budget check (starters only)
-      if (slotType === "starter") {
-        const target = state.prospects.find(p => p.id === playerId)
-                    || state.players.find(p => p.id === playerId);
-        if (target) {
-          const cap       = getTeamCap(userTeam);
-          const committed = rosterNow
-            .filter(p => !p.isSub)
-            .reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
-          const cost = getSigningCost(target);
-          const over = committed + cost - cap;
-          if (over > 0) {
-            return addNotif(state,
-              `Over budget — signing ${target.name} would exceed your cap by $${(over / 1000).toFixed(0)}k.`
-            );
-          }
-        }
-      }
+      const requestedSlot = slotType || "starter";
+      const actualSlot = resolveSigningSlot(state.players, userTeam, requestedSlot);
 
       const tag = CDL_TEAMS.find(t => t.id === userTeam)?.tag ?? userTeam;
       const phase = state.schedule?.phase ?? "stage";
       const targetForDuplicateCheck = state.prospects.find(p => p.id === playerId)
         || state.players.find(p => p.id === playerId);
+
+      // Hard budget check (starters only). If the lineup already has four
+      // starters, a requested starter signing is intentionally placed on the
+      // bench instead of being blocked/stuck in limbo.
+      if (actualSlot === "starter" && targetForDuplicateCheck) {
+        const cap       = getTeamCap(userTeam);
+        const committed = rosterNow
+          .filter(p => !p.isSub)
+          .reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
+        const cost = getSigningCost(targetForDuplicateCheck);
+        const over = committed + cost - cap;
+        if (over > 0) {
+          return addNotif(state,
+            `Over budget — signing ${targetForDuplicateCheck.name} would exceed your cap by $${(over / 1000).toFixed(0)}k.`
+          );
+        }
+      }
       if (!targetForDuplicateCheck || isInactivePlayer(targetForDuplicateCheck)) {
         return addNotif(state, "Player is not available to sign.");
       }
@@ -661,13 +655,14 @@ function reducer(state, action) {
       const prospect = state.prospects.find(p => p.id === playerId);
 
       if (prospect) {
+        const fromChallengerTeamId = prospect.challengerTeamId ?? null;
         const existingHistory = prospect.teamHistory || [];
         const historyUpdated  = existingHistory.some(e => e.season === state.season)
           ? existingHistory
           : [...existingHistory, { season: state.season, teamId: userTeam }];
         const demand = getSigningCost(prospect);
         const signed = {
-          ...prospect, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: slotType === "sub",
+          ...prospect, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: actualSlot === "sub",
           scouted: true, contractYears: 2, salary: demand, teamHistory: historyUpdated,
         };
         return pushFeed(
@@ -675,13 +670,13 @@ function reducer(state, action) {
             ...state,
             players:  [...state.players, signed],
             prospects: state.prospects.filter(p => p.id !== playerId),
-            challengerTeams: (state.challengerTeams || []).map(t => t.id === signed.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
+            challengerTeams: (state.challengerTeams || []).map(t => t.id === fromChallengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
             challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
-              type: "CDL_SIGNING", playerId: signed.id, playerName: signed.name, fromTeamId: signed.challengerTeamId ?? null, toTeamId: userTeam,
+              type: "CDL_SIGNING", playerId: signed.id, playerName: signed.name, fromTeamId: fromChallengerTeamId, toTeamId: userTeam,
               note: `${tag} signed ${signed.name} from Challengers`,
             }),
-          }, `${signed.name} signed!`),
-          [mkFeed("signing", `${tag} sign ${signed.name}`, state.season, phase)]
+          }, `${signed.name} signed! ${actualSlot === "starter" ? "Player added to starting roster." : "Roster full: player added as substitute."}`),
+          [mkFeed("signing", `${tag} sign ${signed.name} (${actualSlot === "starter" ? "starter" : "bench"})`, state.season, phase)]
         );
       }
 
@@ -701,7 +696,7 @@ function reducer(state, action) {
               ? existingHistory
               : [...existingHistory, { season: state.season, teamId: userTeam }];
             return {
-              ...p, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: slotType === "sub",
+              ...p, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: actualSlot === "sub",
               scouted: true, contractYears: 2, salary: demand, teamHistory: historyUpdated,
             };
           }),
@@ -710,9 +705,73 @@ function reducer(state, action) {
             type: target.status === "freeAgent" ? "FREE_AGENT_SIGNING" : "CDL_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.previousTeamId ?? target.challengerTeamId ?? null, toTeamId: userTeam,
             note: target.status === "freeAgent" ? `${tag} signed ${target.name} in free agency` : `${tag} signed ${target.name}`,
           }),
-        }, `${target.name} signed!`),
-        [mkFeed("signing", `${tag} sign ${target.name}`, state.season, phase)]
+        }, `${target.name} signed! ${actualSlot === "starter" ? "Player added to starting roster." : "Roster full: player added as substitute."}`),
+        [mkFeed("signing", `${tag} sign ${target.name} (${actualSlot === "starter" ? "starter" : "bench"})`, state.season, phase)]
       );
+    }
+
+    // ── USER ROSTER SLOT MANAGEMENT ───────────────────────────────────────────
+    case "PROMOTE_PLAYER_TO_STARTER": {
+      const { playerId, swapWithPlayerId } = action;
+      const player = state.players.find(p => p.id === playerId);
+      if (!player || player.teamId !== state.userTeamId || !player.isSub) return addNotif(state, "Choose a bench player to promote.");
+      const starters = getStarters(state.players, state.userTeamId);
+      if (starters.length >= STARTER_LIMIT && !swapWithPlayerId) {
+        return addNotif(state, "Starting roster is full (4/4). Choose a starter to swap with this substitute.");
+      }
+      if (swapWithPlayerId) {
+        const starter = starters.find(p => p.id === swapWithPlayerId);
+        if (!starter) return addNotif(state, "Choose a valid starter to move to the bench.");
+        return addNotif({
+          ...state,
+          players: state.players.map(p => {
+            if (p.id === playerId) return { ...p, isSub: false };
+            if (p.id === swapWithPlayerId) return { ...p, isSub: true };
+            return p;
+          }),
+        }, `${player.name} promoted. ${starter.name} moved to the bench.`);
+      }
+      return addNotif({
+        ...state,
+        players: state.players.map(p => p.id === playerId ? { ...p, isSub: false } : p),
+      }, `${player.name} promoted to the starting roster.`);
+    }
+
+    case "MOVE_PLAYER_TO_BENCH": {
+      const { playerId } = action;
+      const player = state.players.find(p => p.id === playerId);
+      if (!player || player.teamId !== state.userTeamId || player.isSub) return addNotif(state, "Choose a starter to move to the bench.");
+      const nextPlayers = state.players.map(p => p.id === playerId ? { ...p, isSub: true } : p);
+      const warning = getRosterIncompleteMessage({ ...state, players: nextPlayers });
+      return addNotif({ ...state, players: nextPlayers }, warning ? `${player.name} moved to the bench. ${warning}` : `${player.name} moved to the bench.`);
+    }
+
+    case "SWAP_STARTER_SUB": {
+      const { starterId, subId } = action;
+      const starter = state.players.find(p => p.id === starterId);
+      const sub = state.players.find(p => p.id === subId);
+      if (!starter || starter.teamId !== state.userTeamId || starter.isSub) return addNotif(state, "Choose a valid starter to swap out.");
+      if (!sub || sub.teamId !== state.userTeamId || !sub.isSub) return addNotif(state, "Choose a valid bench player to swap in.");
+      return addNotif({
+        ...state,
+        players: state.players.map(p => {
+          if (p.id === starterId) return { ...p, isSub: true };
+          if (p.id === subId) return { ...p, isSub: false };
+          return p;
+        }),
+      }, `${sub.name} swapped into the starting roster. ${starter.name} moved to the bench.`);
+    }
+
+    case "AUTO_PICK_BEST_STARTERS": {
+      const teamId = action.teamId ?? state.userTeamId;
+      if (teamId !== state.userTeamId) return state;
+      const roster = state.players.filter(p => p.teamId === teamId && !isInactivePlayer(p));
+      if (roster.length < STARTER_LIMIT) return addNotif(state, `Need ${STARTER_LIMIT} active players before auto-picking starters.`);
+      const starterIds = autoPickStarterIds(state.players, teamId, STARTER_LIMIT);
+      return addNotif({
+        ...state,
+        players: state.players.map(p => p.teamId === teamId && !isInactivePlayer(p) ? { ...p, isSub: !starterIds.has(p.id) } : p),
+      }, "Auto Pick Best 4 complete. Highest-OVR players are now starters.");
     }
 
     // ── RELEASE PLAYER ────────────────────────────────────────────────────────
@@ -1126,7 +1185,7 @@ function reducer(state, action) {
         next = pushFeed(next, [mkFeed("transfer_done", `${buyTag} complete ${fmtFee(agreedFee)} buyout for ${player.name}`, state.season, phase)]);
         const msg = userIsSeller
           ? `${player.name} sold to ${trTeamName0(result.buyerTeamId)} for ${fmtFee(agreedFee)}.`
-          : `Transfer completed: ${player.name} has joined ${trTeamName0(result.buyerTeamId)}.`;
+          : `Transfer completed: ${player.name} has joined ${trTeamName0(result.buyerTeamId)}. ${result.asSub ? "Player added to bench." : "Player added to starting roster."}`;
         return addNotif(next, msg);
       }
       return state;
@@ -1217,7 +1276,9 @@ function addNotif(state, msg) {
 // Actions that change rosters or staff → safe trigger to refresh map profiles
 // mid-season (deterministic rebuild, so it stays stable until the next change).
 const MAP_PROFILE_REFRESH_ACTIONS = new Set([
-  "SIGN_PLAYER", "RELEASE_PLAYER", "RESIGN_PLAYER", "HIRE_STAFF", "FIRE_STAFF",
+  "SIGN_PLAYER", "RELEASE_PLAYER", "RESIGN_PLAYER", "PROMOTE_PLAYER_TO_STARTER",
+  "MOVE_PLAYER_TO_BENCH", "SWAP_STARTER_SUB", "AUTO_PICK_BEST_STARTERS",
+  "HIRE_STAFF", "FIRE_STAFF",
 ]);
 
 function instrumentedReducer(prevState, action) {

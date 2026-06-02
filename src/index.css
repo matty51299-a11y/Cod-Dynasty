@@ -9890,3 +9890,16 @@ body { background: #111317; }
   background: var(--bg3); border: 1px solid var(--border);
   color: var(--text-dim); font-size: 13px;
 }
+
+.roster-action-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.roster-action-stack .btn-primary-sm,
+.roster-action-stack .btn-secondary-sm,
+.roster-action-stack .btn-danger-sm {
+  white-space: nowrap;
+}

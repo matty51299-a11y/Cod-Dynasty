@@ -3064,6 +3064,12 @@ export function refreshProspectPool(prospects, season) {
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
+function activeMatchPlayers(gameState, teamId) {
+  const roster = (gameState.players || []).filter(p => p.teamId === teamId);
+  const starters = roster.filter(p => !p.isSub);
+  return [...starters, ...roster.filter(p => p.isSub)];
+}
+
 function buildTeamObj(teamId, gameState) {
   // Attach the team's CDL 2026 map profile so simMatch can derive the veto /
   // map-pool edge. getTeamMapProfile is read-only with a safe fallback, so this
@@ -3073,7 +3079,7 @@ function buildTeamObj(teamId, gameState) {
     return { id: eventTeam.id, name: eventTeam.name, players: eventTeam.players || [], mapProfile: getTeamMapProfile(gameState, teamId) };
   }
   const meta    = CDL_TEAMS.find(t => t.id === teamId) ?? { id: teamId, name: teamId };
-  const players = (gameState.players || []).filter(p => p.teamId === teamId);
+  const players = activeMatchPlayers(gameState, teamId);
   return { id: meta.id, name: meta.name, players, mapProfile: getTeamMapProfile(gameState, teamId) };
 }
 
@@ -3130,8 +3136,8 @@ export function commitUserMatchResult(state, result) {
 
     // 4. Update form on both teams' starters
     const teamAWon = result.winnerId === result.teamAId;
-    _updateFormSimple(state.players.filter(p => p.teamId === result.teamAId).slice(0, 4), teamAWon);
-    _updateFormSimple(state.players.filter(p => p.teamId === result.teamBId).slice(0, 4), !teamAWon);
+    _updateFormSimple(activeMatchPlayers(state, result.teamAId).slice(0, 4), teamAWon);
+    _updateFormSimple(activeMatchPlayers(state, result.teamBId).slice(0, 4), !teamAWon);
 
     // 5. Sim the remaining non-user matches in the same matchday batch
     const stillUnplayed = stage.matches
@@ -3193,8 +3199,8 @@ export function commitUserMatchResult(state, result) {
 
     // Update form on both teams' starters
     const teamAWon = result.winnerId === result.teamAId;
-    _updateFormSimple(state.players.filter(p => p.teamId === result.teamAId).slice(0, 4), teamAWon);
-    _updateFormSimple(state.players.filter(p => p.teamId === result.teamBId).slice(0, 4), !teamAWon);
+    _updateFormSimple(activeMatchPlayers(state, result.teamAId).slice(0, 4), teamAWon);
+    _updateFormSimple(activeMatchPlayers(state, result.teamBId).slice(0, 4), !teamAWon);
 
     let nextState = state;
     if (allComplete || _resolveMajorCompletion(schedule.majors[schedule.majorIdx])) nextState = _advanceMajorPhase(schedule, state);

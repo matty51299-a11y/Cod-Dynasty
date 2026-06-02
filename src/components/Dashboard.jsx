@@ -843,13 +843,14 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
                 const roster = players.filter(p => p.teamId === userTeamId);
                 const starters = roster.filter(p => !p.isSub);
                 const committed = starters.reduce((sum, p) => sum + (p.salary ?? getSigningCost(p)), 0);
-                const canSign = freeAgencyOpen && starters.length < 4 && committed + getSigningCost(ply) <= getTeamCap(userTeamId);
+                const signSlot = starters.length < 4 ? "starter" : "sub";
+                const canSign = freeAgencyOpen && (signSlot === "sub" || committed + getSigningCost(ply) <= getTeamCap(userTeamId));
                 return (
                 <div className="oh-available-row" key={ply.id}>
                   <button className="link-button player-link" onClick={() => openPlayerProfile(ply.id)}>{ply.name}</button>
                   <span>{ply.primary || ply.role || "Role TBD"} · {ply.overall || "—"}/{ply.potential || "—"}</span>
                   <em>{fmtMoney(getSigningCost(ply))} · {stockLabel(ply)} · {ply.region || "NA"}</em>
-                  {freeAgencyOpen && (canSign ? <button className="btn-primary-sm" onClick={() => dispatch({ type: "SIGN_PLAYER", playerId: ply.id, slotType: "starter" })}>Sign</button> : <small className="muted">Full/over cap</small>)}
+                  {freeAgencyOpen && (canSign ? <button className="btn-primary-sm" onClick={() => dispatch({ type: "SIGN_PLAYER", playerId: ply.id, slotType: signSlot })}>Sign</button> : <small className="muted">Over cap</small>)}
                 </div>
               );})}
             </div> : <p className="oh-empty">No available free agents found.</p>}

@@ -49,13 +49,13 @@ export function getRosterIncompleteMessage(state, teamId = state?.userTeamId) {
     if (status.valid) return null;
     const teamName = resolveUserTeamMeta(state)?.name ?? teamId ?? "Your team";
     const playerWord = status.missing === 1 ? "player" : "players";
-    return `Roster incomplete — ${teamName} have ${status.count}/${status.required} starters. Sign ${status.missing} more ${playerWord} before continuing.`;
+    return `Roster incomplete — ${teamName} have ${status.count}/${status.required} starters. Promote or sign ${status.missing} more ${playerWord} before continuing.`;
   }
   const status = getTeamRosterStatus(state?.players, teamId);
   if (status.valid) return null;
   const teamName = CDL_TEAMS.find(t => t.id === teamId)?.name ?? teamId ?? "Your team";
   const playerWord = status.missing === 1 ? "player" : "players";
-  return `Roster incomplete — ${teamName} have ${status.count}/${status.required} starters. Sign ${status.missing} more ${playerWord} before continuing.`;
+  return `Roster incomplete — ${teamName} have ${status.count}/${status.required} starters. Promote or sign ${status.missing} more ${playerWord} before continuing.`;
 }
 
 export function isUserRosterPlayable(state) {
