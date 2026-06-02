@@ -24,7 +24,7 @@ export const TRANSFER_STATUSES = [
   "Open to Offers", "Transfer Listed", "Not For Sale",
   "Unsettled", "Wants Move", "Recently Signed", "Protected",
 ];
-export const OFFER_STATUSES = ["Pending", "Accepted", "Rejected", "Countered", "Withdrawn", "Expired"];
+export const OFFER_STATUSES = ["Pending", "Accepted", "Completed", "Rejected", "Countered", "Withdrawn", "Expired", "Cancelled"];
 
 // ── Tiny deterministic helpers ───────────────────────────────────────────────
 function hashStr(str) {
@@ -51,6 +51,8 @@ export function migrateTransferMarket(existing) {
     budgets: e.budgets && typeof e.budgets === "object" ? e.budgets : {},    // { [teamId]: {balance, spend, income} }
     recentlyTransferred: e.recentlyTransferred && typeof e.recentlyTransferred === "object" ? e.recentlyTransferred : {},
     cooldowns: e.cooldowns && typeof e.cooldowns === "object" ? e.cooldowns : {},
+    pendingAcceptedOfferId: e.pendingAcceptedOfferId ?? null,
+    activeTermsOfferId: e.activeTermsOfferId ?? null,
     lastWaveKey: e.lastWaveKey ?? null,
     waveNonce: e.waveNonce ?? 0,
     nextId: e.nextId ?? 1,
@@ -163,10 +165,56 @@ export function getTransferBudget(state, teamId) {
 }
 
 // Salary-cap room for a buyer to add `salary` as a starter (subs are cap-free).
-function capRoomForStarter(state, teamId, addSalary, excludePlayerId = null) {
+export function capRoomForStarter(state, teamId, addSalary, excludePlayerId = null) {
   const starters = getActiveStarters(state.players, teamId).filter(p => p.id !== excludePlayerId);
   const committed = starters.reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0);
   return getTeamCap(teamId) - committed - addSalary;
+}
+
+export function isOutgoingTermsRequired(neg, state) {
+  if (!neg || !state) return false;
+  if (neg.initiator !== "user" || neg.fromTeamId !== state.userTeamId) return false;
+  if (neg.status !== "Accepted") return false;
+  if (neg.nextAction && neg.nextAction !== "player_terms") return false;
+  const player = (state.players || []).find(p => p.id === neg.playerId);
+  return !!player && player.teamId === neg.toTeamId;
+}
+
+export function getAcceptedOutgoingTermsOffers(state) {
+  const tm = migrateTransferMarket(state?.transferMarket);
+  return tm.negotiations.filter(n => isOutgoingTermsRequired(n, state));
+}
+
+export function getTransferTermsPreview(state, neg) {
+  const player = (state?.players || []).find(p => p.id === neg?.playerId);
+  if (!state || !neg || !player) return null;
+  const salary = player.salary ?? getSigningCost(player);
+  const contractYears = Math.max(1, player.contractYears ?? 2);
+  const buyerTeamId = neg.fromTeamId;
+  const sellerTeamId = neg.toTeamId;
+  const buyerStarters = getActiveStarters(state.players, buyerTeamId);
+  const userIsBuyer = buyerTeamId === state.userTeamId;
+  let asSub = false;
+  let releaseId = null;
+  let rosterNote = "Starter slot available";
+  if (buyerStarters.length >= 4) {
+    if (userIsBuyer) {
+      const subs = state.players.filter(p => p.teamId === buyerTeamId && p.isSub && !isInactivePlayer(p));
+      asSub = true;
+      rosterNote = subs.length >= 1 ? "Roster full — release a starter or your sub first" : "Will join as your sub";
+    } else {
+      const weakest = [...buyerStarters].sort((a, b) => (a.overall ?? 70) - (b.overall ?? 70))[0];
+      releaseId = weakest?.id ?? null;
+      rosterNote = releaseId ? "AI buyer will release weakest starter" : "AI buyer roster check pending";
+    }
+  }
+  const capAfter = asSub ? getTeamCap(buyerTeamId) - getActiveStarters(state.players, buyerTeamId).reduce((s, p) => s + (p.salary ?? getSigningCost(p)), 0)
+    : capRoomForStarter(state, buyerTeamId, salary, releaseId);
+  return {
+    player, buyerTeamId, sellerTeamId,
+    transferFee: neg.counterFee ?? neg.agreedFee ?? neg.fee,
+    salary, contractYears, asSub, releaseId, capAfter, rosterNote,
+  };
 }
 
 // ── Player willingness to move (buyer = destination) ─────────────────────────

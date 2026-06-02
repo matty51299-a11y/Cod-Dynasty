@@ -21,6 +21,7 @@ import {
   migrateTransferMarket, isTransferWindowOpen, getWindowKey, generateIncomingOffers,
   getPlayerValuation, getAskingPrice, evaluateSellResponse, evaluateBuyerCounterResponse,
   buildTransferResult, getTransferBudget, getTransferStatus, getLeagueTransferListed,
+  getAcceptedOutgoingTermsOffers, getTransferTermsPreview, isOutgoingTermsRequired,
 } from "../src/engine/transferEngine.js";
 
 let pass = 0, fail = 0;
@@ -216,6 +217,33 @@ function noDuplicateOwnership(state) {
   check("hydrate: structure", tm && Array.isArray(tm.negotiations) && typeof tm.budgets === "object");
   check("hydrate: status read defaults to Open to Offers", getTransferStatus(s.players.find(p => p.teamId), { ...s, transferMarket: tm }) === "Open to Offers");
   check("hydrate: window key derivable", typeof getWindowKey({ ...s, transferMarket: tm }) === "string");
+}
+
+// ── 9. Accepted outgoing offer requires terms, then completes cleanly ────────
+{
+  const s = newGame("boston");
+  const target = s.players.filter(p => p.teamId === "g2" && !p.isSub).sort((a, b) => b.overall - a.overall)[0];
+  const fee = getPlayerValuation(target, s);
+  const accepted = {
+    id: "tr_terms", fromTeamId: "boston", toTeamId: "g2", playerId: target.id,
+    offerType: "buyout", fee, agreedFee: fee, status: "Accepted", nextAction: "player_terms",
+    initiator: "user", history: [{ by: "boston", action: "offer", fee }, { by: "g2", action: "accept", fee }],
+  };
+  const pendingState = { ...s, transferMarket: { ...s.transferMarket, negotiations: [accepted], pendingAcceptedOfferId: accepted.id } };
+  check("terms: accepted outgoing offer is action-required", isOutgoingTermsRequired(accepted, pendingState));
+  check("terms: selector finds accepted outgoing terms offer", getAcceptedOutgoingTermsOffers(pendingState).length === 1);
+  const preview = getTransferTermsPreview(pendingState, accepted);
+  check("terms: preview includes fee/salary/contract/cap", !!preview && preview.transferFee === fee && preview.salary > 0 && preview.contractYears > 0 && typeof preview.capAfter === "number");
+  const result = buildTransferResult(pendingState, accepted, fee);
+  check("terms: confirm transfer result is not blocked", !result.blockedReason, result.blockedReason || "");
+  if (!result.blockedReason) {
+    const negotiations = result.transferMarket.negotiations.map(n => n.id === accepted.id ? { ...n, status: "Completed", nextAction: "done", agreedFee: fee } : n);
+    const completed = ensureCdlRosterIntegrity({ ...pendingState, players: result.players, transferMarket: { ...result.transferMarket, negotiations } }, { windowType: "transfer" });
+    check("terms: player moves to user team", completed.players.find(p => p.id === target.id)?.teamId === "boston");
+    check("terms: player leaves selling team", !completed.players.some(p => p.id === target.id && p.teamId === "g2"));
+    check("terms: negotiation becomes completed", completed.transferMarket.negotiations.find(n => n.id === accepted.id)?.status === "Completed");
+    check("terms: no duplicate ownership after completion", noDuplicateOwnership(completed));
+  }
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────

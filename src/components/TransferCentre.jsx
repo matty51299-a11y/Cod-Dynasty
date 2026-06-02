@@ -12,6 +12,7 @@ import {
   isTransferWindowOpen, transferWindowLabel, getWindowKey, getTransferBudget,
   getPlayerValuation, getAskingPrice, getTransferStatus, getIncomingOffers,
   getOutgoingOffers, getLeagueTransferListed, fmtFee, teamTag,
+  teamName, getAcceptedOutgoingTermsOffers, getTransferTermsPreview,
 } from "../engine/transferEngine.js";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 
@@ -25,7 +26,63 @@ function feeColor(fee, val) {
 }
 
 function offerStatusTone(status) {
-  return { Pending: "neutral", Countered: "warning", Accepted: "success", Rejected: "danger", Withdrawn: "danger", Expired: "danger" }[status] || "neutral";
+  return { Pending: "neutral", Countered: "warning", Accepted: "warning", Completed: "success", Rejected: "danger", Withdrawn: "danger", Expired: "danger", Cancelled: "danger" }[status] || "neutral";
+}
+
+function offerStatusLabel(n) {
+  if (n.status === "Accepted" && (!n.nextAction || n.nextAction === "player_terms")) return "Fee Accepted";
+  if (n.status === "Countered") return "Counter Received";
+  return n.status;
+}
+
+function nextStepLabel(n) {
+  if (n.status === "Accepted" && (!n.nextAction || n.nextAction === "player_terms")) return "Agree player terms";
+  if (n.status === "Countered" && n.counterBy === "seller") return "Respond to counter";
+  if (n.status === "Completed") return "Done";
+  if (n.status === "Pending") return "Await selling team";
+  if (["Rejected", "Withdrawn", "Expired", "Cancelled"].includes(n.status)) return "Closed";
+  return "Review offer";
+}
+
+function ConfirmSigningModal() {
+  const { state, dispatch } = useGame();
+  if (!state?.transferMarket?.activeTermsOfferId) return null;
+  const neg = getAcceptedOutgoingTermsOffers(state).find(n => n.id === state.transferMarket.activeTermsOfferId);
+  const preview = getTransferTermsPreview(state, neg);
+  if (!neg || !preview) return null;
+  const capTone = preview.capAfter < 0 ? "tr-impact-bad" : "tr-impact-good";
+
+  return (
+    <div className="transfer-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-signing-title">
+      <div className="transfer-modal transfer-terms-modal">
+        <div className="transfer-modal-kicker">Player terms required</div>
+        <h2 id="confirm-signing-title">Confirm Signing</h2>
+        <p>
+          <strong>{preview.player.name}</strong> will join your roster from {teamName(preview.sellerTeamId)} for {fmtFee(preview.transferFee)}.
+        </p>
+        <div className="transfer-terms-grid">
+          <span><strong>Player</strong>{preview.player.name}</span>
+          <span><strong>From</strong>{teamName(preview.sellerTeamId)}</span>
+          <span><strong>To</strong>{teamName(preview.buyerTeamId)}</span>
+          <span><strong>Transfer Fee</strong>{fmtFee(preview.transferFee)}</span>
+          <span><strong>Salary</strong>{fmtFee(preview.salary)}</span>
+          <span><strong>Contract</strong>{preview.contractYears} year{preview.contractYears === 1 ? "" : "s"}</span>
+          <span className={capTone}><strong>Cap Space After Deal</strong>{fmtFee(preview.capAfter)}</span>
+          <span><strong>Roster Impact</strong>{preview.rosterNote}</span>
+        </div>
+        {preview.capAfter < 0 && (
+          <div className="ui-warning-banner tr-modal-warning">
+            Cannot complete transfer: this signing would exceed your salary cap by {fmtFee(Math.abs(preview.capAfter))}.
+          </div>
+        )}
+        <div className="transfer-modal-actions">
+          <button className="btn-primary" onClick={() => dispatch({ type: "RESPOND_TRANSFER_OFFER", negotiationId: neg.id, action: "accept" })}>Confirm Transfer</button>
+          <button className="btn-secondary" onClick={() => dispatch({ type: "RESPOND_TRANSFER_OFFER", negotiationId: neg.id, action: "cancel" })}>Cancel Deal</button>
+          <button className="btn-secondary" onClick={() => dispatch({ type: "CLOSE_TRANSFER_TERMS" })}>Later</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function TransferCentre() {
@@ -50,6 +107,7 @@ export default function TransferCentre() {
   const incoming = getIncomingOffers(state).filter(n => ["Pending", "Countered", "Accepted"].includes(n.status));
   const incomingDone = getIncomingOffers(state).filter(n => ["Rejected", "Withdrawn", "Expired"].includes(n.status)).slice(-5);
   const outgoing = getOutgoingOffers(state);
+  const actionRequired = getAcceptedOutgoingTermsOffers(state);
   const listed = getLeagueTransferListed(state).filter(p => p.teamId !== userTeamId);
   const myPlayers = players.filter(p => p.teamId === userTeamId && !isInactivePlayer(p));
   const budget = getTransferBudget(state, userTeamId);
@@ -65,6 +123,10 @@ export default function TransferCentre() {
   function makeOffer(playerId) {
     const v = Number(counterFees["mk_" + playerId]);
     if (v > 0) dispatch({ type: "MAKE_TRANSFER_OFFER", playerId, fee: v * 1000 });
+  }
+  function openTerms(negotiationId) {
+    setTab("outgoing");
+    dispatch({ type: "OPEN_TRANSFER_TERMS", negotiationId });
   }
 
   const TABS = [
@@ -92,6 +154,16 @@ export default function TransferCentre() {
 
       {!windowOpen && (
         <div className="ui-warning-banner"><strong>Transfer window closed.</strong> In-contract moves resume between stages and in the offseason — not during live events.</div>
+      )}
+
+      {actionRequired.length > 0 && (
+        <div className="tr-action-banner">
+          <div>
+            <strong>You have {actionRequired.length} accepted transfer{actionRequired.length === 1 ? "" : "s"} waiting for player terms.</strong>
+            <span>Open terms to confirm the signing, or cancel the deal before it gets stuck.</span>
+          </div>
+          <button className="btn-primary-sm" onClick={() => openTerms(actionRequired[0].id)}>Review Now</button>
+        </div>
       )}
 
       <div className="cm-tabs ui-tabs">
@@ -152,31 +224,63 @@ export default function TransferCentre() {
       {/* ── OUTGOING OFFERS ─────────────────────────────────────────────────── */}
       {tab === "outgoing" && (
         <SectionCard title="Outgoing Offers" subtitle="Approaches you've made for other clubs' contracted players.">
+          {actionRequired.length > 0 && (
+            <div className="tr-action-required">
+              <div className="tr-action-required-head">
+                <h4>Action Required</h4>
+                <span>{actionRequired.length} accepted fee{actionRequired.length === 1 ? "" : "s"} need player terms</span>
+              </div>
+              <div className="ui-table-wrap"><table className="roster-table data-table">
+                <thead><tr><th>Player</th><th>Selling Team</th><th>Accepted Fee</th><th>Next Step</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {actionRequired.map(n => {
+                    const p = pById(n.playerId); if (!p) return null;
+                    const fee = n.counterFee ?? n.agreedFee ?? n.fee;
+                    return (
+                      <tr key={`ar_${n.id}`}>
+                        <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button> <span className="muted">{p.primary} · {p.overall}</span></td>
+                        <td>{teamTag(n.toTeamId)} accepted {fmtFee(fee)}</td>
+                        <td>{fmtFee(fee)}</td>
+                        <td><strong>Agree Player Terms</strong></td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <button className="btn-primary-sm" onClick={() => openTerms(n.id)}>Open Terms</button>
+                          <button className="btn-secondary tr-btn" onClick={() => respond(n.id, "cancel")}>Cancel Deal</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table></div>
+            </div>
+          )}
           {outgoing.length === 0 ? (
             <EmptyState title="No outgoing offers" detail="Use the Transfer-Listed tab or a player's profile to make an offer for a contracted player." />
           ) : (
             <div className="ui-table-wrap"><table className="roster-table data-table">
-              <thead><tr><th>Selling Team</th><th>Player</th><th>Your Fee</th><th>Counter</th><th>Status</th><th>Re-counter</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Player</th><th>Selling Team</th><th>Fee</th><th>Status</th><th>Next Step</th><th>Re-counter</th><th>Actions</th></tr></thead>
               <tbody>
                 {outgoing.slice().reverse().map(n => {
                   const p = pById(n.playerId); if (!p) return null;
-                  const accepted = n.status === "Accepted";
+                  const accepted = n.status === "Accepted" && (!n.nextAction || n.nextAction === "player_terms");
                   const countered = n.status === "Countered" && n.counterBy === "seller";
+                  const liveFee = n.counterFee ?? n.agreedFee ?? n.fee;
                   return (
                     <tr key={n.id}>
-                      <td>{teamTag(n.toTeamId)}</td>
                       <td className="player-name"><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button> <span className="muted">{p.primary} · {p.overall}</span></td>
-                      <td>{fmtFee(n.fee)}</td>
-                      <td style={{ color: "#fbbf24", fontWeight: 600 }}>{n.counterFee ? fmtFee(n.counterFee) : "—"}</td>
-                      <td><Pill tone={offerStatusTone(n.status)}>{n.status}</Pill></td>
+                      <td>{teamTag(n.toTeamId)}</td>
+                      <td>{fmtFee(liveFee)}</td>
+                      <td><Pill tone={offerStatusTone(n.status)}>{offerStatusLabel(n)}</Pill>{accepted && <span className="tr-substatus">Terms Required</span>}</td>
+                      <td>{nextStepLabel(n)}</td>
                       <td>{(countered) && <input className="slot-select tr-fee-input" type="number" placeholder="k" value={counterFees[n.id] ?? ""} onChange={e => setCounterFees({ ...counterFees, [n.id]: e.target.value })} />}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
-                        {accepted && <button className="btn-primary-sm" onClick={() => respond(n.id, "accept")}>Complete Signing</button>}
+                        {accepted && <button className="btn-primary-sm" onClick={() => openTerms(n.id)}>Open Terms</button>}
                         {countered && <>
                           <button className="btn-primary-sm" onClick={() => respond(n.id, "accept")} title={`Pay ${fmtFee(n.counterFee)}`}>Accept Counter</button>
                           <button className="btn-secondary tr-btn" onClick={() => { const v = Number(counterFees[n.id]); if (v > 0) respond(n.id, "counter", v * 1000); }} disabled={!(Number(counterFees[n.id]) > 0)}>Re-counter</button>
                         </>}
-                        {["Pending", "Countered", "Accepted"].includes(n.status) && <button className="btn-secondary tr-btn" onClick={() => respond(n.id, "withdraw")}>Withdraw</button>}
+                        {accepted && <button className="btn-secondary tr-btn" onClick={() => respond(n.id, "cancel")}>Cancel Deal</button>}
+                        {["Pending", "Countered"].includes(n.status) && <button className="btn-secondary tr-btn" onClick={() => respond(n.id, "withdraw")}>Withdraw</button>}
+                        {n.status === "Completed" && <button className="btn-secondary tr-btn" onClick={() => openPlayerProfile(p)}>View Player</button>}
                       </td>
                     </tr>
                   );
@@ -186,6 +290,8 @@ export default function TransferCentre() {
           )}
         </SectionCard>
       )}
+
+      <ConfirmSigningModal />
 
       {/* ── TRANSFER LISTED (league) ────────────────────────────────────────── */}
       {tab === "listed" && (
