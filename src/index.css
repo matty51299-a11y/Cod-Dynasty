@@ -9883,3 +9883,10 @@ body { background: #111317; }
   box-shadow: 0 0 0 1px var(--accent) inset;
 }
 .cd-action-banner strong { color: var(--text-head); }
+
+/* Challenger staff framing note */
+.staff-challenger-note {
+  margin: 0 0 14px; padding: 10px 14px; border-radius: 8px;
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 13px;
+}

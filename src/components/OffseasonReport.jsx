@@ -4,24 +4,29 @@
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import { isChallengerMode, getChallengerRosterPlayers } from "../utils/userTeam.js";
 
 const TEAM_MAP = Object.fromEntries(CDL_TEAMS.map(t => [t.id, t]));
-
-const FILTER_OPTIONS = [
-  { id: "all",       label: "All Players" },
-  { id: "myteam",   label: "My Team" },
-  { id: "pros",     label: "Pros Only" },
-  { id: "prospects",label: "Challengers" },
-  { id: "improved", label: "Improved" },
-  { id: "declined", label: "Declined" },
-  { id: "breakouts",label: "Breakouts" },
-  { id: "falloffs", label: "Fall-offs" },
-];
 
 export default function OffseasonReport() {
   const { state } = useGame();
   const [filter, setFilter] = useState("all");
   const [sortBy, setSortBy] = useState("delta");
+
+  const challengerMode = isChallengerMode(state);
+  const myRosterIds = new Set(challengerMode ? getChallengerRosterPlayers(state).map(p => p.id) : []);
+  const isMine = (e) => challengerMode ? myRosterIds.has(e.id) : e.teamId === state.userTeamId;
+
+  const FILTER_OPTIONS = [
+    { id: "all",       label: "All Players" },
+    { id: "myteam",    label: challengerMode ? "My Squad" : "My Team" },
+    { id: "pros",      label: "Pros Only" },
+    { id: "prospects", label: "Challengers" },
+    { id: "improved",  label: "Improved" },
+    { id: "declined",  label: "Declined" },
+    { id: "breakouts", label: "Breakouts" },
+    { id: "falloffs",  label: "Fall-offs" },
+  ];
 
   const log = state?.progressionLog;
 
@@ -50,7 +55,7 @@ export default function OffseasonReport() {
 
   // Filtering
   const filtered = log.filter(e => {
-    if (filter === "myteam")    return e.teamId === state.userTeamId;
+    if (filter === "myteam")    return isMine(e);
     if (filter === "pros")      return !e.isProspect;
     if (filter === "prospects") return !!e.isProspect;
     if (filter === "improved")  return e.delta > 0;
@@ -97,8 +102,13 @@ export default function OffseasonReport() {
   return (
     <div className="page-shell">
       <h2 className="page-title">
-        Development Report — After Season {state.season - 1}
+        {challengerMode ? "Challenger Development" : "Development Report"} — After Season {state.season - 1}
       </h2>
+      {challengerMode && (
+        <p className="text-dim" style={{ margin: "4px 0 12px", fontSize: 13 }}>
+          Growing OVR/POT builds CDL-ready, higher-value players — develop talent for Pro-Am Majors, and expect buyout interest when they perform.
+        </p>
+      )}
 
       {/* Summary bar */}
       <div className="dev-summary-bar">
@@ -210,7 +220,7 @@ export default function OffseasonReport() {
                                : "delta-zero";
               const rowClass = [
                 "dev-row",
-                e.teamId === state.userTeamId ? "dev-row--myteam" : "",
+                isMine(e) ? "dev-row--myteam" : "",
                 isBreakout ? "dev-row--breakout" : "",
                 isCollapse ? "dev-row--collapse" : "",
               ].filter(Boolean).join(" ");

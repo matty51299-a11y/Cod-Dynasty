@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import { CDL_TEAMS } from "../data/teams.js";
+import { isChallengerMode, resolveUserTeamMeta } from "../utils/userTeam.js";
 import { STAFF_ROLES } from "../data/staff.js";
 import {
   getStaffForTeam,
@@ -252,8 +253,10 @@ export default function StaffPanel() {
   const [filterRole, setFilterRole] = useState("");
 
   if (!state) return null;
-  const { userTeamId, staff = [], season } = state;
-  const team = CDL_TEAMS.find(t => t.id === userTeamId);
+  const { userTeamId, staff = [] } = state;
+  const challengerMode = isChallengerMode(state);
+  const meta = resolveUserTeamMeta(state);
+  const team = CDL_TEAMS.find(t => t.id === userTeamId) || meta;
 
   const teamStaff = getStaffForTeam(staff, userTeamId);
   const freeStaff = getFreeStaff(staff);
@@ -274,7 +277,7 @@ export default function StaffPanel() {
       {/* ── Header ── */}
       <div className="staff-header">
         <div>
-          <h2 className="staff-title">Staff &amp; Coaching</h2>
+          <h2 className="staff-title">{challengerMode ? "Challenger Staff" : "Staff & Coaching"}</h2>
           <p className="staff-subtitle" style={{ color: team?.color ?? "var(--accent)" }}>
             {team?.name ?? "Your Team"}
           </p>
@@ -284,6 +287,12 @@ export default function StaffPanel() {
           <span className="staff-payroll-val">${(payroll / 1000).toFixed(0)}k / yr</span>
         </div>
       </div>
+
+      {challengerMode && (
+        <p className="staff-challenger-note">
+          Staff resources are lighter at Challenger level. Strong coaching and scouting help develop players and attract CDL attention.
+        </p>
+      )}
 
       {/* ── Staff bonuses overview ── */}
       <div className="staff-bonuses-card">

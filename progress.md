@@ -919,3 +919,22 @@ Bug-fix pass only — no new systems, no rebalancing, no format/logic changes be
 
 ### Testing
 - `npm run build` ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseOffseasonFreeAgency`/`diagnoseOffseasonState`/`diagnoseChallengerRosterIntegrity`/`diagnosePostSeasonFlow`/`diagnoseTransferMarket` (49/49)/`diagnoseProspectScouting` (26/26)/`diagnoseChallengerManagerMode` (33/33)/`diagnoseBoardObjectives`/`diagnoseMapProfiles`/`diagnoseChallengerQualifier24`/`diagnosePostSeasonEvents` ✓ · ESLint clean on changed files (pre-existing matchSim unused-var warnings untouched).
+
+## Update 2026-06-02 (Challenger-mode UI context pass — secondary screens)
+UI/context only — no engine, gameplay, format, or diagnostic changes. Only components + CSS touched. All screens detect mode via `isChallengerMode(state)` (defaults to CDL when `userTeamType` is missing); CDL saves render exactly as before.
+
+### Screens reskinned for Challenger mode
+- **Transfer Centre** (`TransferCentre.jsx`): Challenger users get a dedicated buyout-focused view (`ChallengerTransferCentre`) reusing the existing `state.challengerOffers` flow — tabs **CDL Interest** (incoming buyout offers, Accept/Reject → `RESPOND_CHALLENGER_OFFER`) and **My Challenger Squad** (roster with Development Value, Buyout Risk, live CDL Interest). Transfer-Funds/open-offers/window header, and a clear empty state ("Transfer activity will appear here when CDL teams make offers for your players…"). CDL Transfer Centre is unchanged.
+- **Staff** (`StaffPanel.jsx`): title becomes "Challenger Staff", team name resolved via `resolveUserTeamMeta`, plus a framing note ("Staff resources are lighter at Challenger level…"). Hiring stays functional; CDL staff screen unchanged.
+- **Scouting** (`Scouting.jsx`): title "Prospect Scouting" with Challenger-focused eyebrow/subtitle ("Find affordable talent, hidden gems and players with a route back to CDL…").
+- **Dev Report** (`OffseasonReport.jsx`): title "Challenger Development" + framing line; the "My Team" filter/highlight is now Challenger-aware (matches the user's Challenger roster ids, since Challenger players have `teamId: null`) and relabeled "My Squad".
+- **Free Agency** (`FreeAgency.jsx`): Challenger-specific header/subtitle, recruitment-context stat cards (Market / Former CDL / Challenger Roster x/4 / Transfer Funds) replacing the CDL cap cards, the CDL salary-cap budget bar hidden, and sign-gating driven by the 4-man Challenger roster instead of the CDL cap.
+- **Market** (`Prospects.jsx`): Challenger header/subtitle ("…players with a route back to CDL. Replace players poached by CDL teams…"), CDL cap row/budget bar hidden, Squad x/4 chip, and 4-man sign-gating.
+- **Offseason summary** (`ChallengerDashboard.jsx`): a Challenger "Offseason — Challenger Review" card (circuit finish, Majors qualified, players sold to CDL, transfer funds) with a contract pass-through explanation ("Your Challenger contracts have been reviewed. Focus now shifts to recruitment, development and protecting key players from CDL interest…").
+
+### Intentionally unchanged
+- All engine/store/data/diagnostics. CDL mode UI across every screen. The CDL transfer engine, scouting engine, staff engine and budgets (Challenger screens reuse existing state/actions only; no new logic).
+- The "Sign As" starter/sub dropdown still renders in the Market/FA tables for Challenger users (ignored by `SIGN_CHALLENGER_PLAYER`); a future pass could hide it.
+
+### Testing
+`npm run build` ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseChallengerManagerMode` 33/33 ✓ · `diagnoseTransferMarket` 49/49 ✓ · `diagnoseProspectScouting` 26/26 ✓ · ESLint clean on changed files.
