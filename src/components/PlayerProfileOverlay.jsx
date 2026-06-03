@@ -9,6 +9,9 @@ import {
   getPlayerValuation, getAskingPrice, getTransferStatus, getTransferBudget,
   isTransferWindowOpen, fmtFee, getTransferIntel,
 } from "../engine/transferEngine.js";
+import { getMorale, moodForLevel, moraleColor, derivePersonality } from "../engine/moraleEngine.js";
+import { isChallengerMode } from "../utils/userTeam.js";
+import ConversationModal from "./ConversationModal.jsx";
 
 function ratingColor(v) {
   if (v >= 90) return "#166534";
@@ -38,6 +41,7 @@ export default function PlayerProfileOverlay() {
   const { openPlayerRef, closePlayerProfile } = usePlayerProfile();
   const [tab, setTab] = useState(null);
   const [offerK, setOfferK] = useState("");
+  const [showTalk, setShowTalk] = useState(false);
   const player = useMemo(() => findPlayerEverywhere(state, openPlayerRef), [state, openPlayerRef]);
   const history = useMemo(() => buildPlayerHistory(state, player), [state, player]);
 
@@ -176,6 +180,41 @@ export default function PlayerProfileOverlay() {
             );
           })()}
 
+          {player && (() => {
+            const onUserTeam = (player.teamId && player.teamId === state.userTeamId)
+              || (isChallengerMode(state) && player.challengerTeamId === state.userTeamId);
+            // Morale is most meaningful for the user's own squad; show it there.
+            if (!onUserTeam) return null;
+            const m = getMorale(state, player.id);
+            const activePromises = (m.promises || []).filter(p => p.status === "active");
+            const lastEvent = m.recentEvents?.[m.recentEvents.length - 1];
+            const traits = derivePersonality(player);
+            return (
+              <div className="pm-section pm-morale-section">
+                <div className="pm-section-title">Morale & Dynamics</div>
+                <div className="pm-info-strip">
+                  <span><span className="pm-strip-lbl">Mood</span> <b style={{ color: moraleColor(m.level) }}>{m.level} {moodForLevel(m.level)}</b></span>
+                  <span><span className="pm-strip-lbl">Trust</span> {m.trust}</span>
+                  <span><span className="pm-strip-lbl">Personality</span> {traits.join(", ")}</span>
+                  {lastEvent && <span><span className="pm-strip-lbl">Last Event</span> {lastEvent.label}{lastEvent.delta ? ` (${lastEvent.delta > 0 ? "+" : ""}${lastEvent.delta})` : ""}</span>}
+                </div>
+                {m.concerns?.length > 0 && (
+                  <div className="pm-morale-chips">
+                    {m.concerns.map(c => <span key={c.key} className="trait-chip concern-chip">{c.label}</span>)}
+                  </div>
+                )}
+                {activePromises.length > 0 && (
+                  <div className="pm-morale-chips">
+                    {activePromises.map(p => <span key={p.id} className="trait-chip promise-chip">{p.label}</span>)}
+                  </div>
+                )}
+                <div className="pm-transfer-actions">
+                  <button className="btn-primary-sm" onClick={() => setShowTalk(true)}>Talk to {player.name}</button>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="pm-section">
             <div className="pm-section-title">Season {season.season}</div>
             <div className="pm-info-strip profile-season-meta">
@@ -220,6 +259,7 @@ export default function PlayerProfileOverlay() {
           </div>
         </div>
       </div>
+      {showTalk && player && <ConversationModal player={player} onClose={() => setShowTalk(false)} />}
     </div>
   );
 }

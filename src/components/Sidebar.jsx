@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { id: "schedule",  icon: "◫",  label: "Schedule" },
   { id: "kdleaders", icon: "↑",  label: "K/D Leaders" },
   { id: "roster",    icon: "♟",  label: "Roster" },
+  { id: "dynamics",  icon: "♥",  label: "Dynamics" },
   { id: "board",     icon: "⚖",  label: "Board" },
   { id: "fa",        icon: "$",  label: "Free Agency", offseasonOnly: true },
   { id: "scouting",  icon: "◎",  label: "Scouting" },
