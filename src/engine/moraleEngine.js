@@ -21,9 +21,12 @@
 import { isInactivePlayer } from "../utils/playerIdentity.js";
 import { isChallengerMode } from "../utils/userTeam.js";
 
-export const MORALE_VERSION = 1;
+export const MORALE_VERSION = 2;
 
 const RECENT_EVENTS_CAP = 8;
+const CONVERSATION_HISTORY_CAP = 3;
+const MORALE_EVENTS_CAP = 24;
+const COOLDOWN_STAGES = 2;
 
 // ── Clamp helpers ─────────────────────────────────────────────────────────────
 export function clampMorale(n) {
@@ -119,6 +122,7 @@ function defaultEntry(level = 70) {
     concerns: [],
     promises: [],
     recentEvents: [],
+    conversationHistory: [],
     lastUpdatedSeason: 1,
     lastUpdatedStage: 0,
   };
@@ -134,6 +138,7 @@ function normalizeEntry(raw) {
     concerns: Array.isArray(raw.concerns) ? raw.concerns : [],
     promises: Array.isArray(raw.promises) ? raw.promises : [],
     recentEvents: Array.isArray(raw.recentEvents) ? raw.recentEvents.slice(-RECENT_EVENTS_CAP) : [],
+    conversationHistory: Array.isArray(raw.conversationHistory) ? raw.conversationHistory.slice(-CONVERSATION_HISTORY_CAP) : [],
     lastUpdatedSeason: raw.lastUpdatedSeason ?? 1,
     lastUpdatedStage: raw.lastUpdatedStage ?? 0,
   };
@@ -554,11 +559,12 @@ export function applyMajorMorale(state, placement) {
 export function applyBenchEvent(state, player) {
   // Being dropped to the bench: a broken no_bench promise is handled by the
   // promise evaluator; here we add the immediate morale hit + concern.
-  return applyPlayerEvent(state, player, {
+  const next = applyPlayerEvent(state, player, {
     delta: -10,
     label: "Dropped to the bench",
     concernsAdd: [{ key: "benched", label: CONCERNS.BENCHED.label }, { key: "wants_start", label: CONCERNS.WANTS_START.label }],
   });
+  return createMoraleConversationEvent(next, player, { topic: "playing_time", trigger: "Benched after being in the rotation.", severity: "medium" });
 }
 
 export function applyPromoteEvent(state, player) {
@@ -581,22 +587,24 @@ export function applyReleaseEvent(state, player) {
 }
 
 export function applyBlockedMoveEvent(state, player) {
-  return applyPlayerEvent(state, player, {
+  const next = applyPlayerEvent(state, player, {
     delta: -8,
     label: "Transfer request blocked",
     trustDelta: -6,
     concernsAdd: [{ key: "blocked_move", label: CONCERNS.BLOCKED_MOVE.label }],
   });
+  return createMoraleConversationEvent(next, player, { topic: "transfer", trigger: "A move or buyout was blocked by management.", severity: "critical" });
 }
 
 export function applyTransferInterestEvent(state, player) {
   // A concrete offer arriving: ambitious players get a small lift / itch.
   const ambitious = (player?.ego ?? 2) >= 3;
-  return applyPlayerEvent(state, player, {
+  const next = applyPlayerEvent(state, player, {
     delta: ambitious ? 2 : 0,
     label: "Attracted transfer interest",
     concernsAdd: ambitious ? [{ key: "wants_move", label: CONCERNS.WANTS_MOVE.label }] : [],
   });
+  return ambitious ? createMoraleConversationEvent(next, player, { topic: "transfer", trigger: "Concrete transfer interest has reached the player.", severity: "medium" }) : next;
 }
 
 export function applyNewContractEvent(state, player) {
@@ -618,106 +626,433 @@ export function applySignedEvent(state, player) {
   return writeMorale(state, player.id, entry);
 }
 
-// ── Conversations ─────────────────────────────────────────────────────────────
-// Lightweight, generated from the player's top concern. Each option carries an
-// optional promise to make and a direct morale/trust nudge. The reducer applies
-// the choice via applyConversationChoice.
-export function getConversationFor(state, player) {
-  if (!player) return null;
-  const entry = getMorale(state, player.id);
-  const concernKeys = new Set((entry.concerns || []).map(c => c.key));
-  const challenger = isChallengerMode(state);
-
-  // Pick a topic by priority.
-  let topic = "general";
-  if (concernKeys.has("benched") || concernKeys.has("wants_start")) topic = "playing_time";
-  else if (concernKeys.has("wants_cdl_move") || (challenger && concernKeys.has("wants_move"))) topic = "cdl_move";
-  else if (concernKeys.has("wants_move") || concernKeys.has("blocked_move")) topic = "transfer";
-  else if (concernKeys.has("wants_contract") || concernKeys.has("expiring")) topic = "contract";
-  else if (concernKeys.has("demands_roster") || concernKeys.has("missed_major")) topic = "ambition";
-  else if (concernKeys.has("wants_dev")) topic = "development";
-
-  const TOPICS = {
-    playing_time: {
-      intro: `${player.name}: "I need more maps. I don't want to sit on the bench all stage."`,
-      options: [
-        { id: "promise_starter", label: "Promise him a starting role", promise: "starter_role", hint: "Big morale lift now — risky if you can't deliver." },
-        { id: "promise_maps", label: "Promise more maps soon", promise: "more_maps", hint: "Smaller lift, shorter deadline." },
-        { id: "earn", label: "Tell him to earn his place", morale: { delta: -4, label: "Told to earn his place" }, hint: "Professionals accept it; hot-heads sour." },
-        { id: "none", label: "Make no promises", morale: { delta: -2, label: "No reassurance given" }, hint: "Neutral to slightly negative." },
-      ],
-    },
-    cdl_move: {
-      intro: `${player.name}: "A CDL team is interested. I want to hear them out."`,
-      options: [
-        { id: "promise_consider", label: "Promise to consider fair CDL offers", promise: "consider_offers", hint: "Settles him; you must not block every move." },
-        { id: "promise_build", label: "Promise to build the team around him", promise: "build_around", hint: "High-stakes — needs roster results." },
-        { id: "not_for_sale", label: "Tell him he is not for sale", morale: { delta: -6, label: "Refused to discuss a move", trustDelta: -4 }, concern: "blocked_move", hint: "May unsettle him." },
-        { id: "none", label: "Make no promises", morale: { delta: -2, label: "No reassurance given" }, hint: "Neutral." },
-      ],
-    },
-    transfer: {
-      intro: `${player.name}: "I think it might be time for a new challenge."`,
-      options: [
-        { id: "promise_consider", label: "Promise to consider fair offers", promise: "consider_offers", hint: "Keeps him calm while you weigh offers." },
-        { id: "promise_can_leave", label: "Agree he can leave for a contender", promise: "can_leave_for_contender", hint: "High-stakes promise." },
-        { id: "stay", label: "Ask him to commit to the project", morale: { delta: 3, label: "Reassured about the project" }, hint: "Small lift if he buys in." },
-        { id: "none", label: "Make no promises", morale: { delta: -2, label: "No reassurance given" }, hint: "Neutral." },
-      ],
-    },
-    contract: {
-      intro: `${player.name}: "I'd like to talk about my contract."`,
-      options: [
-        { id: "promise_contract", label: "Promise a new contract", promise: "new_contract", hint: "Strong lift; deliver in the offseason." },
-        { id: "promise_talks", label: "Promise talks in the offseason", promise: "contract_talks", hint: "Buys time without committing terms." },
-        { id: "wait", label: "Ask him to keep performing first", morale: { delta: -3, label: "Asked to wait on contract" }, hint: "Slightly negative." },
-        { id: "none", label: "Make no promises", morale: { delta: -2, label: "No reassurance given" }, hint: "Neutral." },
-      ],
-    },
-    ambition: {
-      intro: `${player.name}: "We need to push for trophies. The roster has to get stronger."`,
-      options: [
-        { id: "promise_upgrade", label: "Promise a roster upgrade", promise: "roster_upgrade", hint: "Needs a deep Major run or signings." },
-        { id: "promise_build", label: "Promise to build around him", promise: "build_around", hint: "High-stakes." },
-        { id: "realistic", label: "Set realistic expectations", morale: { delta: -2, label: "Given realistic expectations" }, hint: "Pros accept it." },
-        { id: "none", label: "Make no promises", morale: { delta: -2, label: "No reassurance given" }, hint: "Neutral." },
-      ],
-    },
-    development: {
-      intro: `${player.name}: "I want to know there's a development plan for me."`,
-      options: [
-        { id: "promise_dev", label: "Promise a development focus", promise: "development_focus", hint: "Low-stakes, keep him in the rotation." },
-        { id: "promise_starter", label: "Promise a starting role for experience", promise: "starter_role", hint: "Bigger commitment." },
-        { id: "reassure", label: "Reassure him he's valued", morale: { delta: 3, label: "Reassured about his future" }, hint: "Small lift." },
-        { id: "none", label: "Make no promises", morale: { delta: -2, label: "No reassurance given" }, hint: "Neutral." },
-      ],
-    },
-    general: {
-      intro: `${player.name}: "Where do you see me fitting into the team?"`,
-      options: [
-        { id: "reassure", label: "Reassure him he's a key part of the project", morale: { delta: 4, label: "Reassured about his role", trustDelta: 3 }, hint: "Small lift." },
-        { id: "promise_starter", label: "Promise a starting role", promise: "starter_role", hint: "Commitment — deliver it." },
-        { id: "honest", label: "Be honest about competition for places", morale: { delta: -2, label: "Told about squad competition" }, hint: "Pros respect honesty." },
-        { id: "none", label: "Keep it non-committal", morale: { delta: -1, label: "Non-committal chat" }, hint: "Neutral." },
-      ],
-    },
-  };
-
-  const convo = TOPICS[topic];
-  return { topic, intro: convo.intro, options: convo.options };
+// ── Conversations / action-required events ────────────────────────────────────
+let _conversationSeq = 0;
+function nextConversationId() {
+  _conversationSeq += 1;
+  return `meeting_${Date.now().toString(36)}_${_conversationSeq}`;
 }
 
-// Apply a chosen conversation option. Returns NEW state.
-export function applyConversationChoice(state, player, option) {
+function topicForState(state, player, forcedTopic = null) {
+  if (forcedTopic) return forcedTopic;
+  const entry = getMorale(state, player?.id);
+  const concernKeys = new Set((entry.concerns || []).map(c => c.key));
+  const challenger = isChallengerMode(state);
+  if (concernKeys.has("broken_promise") || concernKeys.has("lost_trust")) return "broken_promise";
+  if (concernKeys.has("benched") || concernKeys.has("wants_start")) return "playing_time";
+  if (concernKeys.has("wants_cdl_move") || (challenger && concernKeys.has("wants_move"))) return "cdl_move";
+  if (concernKeys.has("blocked_move") || concernKeys.has("wants_move")) return "transfer";
+  if (concernKeys.has("wants_contract") || concernKeys.has("expiring") || concernKeys.has("low_offer")) return "contract";
+  if (concernKeys.has("demands_roster") || concernKeys.has("missed_major")) return "ambition";
+  if (concernKeys.has("losing")) return "poor_form";
+  if (concernKeys.has("wants_dev")) return "development";
+  return "general";
+}
+
+function eventSeverityFor(topic, entry, player) {
+  if (entry?.level < 25 || topic === "broken_promise" || topic === "blocked_move") return "critical";
+  if (topic === "transfer" && entry?.concerns?.some(c => c.key === "blocked_move")) return "critical";
+  if (["contract", "cdl_move"].includes(topic) || entry?.level < 45) return "high";
+  if (["playing_time", "ambition", "poor_form"].includes(topic)) return "medium";
+  return player?.isSub ? "medium" : "low";
+}
+
+function severityRank(sev) {
+  return { low: 1, medium: 2, high: 3, critical: 4 }[sev] || 1;
+}
+
+export function conversationRequiresPopup(event) {
+  return severityRank(event?.severity) >= 3;
+}
+
+export function ensureMoraleConversationState(state) {
+  if (!state) return state;
+  const now = stageClock(state.season, state.schedule?.stageIdx ?? 0);
+  const events = Array.isArray(state.moraleConversationEvents)
+    ? state.moraleConversationEvents
+        .filter(e => e && e.id && e.playerId)
+        .map(e => ({
+          id: e.id,
+          playerId: e.playerId,
+          topic: e.topic || "general",
+          title: e.title || "Player meeting requested",
+          trigger: e.trigger || "A morale concern needs attention.",
+          severity: ["low", "medium", "high", "critical"].includes(e.severity) ? e.severity : "medium",
+          actionRequired: e.actionRequired !== false,
+          popupRequired: !!e.popupRequired,
+          status: e.status || "open",
+          createdSeason: e.createdSeason ?? state.season ?? 1,
+          createdStage: e.createdStage ?? state.schedule?.stageIdx ?? 0,
+          delayedUntil: e.delayedUntil ?? null,
+        }))
+        .slice(-MORALE_EVENTS_CAP)
+    : [];
+  const cooldowns = (state.moraleConversationCooldowns && typeof state.moraleConversationCooldowns === "object")
+    ? state.moraleConversationCooldowns
+    : {};
+  const cleanedCooldowns = Object.fromEntries(Object.entries(cooldowns).filter(([, until]) => Number(until) >= now - 12));
+  return {
+    ...state,
+    moraleConversationEvents: events,
+    moraleActionRequired: events.filter(e => e.status === "open" && e.actionRequired && (e.delayedUntil == null || e.delayedUntil <= now)).map(e => e.id),
+    moraleConversationCooldowns: cleanedCooldowns,
+    lastMoraleConversationOutcome: state.lastMoraleConversationOutcome ?? null,
+  };
+}
+
+function eventKey(playerId, topic) {
+  return `${playerId}:${topic}`;
+}
+
+export function createMoraleConversationEvent(state, player, { topic = null, trigger = "A morale concern needs attention.", severity = null, force = false } = {}) {
+  if (!state || !player) return state;
+  let next = ensureMoraleConversationState(state);
+  const resolvedTopic = topicForState(next, player, topic);
+  const entry = getMorale(next, player.id);
+  const resolvedSeverity = severity || eventSeverityFor(resolvedTopic, entry, player);
+  const now = stageClock(next.season, next.schedule?.stageIdx ?? 0);
+  const key = eventKey(player.id, resolvedTopic);
+  if (!force) {
+    if (Number(next.moraleConversationCooldowns?.[key] ?? -1) > now) return next;
+    if ((next.moraleConversationEvents || []).some(e => e.status === "open" && e.playerId === player.id && e.topic === resolvedTopic)) return next;
+  }
+  const title = `${player.name} wants to discuss ${topicTitle(resolvedTopic).toLowerCase()}`;
+  const event = {
+    id: nextConversationId(),
+    playerId: player.id,
+    topic: resolvedTopic,
+    title,
+    trigger,
+    severity: resolvedSeverity,
+    actionRequired: true,
+    popupRequired: severityRank(resolvedSeverity) >= 3,
+    status: "open",
+    createdSeason: next.season ?? 1,
+    createdStage: next.schedule?.stageIdx ?? 0,
+    delayedUntil: null,
+  };
+  const moraleConversationCooldowns = { ...(next.moraleConversationCooldowns || {}), [key]: now + COOLDOWN_STAGES };
+  const moraleConversationEvents = [...(next.moraleConversationEvents || []), event].slice(-MORALE_EVENTS_CAP);
+  return ensureMoraleConversationState({ ...next, moraleConversationEvents, moraleConversationCooldowns });
+}
+
+export function delayMoraleConversationEvent(state, eventId, stages = 1) {
+  const next = ensureMoraleConversationState(state);
+  const until = stageClock(next.season, next.schedule?.stageIdx ?? 0) + stages;
+  return ensureMoraleConversationState({
+    ...next,
+    moraleConversationEvents: (next.moraleConversationEvents || []).map(e => e.id === eventId ? { ...e, delayedUntil: until } : e),
+  });
+}
+
+export function dismissMoraleConversationEvent(state, eventId) {
+  const next = ensureMoraleConversationState(state);
+  return ensureMoraleConversationState({
+    ...next,
+    moraleConversationEvents: (next.moraleConversationEvents || []).map(e => e.id === eventId ? { ...e, status: "dismissed", actionRequired: false } : e),
+  });
+}
+
+export function getActionRequiredMoraleEvents(state) {
+  const next = ensureMoraleConversationState(state);
+  const now = stageClock(next.season, next.schedule?.stageIdx ?? 0);
+  const players = [...(next.players || []), ...(next.prospects || [])];
+  return (next.moraleConversationEvents || [])
+    .filter(e => e.status === "open" && e.actionRequired && (e.delayedUntil == null || e.delayedUntil <= now))
+    .map(e => ({ ...e, player: players.find(p => p.id === e.playerId) }))
+    .filter(e => e.player)
+    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+}
+
+function pickTemplate(templates, state, player, topic) {
+  const arr = templates?.length ? templates : ["I wanted to talk about where things stand."];
+  const seed = Math.abs(String(`${player?.id || "p"}:${topic}:${state?.season || 1}:${state?.schedule?.stageIdx || 0}`).split("").reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) | 0, 7));
+  return arr[seed % arr.length];
+}
+
+function personalityTone(player) {
+  const tags = derivePersonality(player);
+  if (tags.includes("Ego") || tags.includes("Hard to Manage")) return "confrontational";
+  if (tags.includes("Ambitious") || tags.includes("High Standards")) return "ambitious";
+  if (tags.includes("Young Prospect")) return "prospect";
+  if (tags.includes("Veteran Leader")) return "leader";
+  return "professional";
+}
+
+function toneLine(tone, topic) {
+  const lines = {
+    professional: "He is calm, but wants a straight answer.",
+    ambitious: "He is pushing for a clear plan and will judge you on action.",
+    confrontational: "The tone is tense; vague answers could damage trust.",
+    prospect: "He wants guidance and a route into meaningful maps.",
+    leader: "He is measuring whether the dressing room is being managed properly.",
+  };
+  if (topic === "broken_promise") return "Trust has already taken a hit, so another empty promise will not land well.";
+  return lines[tone] || lines.professional;
+}
+
+function topicTitle(topic) {
+  return ({
+    playing_time: "His role",
+    contract: "Contract talks",
+    transfer: "A potential move",
+    ambition: "Team direction",
+    poor_form: "Backing after poor form",
+    broken_promise: "A broken promise",
+    cdl_move: "A CDL opportunity",
+    development: "His development plan",
+    general: "His squad status",
+  })[topic] || "Squad dynamics";
+}
+
+const TOPIC_QUOTES = {
+  playing_time: [
+    "I need more maps. I'm not getting into rhythm like this.",
+    "If I'm just here as cover, tell me now.",
+    "I think I've done enough to start.",
+    "I can accept being benched if there's a reason, but I need one.",
+  ],
+  contract: [
+    "I've been performing, and I think my deal should reflect that.",
+    "I don't want this dragging into the offseason.",
+    "If I'm part of the future, I need to see that in the contract.",
+    "I'm not asking for madness. I just want something fair.",
+  ],
+  transfer: [
+    "A CDL team came in. I want to hear them out.",
+    "I don't want my buyout blocking every opportunity.",
+    "If a contender calls, I need you to be realistic.",
+    "You said you'd consider serious offers. That one was serious.",
+  ],
+  ambition: [
+    "We keep saying we're building, but what are we actually building?",
+    "I want to know if we're trying to win or just survive.",
+    "The roster needs help. Everyone can see it.",
+    "If we miss another Major, people are going to start looking around.",
+  ],
+  poor_form: [
+    "I know I've been poor. I just need some backing.",
+    "I'm trying to play through it, but it's getting in my head.",
+    "If you bench me now, I get it. But I want a way back.",
+    "I don't want one bad stage to define me.",
+  ],
+  broken_promise: [
+    "You told me I'd get a chance. I didn't.",
+    "That wasn't what we agreed.",
+    "I trusted you on this, and nothing changed.",
+    "I'm not interested in another promise if the last one didn't mean anything.",
+  ],
+  cdl_move: [
+    "I want the CDL shot. That's why I'm here.",
+    "I'm not trying to disrespect the team, but I've earned a look.",
+    "If you block every CDL offer, what's the point?",
+    "I'll give everything while I'm here, but I need a route up.",
+  ],
+  development: [
+    "I need a development plan, not just practice reps.",
+    "I can be patient if there's a real path.",
+    "Tell me what I need to improve and when I'll get a look.",
+  ],
+  general: [
+    "Where do you actually see me fitting into the team?",
+    "I need to understand the plan before this drifts.",
+    "I'm not kicking off, but I do need clarity.",
+  ],
+};
+
+function optionsForTopic(topic, player) {
+  const honestHint = isProfessional(player) ? "Professional players usually accept clear standards." : "Honest, but may sting if he wanted reassurance.";
+  const hardHint = isHotHeaded(player) ? "High risk: his mood can swing sharply." : "No promise, modest morale risk.";
+  const byTopic = {
+    playing_time: [
+      { id: "ask_expectation", label: "Tell me what you're expecting", followUp: "I don't need every series, but I need a real chance before the next Major.", hint: "Opens a second step before you commit." },
+      { id: "promise_starter", label: "Promise him a starting role", promise: "starter_role", hint: "Morale boost now, high promise risk." },
+      { id: "promise_maps", label: "Promise more maps soon", promise: "more_maps", hint: "Morale boost now, medium promise risk." },
+      { id: "earn", label: "Tell him he has to earn it", morale: { delta: -3, label: "Told to earn his place" }, hint: honestHint },
+    ],
+    contract: [
+      { id: "promise_contract", label: "Promise a new contract", promise: "new_contract", hint: "Strong lift now; high deadline risk if ignored." },
+      { id: "promise_talks", label: "Promise offseason talks", promise: "contract_talks", hint: "Buys time with medium promise risk." },
+      { id: "wait", label: "Ask him to keep performing first", morale: { delta: -3, label: "Asked to wait on contract" }, hint: honestHint },
+      { id: "none", label: "Say you cannot guarantee anything", morale: { delta: -2, label: "No contract reassurance" }, hint: hardHint },
+    ],
+    transfer: [
+      { id: "promise_consider", label: "Promise to consider fair offers", promise: "consider_offers", hint: "Morale boost, but blocking later risks trust." },
+      { id: "promise_can_leave", label: "Agree he can leave for a contender", promise: "can_leave_for_contender", hint: "Big reassurance, high transfer risk." },
+      { id: "stay", label: "Ask him to commit to the project", morale: { delta: 2, label: "Asked to commit to the project", trustDelta: 1 }, hint: "Small lift if he buys in." },
+      { id: "not_for_sale", label: "Tell him he is not for sale", morale: { delta: -5, label: "Refused to discuss a move", trustDelta: -4 }, concern: "blocked_move", hint: "No promise, but high frustration risk." },
+    ],
+    ambition: [
+      { id: "promise_upgrade", label: "Promise a roster upgrade", promise: "roster_upgrade", hint: "Reassures leaders; needs results or additions." },
+      { id: "promise_build", label: "Promise to build around him", promise: "build_around", hint: "High-stakes promise with strong trust upside." },
+      { id: "realistic", label: "Set realistic expectations", morale: { delta: -2, label: "Given realistic expectations" }, hint: honestHint },
+      { id: "none", label: "Make no promises", morale: { delta: -2, label: "No direction promised" }, hint: hardHint },
+    ],
+    poor_form: [
+      { id: "reassure", label: "Back him publicly", morale: { delta: 4, label: "Backed through poor form", trustDelta: 2 }, hint: "Morale lift, no promise." },
+      { id: "promise_dev", label: "Promise a development focus", promise: "development_focus", hint: "Low-risk promise with a clear plan." },
+      { id: "earn", label: "Tell him form has to improve", morale: { delta: -2, label: "Asked to improve form" }, hint: honestHint },
+      { id: "bench_path", label: "Offer a bench role with a way back", promise: "no_bench_unless_form", hint: "Medium promise risk if you bench without reason." },
+    ],
+    broken_promise: [
+      { id: "apologize", label: "Apologize and promise to fix it", promise: "more_maps", hint: "Repairs some trust, but another miss will hurt." },
+      { id: "own_it", label: "Own the mistake without another promise", morale: { delta: 1, label: "Owned a broken promise", trustDelta: 3 }, hint: "Honest and controlled; concern may remain." },
+      { id: "defend", label: "Defend the decision", morale: { delta: -5, label: "Defended broken promise", trustDelta: -5 }, hint: "No new promise, high trust risk." },
+      { id: "reset", label: "Offer a clean slate after the next Major", promise: "development_focus", hint: "Lower-risk promise; may not satisfy stars." },
+    ],
+    cdl_move: [
+      { id: "promise_consider", label: "Promise to consider fair CDL offers", promise: "consider_offers", hint: "Morale boost, increases move risk." },
+      { id: "route_up", label: "Lay out a route to a CDL shot", promise: "development_focus", hint: "Good for prospects if you keep developing him." },
+      { id: "promise_build", label: "Promise to build around him here", promise: "build_around", hint: "High-stakes retention promise." },
+      { id: "block", label: "Say the team comes first", morale: { delta: -5, label: "CDL route blocked", trustDelta: -3 }, concern: "blocked_move", hint: "Can make him feel trapped." },
+    ],
+    development: [
+      { id: "promise_dev", label: "Promise a development focus", promise: "development_focus", hint: "Low promise risk, clear pathway." },
+      { id: "promise_maps", label: "Promise more maps soon", promise: "more_maps", hint: "Medium risk if rotation stays fixed." },
+      { id: "reassure", label: "Reassure him he's valued", morale: { delta: 3, label: "Reassured about development", trustDelta: 2 }, hint: "Small lift, no deadline." },
+      { id: "earn", label: "Tell him training standards decide it", morale: { delta: -2, label: "Asked to earn development reps" }, hint: honestHint },
+    ],
+    general: [
+      { id: "reassure", label: "Reassure him he's part of the plan", morale: { delta: 4, label: "Reassured about role", trustDelta: 3 }, hint: "Small lift, no promise." },
+      { id: "promise_starter", label: "Promise a starting role", promise: "starter_role", hint: "High promise risk." },
+      { id: "honest", label: "Be honest about competition", morale: { delta: -2, label: "Told about squad competition" }, hint: honestHint },
+      { id: "none", label: "Keep it non-committal", morale: { delta: -1, label: "Non-committal chat" }, hint: "Safe but underwhelming." },
+    ],
+  };
+  return byTopic[topic] || byTopic.general;
+}
+
+function promiseRiskLabel(option, state, player) {
+  if (!option.promise) return "No promise";
+  if (["starter_role", "can_leave_for_contender", "build_around", "new_contract"].includes(option.promise)) return "High risk";
+  if (option.promise === "more_maps" && player?.isSub) return "Already at risk";
+  if (["more_maps", "contract_talks", "consider_offers", "no_bench_unless_form", "roster_upgrade"].includes(option.promise)) return "Medium risk";
+  return "Low risk";
+}
+
+function enrichOptions(options, state, player) {
+  return options.map(o => ({
+    ...o,
+    impact: o.promise
+      ? `Morale boost now, ${promiseRiskLabel(o, state, player).toLowerCase()}.`
+      : o.morale?.delta > 0
+        ? "Positive morale/trust nudge, no promise created."
+        : "No promise; morale may dip depending on personality.",
+    risk: promiseRiskLabel(o, state, player),
+  }));
+}
+
+export function getPromiseRiskLabel(promise, state, player) {
+  if (!promise || promise.status !== "active") return "Resolved";
+  if (promise.type === "starter_role" || promise.type === "more_maps" || promise.type === "no_bench_unless_form") return player?.isSub ? "Already at risk" : (promise.importance === "High" ? "Medium risk" : "Low risk");
+  if (promise.type === "new_contract" || promise.type === "contract_talks") return promise.progress >= 1 ? "Low risk" : "Medium risk";
+  const m = getMorale(state, promise.playerId);
+  if (m.concerns?.some(c => c.key === "blocked_move" || c.key === "broken_promise")) return "Already at risk";
+  return promise.importance === "High" ? "High risk" : promise.importance === "Low" ? "Low risk" : "Medium risk";
+}
+
+export function getConversationFor(state, player, event = null) {
+  if (!player) return null;
+  const entry = getMorale(state, player.id);
+  const topic = topicForState(state, player, event?.topic);
+  const tone = personalityTone(player);
+  const quote = pickTemplate(TOPIC_QUOTES[topic], state, player, topic);
+  const activePromises = (entry.promises || []).filter(p => p.status === "active");
+  const context = [
+    { label: "Morale", value: `${entry.level} ${moodForLevel(entry.level)}` },
+    { label: "Status", value: player.isSub ? "Substitute" : "Starter" },
+    { label: "Concern", value: topicTitle(topic) },
+    { label: "Tone", value: toneLine(tone, topic) },
+  ];
+  const conflictWarning = activePromises.length
+    ? `Already active: ${activePromises.map(p => `${p.label} (${getPromiseRiskLabel(p, state, player)})`).join(", ")}.`
+    : "No active promise conflicts.";
+  return {
+    topic,
+    title: topicTitle(topic),
+    intro: `${player.name}: "${quote}"`,
+    quote,
+    tone,
+    toneLine: toneLine(tone, topic),
+    trigger: event?.trigger || entry.concerns?.[entry.concerns.length - 1]?.label || "A squad dynamics concern needs attention.",
+    severity: event?.severity || eventSeverityFor(topic, entry, player),
+    context,
+    activePromises,
+    conflictWarning,
+    options: enrichOptions(optionsForTopic(topic, player), state, player),
+  };
+}
+
+function describeOutcome(player, option, before, after, promiseCreated) {
+  if (option.promise && promiseCreated) return `${player.name} is satisfied for now, but expects you to follow through.`;
+  if (option.promise && !promiseCreated) return `${player.name} heard the reassurance, but you had already made that promise.`;
+  if ((after.level ?? 70) > (before.level ?? 70)) return `${player.name} appreciated the honesty and left the meeting calmer.`;
+  if ((after.level ?? 70) < (before.level ?? 70)) return `${player.name} remains concerned and the issue may need action later.`;
+  return `${player.name} accepted the answer, but the situation is still worth monitoring.`;
+}
+
+export function applyConversationChoice(state, player, option, event = null) {
   if (!player || !option) return state;
-  let next = state;
-  if (option.promise) next = makePromise(next, player.id, option.promise);
+  let next = ensureMoraleConversationState(state);
+  const before = getMorale(next, player.id);
+  const promiseCountBefore = (before.promises || []).filter(p => p.status === "active").length;
+  if (option.promise) {
+    next = makePromise(next, player.id, option.promise);
+    const def = PROMISE_TYPES[option.promise] || {};
+    next = applyPlayerEvent(next, player, {
+      delta: def.importance === "High" ? 7 : def.importance === "Low" ? 4 : 6,
+      trustDelta: def.importance === "High" ? 5 : 3,
+      label: `Meeting promise: ${def.label || option.label}`,
+      concernsRemove: def.removesConcern || [],
+    });
+  }
   if (option.morale) next = applyPlayerEvent(next, player, option.morale);
   if (option.concern) {
     const def = Object.values(CONCERNS).find(c => c.key === option.concern);
     next = applyPlayerEvent(next, player, { delta: 0, concernsAdd: [{ key: option.concern, label: def?.label || option.concern }] });
   }
-  return next;
+  const after = getMorale(next, player.id);
+  const activeAfter = (after.promises || []).filter(p => p.status === "active");
+  const promiseCreated = activeAfter.length > promiseCountBefore;
+  const createdPromise = promiseCreated ? activeAfter[activeAfter.length - 1] : null;
+  const outcome = {
+    id: `outcome_${Date.now().toString(36)}`,
+    playerId: player.id,
+    playerName: player.name,
+    topic: event?.topic || topicForState(state, player),
+    response: option.label,
+    summary: describeOutcome(player, option, before, after, promiseCreated),
+    effects: [
+      `Morale: ${after.level - before.level >= 0 ? "+" : ""}${after.level - before.level}`,
+      `Trust: ${after.trust - before.trust >= 0 ? "+" : ""}${after.trust - before.trust}`,
+      promiseCreated ? `Promise added: ${createdPromise.label}` : "No promise created",
+      after.concerns?.length ? `Active concerns: ${after.concerns.map(c => c.label).slice(-2).join(", ")}` : "Concern settled for now",
+    ],
+    promiseCreated: createdPromise ? { id: createdPromise.id, label: createdPromise.label, deadlineSeason: createdPromise.deadlineSeason, deadlineStage: createdPromise.deadlineStage } : null,
+    season: next.season ?? 1,
+    stage: next.schedule?.stageIdx ?? 0,
+  };
+  const history = [...(after.conversationHistory || []), {
+    date: `S${outcome.season} Stage ${(outcome.stage ?? 0) + 1}`,
+    topic: topicTitle(outcome.topic),
+    response: option.label,
+    outcome: outcome.summary,
+    promise: createdPromise?.label || null,
+  }].slice(-CONVERSATION_HISTORY_CAP);
+  next = writeMorale(next, player.id, { ...after, conversationHistory: history });
+  if (event?.id) {
+    next = {
+      ...next,
+      moraleConversationEvents: (next.moraleConversationEvents || []).map(e => e.id === event.id ? { ...e, status: "resolved", actionRequired: false, resolvedSeason: outcome.season, resolvedStage: outcome.stage } : e),
+    };
+  }
+  const key = eventKey(player.id, outcome.topic);
+  next = {
+    ...next,
+    lastMoraleConversationOutcome: outcome,
+    moraleConversationCooldowns: { ...(next.moraleConversationCooldowns || {}), [key]: stageClock(next.season, next.schedule?.stageIdx ?? 0) + COOLDOWN_STAGES },
+  };
+  return ensureMoraleConversationState(next);
 }
 
 // ── Squad-level summary (for the Dynamics page) ───────────────────────────────
@@ -747,6 +1082,7 @@ export function getSquadMorale(state) {
   }
   return {
     rows, avg, mood: moodForLevel(avg), leaders, unhappy, atRisk,
+    actionRequired: getActionRequiredMoraleEvents(state),
     activePromises, brokenPromises,
     note: getDressingRoomNote({ avg, unhappy, atRisk, rows, brokenPromises, activePromises }),
   };

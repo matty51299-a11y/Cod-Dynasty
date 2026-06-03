@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import {
   getSquadMorale, getMorale, moodForLevel, moraleColor, moraleTone, derivePersonality, PROMISE_TYPES,
+  getActionRequiredMoraleEvents, getPromiseRiskLabel,
 } from "../engine/moraleEngine.js";
 import { getTransferStatus } from "../engine/transferEngine.js";
 import { isChallengerMode } from "../utils/userTeam.js";
@@ -23,26 +24,18 @@ function MoraleBadge({ level }) {
 }
 
 function promiseRisk(promise, state, player) {
-  // Cheap risk read for the promises panel.
-  if (promise.type.startsWith("starter") || promise.type === "more_maps" || promise.type === "no_bench_unless_form") {
-    return player?.isSub ? "High" : "Low";
-  }
-  if (promise.type === "new_contract" || promise.type === "contract_talks") {
-    return promise.progress >= 1 ? "None" : "Medium";
-  }
-  const m = getMorale(state, promise.playerId);
-  if (m.concerns?.some(c => c.key === "blocked_move")) return "High";
-  return "Medium";
+  return getPromiseRiskLabel(promise, state, player);
 }
 
 export default function Dynamics() {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const { openPlayerProfile } = usePlayerProfile();
   const [talkTo, setTalkTo] = useState(null);
 
   if (!state) return null;
   const challenger = isChallengerMode(state);
   const squad = getSquadMorale(state);
+  const actionEvents = getActionRequiredMoraleEvents(state);
 
   if (!squad.rows.length) {
     return (
@@ -63,6 +56,7 @@ export default function Dynamics() {
           <div className="ui-stat-grid compact">
             <StatCard label="Squad Morale" value={squad.avg} hint={squad.mood} tone={squad.avg >= 64 ? "success" : squad.avg >= 50 ? "neutral" : squad.avg >= 38 ? "warning" : "danger"} />
             <StatCard label="Leaders" value={squad.leaders.length} />
+            <StatCard label="Action Required" value={actionEvents.length} tone={actionEvents.length ? "warning" : "neutral"} />
             <StatCard label="Unhappy" value={squad.unhappy.length} tone={squad.unhappy.length ? "warning" : "neutral"} />
             <StatCard label="At Risk" value={squad.atRisk.length} tone={squad.atRisk.length ? "danger" : "neutral"} />
             <StatCard label="Active Promises" value={squad.activePromises.length} />
@@ -70,6 +64,29 @@ export default function Dynamics() {
           </div>
         )}
       />
+
+
+      <SectionCard title={`Action Required (${actionEvents.length})`} subtitle="Important morale conversations that need a manager response.">
+        {!actionEvents.length ? (
+          <EmptyState title="No player meetings pending" detail="Minor morale notes still appear in the table below, but nothing requires immediate action." />
+        ) : (
+          <div className="dynamics-action-list">
+            {actionEvents.map(ev => (
+              <div key={ev.id} className={`dynamics-action-card sev-${ev.severity}`}>
+                <div>
+                  <div className="dynamics-action-title">{ev.title}</div>
+                  <div className="dynamics-action-meta">{ev.player.name} · {ev.player.primary} · {ev.severity.toUpperCase()} · {ev.trigger}</div>
+                </div>
+                <div className="dynamics-action-buttons">
+                  <button className="btn-primary-sm" onClick={() => setTalkTo({ player: ev.player, event: ev })}>Talk</button>
+                  <button className="btn-secondary-sm" onClick={() => dispatch({ type: "DELAY_MORALE_CONVERSATION", eventId: ev.id })}>Delay</button>
+                  {ev.severity === "low" && <button className="btn-secondary-sm" onClick={() => dispatch({ type: "DISMISS_MORALE_CONVERSATION", eventId: ev.id })}>Dismiss</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
       {/* Dressing room notes */}
       <SectionCard title="Dressing Room" subtitle="How the squad is feeling right now.">
@@ -114,7 +131,7 @@ export default function Dynamics() {
                       </td>
                       <td className="muted">{getTransferStatus(player, state)}</td>
                       <td>
-                        <button className="btn-secondary-sm" onClick={() => setTalkTo(player)}>Talk</button>
+                        <button className="btn-secondary-sm" onClick={() => setTalkTo({ player })}>Talk</button>
                       </td>
                     </tr>
                   );
@@ -164,7 +181,7 @@ export default function Dynamics() {
         </p>
       </SectionCard>
 
-      {talkTo && <ConversationModal player={talkTo} onClose={() => setTalkTo(null)} />}
+      {talkTo && <ConversationModal player={talkTo.player} event={talkTo.event} onClose={() => setTalkTo(null)} />}
     </div>
   );
 }
