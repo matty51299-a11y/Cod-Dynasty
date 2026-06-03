@@ -15,7 +15,7 @@ import {
   applyBenchEvent, applyPromoteEvent, applyBlockedMoveEvent, applyResultMorale,
   makePromise, evaluateAllPromises, advancePromiseProgress, getConversationFor,
   applyConversationChoice, getSquadMorale, moraleWillingnessDelta, derivePersonality,
-  createMoraleConversationEvent, getActionRequiredMoraleEvents, delayMoraleConversationEvent,
+  createMoraleConversationEvent, getActionRequiredMoraleEvents, delayMoraleConversationEvent, getPopupRequiredMoraleEvents,
 } from "../src/engine/moraleEngine.js";
 
 let pass = 0, fail = 0;
@@ -155,6 +155,7 @@ const event = getActionRequiredMoraleEvents(s8).find(e => e.playerId === p6.id);
 const convo = getConversationFor(s8, p6, event);
 check("conversation event can be created", !!event);
 check("high severity event appears in action queue", event?.severity === "high" && getActionRequiredMoraleEvents(s8).some(e => e.id === event.id));
+check("high severity event appears in app-level popup queue", getPopupRequiredMoraleEvents(s8).some(e => e.id === event.id));
 check("popup-required event has valid player/topic/options", !!event?.player && !!convo.topic && convo.options.length >= 2);
 check("conversation has varied quote + impact hints", !!convo.quote && convo.options.every(o => o.impact && o.risk));
 const promiseOption = convo.options.find(o => o.promise);
@@ -185,6 +186,12 @@ delayState = createMoraleConversationEvent(delayState, delayPlayer, { topic: "co
 const delayEvent = getActionRequiredMoraleEvents(delayState)[0];
 delayState = delayMoraleConversationEvent(delayState, delayEvent.id);
 check("delayed event leaves action queue temporarily", !getActionRequiredMoraleEvents(delayState).some(e => e.id === delayEvent.id));
+check("delayed event leaves app popup queue temporarily", !getPopupRequiredMoraleEvents(delayState).some(e => e.id === delayEvent.id));
+let lowState = baseState();
+lowState.playerMorale = migratePlayerMorale(lowState);
+const lowPlayer = lowState.players.find(p => p.teamId === lowState.userTeamId);
+lowState = createMoraleConversationEvent(lowState, lowPlayer, { topic: "playing_time", severity: "low", force: true });
+check("low severity event does not interrupt", getPopupRequiredMoraleEvents(lowState).length === 0);
 check("old save hydration works with conversation fields", Array.isArray(old.playerMorale[userPlayers[0].id].conversationHistory));
 
 // ── 9. Result morale stays bounded across repeated sims ──────────────────────

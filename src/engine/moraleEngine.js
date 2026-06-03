@@ -761,7 +761,12 @@ export function getActionRequiredMoraleEvents(state) {
     .filter(e => e.status === "open" && e.actionRequired && (e.delayedUntil == null || e.delayedUntil <= now))
     .map(e => ({ ...e, player: players.find(p => p.id === e.playerId) }))
     .filter(e => e.player)
-    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || stageClock(a.createdSeason, a.createdStage) - stageClock(b.createdSeason, b.createdStage));
+}
+
+export function getPopupRequiredMoraleEvents(state) {
+  return getActionRequiredMoraleEvents(state)
+    .filter(e => e.popupRequired && (e.severity === "high" || e.severity === "critical"));
 }
 
 function pickTemplate(templates, state, player, topic) {

@@ -40,8 +40,10 @@ import SeasonAwardsOverlay from "./components/SeasonAwardsOverlay.jsx";
 import BoardReviewOverlay from "./components/BoardReviewOverlay.jsx";
 import TransferAcceptedModal from "./components/TransferAcceptedModal.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
+import ConversationModal from "./components/ConversationModal.jsx";
 import { getTeamThemeStyle } from "./utils/teamTheme.js";
 import { resolveUserTeamMeta, isChallengerMode } from "./utils/userTeam.js";
+import { getMorale, getPopupRequiredMoraleEvents, moodForLevel, moraleColor } from "./engine/moraleEngine.js";
 
 export default function App() {
   const { state, dispatch } = useGame();
@@ -49,6 +51,8 @@ export default function App() {
   const [confirmNew, setConfirmNew]   = useState(false);
   const [showMatchOverlay, setShowMatchOverlay] = useState(false);
   const [showFeed, setShowFeed]       = useState(false);
+  const [activeMoraleMeeting, setActiveMoraleMeeting] = useState(null);
+  const [suppressedMoralePrompts, setSuppressedMoralePrompts] = useState([]);
 
   // On mount: auto-load a save if one exists
   useEffect(() => {
@@ -87,6 +91,10 @@ export default function App() {
   const teamThemeStyle = getTeamThemeStyle(team);
   const challengerMode = isChallengerMode(state);
   const notification = state.notifications?.[0];
+  const popupMoraleEvents = getPopupRequiredMoraleEvents(state);
+  const appMoralePrompt = !activeMoraleMeeting && screen !== "dynamics"
+    ? popupMoraleEvents.find(ev => !suppressedMoralePrompts.includes(ev.id))
+    : null;
 
   function handleNewGame() {
     deleteSave();
@@ -94,6 +102,8 @@ export default function App() {
     setScreen("home");
     setShowMatchOverlay(false);
     setShowFeed(false);
+    setActiveMoraleMeeting(null);
+    setSuppressedMoralePrompts([]);
     setConfirmNew(false);
   }
 
@@ -157,6 +167,30 @@ export default function App() {
         <BoardReviewOverlay />
         <TransferAcceptedModal setScreen={setScreen} />
         <NotificationsFeed isOpen={showFeed} onClose={() => setShowFeed(false)} />
+        <AppMoralePrompt
+          state={state}
+          event={appMoralePrompt}
+          onTalkNow={(ev) => {
+            setSuppressedMoralePrompts(prev => prev.includes(ev.id) ? prev : [...prev, ev.id]);
+            setActiveMoraleMeeting({ player: ev.player, event: ev });
+          }}
+          onLater={(ev) => {
+            setSuppressedMoralePrompts(prev => prev.includes(ev.id) ? prev : [...prev, ev.id]);
+            dispatch({ type: "DELAY_MORALE_CONVERSATION", eventId: ev.id });
+          }}
+          onGoDynamics={(ev) => {
+            setSuppressedMoralePrompts(prev => prev.includes(ev.id) ? prev : [...prev, ev.id]);
+            setScreen("dynamics");
+          }}
+        />
+        {activeMoraleMeeting && (
+          <ConversationModal
+            player={activeMoraleMeeting.player}
+            event={activeMoraleMeeting.event}
+            onClose={() => setActiveMoraleMeeting(null)}
+          />
+        )}
+
 
         {/* Screen content */}
         <main className="main-content">
@@ -181,5 +215,32 @@ export default function App() {
     </TeamHubProvider>
     </MatchCenterProvider>
     </ErrorBoundary>
+  );
+}
+
+
+function AppMoralePrompt({ state, event, onTalkNow, onLater, onGoDynamics }) {
+  if (!event?.player) return null;
+  const morale = getMorale(state, event.player.id);
+  const concern = event.topic ? event.topic.replaceAll("_", " ") : "squad dynamics";
+  return (
+    <div className="app-morale-backdrop">
+      <div className={`app-morale-prompt sev-${event.severity}`}>
+        <div className="meeting-eyebrow">Player Meeting Required</div>
+        <h3>{event.player.name} wants to speak about {concern}.</h3>
+        <div className="app-morale-grid">
+          <span><b>Player</b>{event.player.name}</span>
+          <span><b>Morale</b><em style={{ color: moraleColor(morale.level) }}>{morale.level} {moodForLevel(morale.level)}</em></span>
+          <span><b>Concern</b>{concern}</span>
+          <span><b>Severity</b>{event.severity}</span>
+        </div>
+        <p>{event.trigger}</p>
+        <div className="app-morale-actions">
+          <button className="btn-primary-sm" onClick={() => onTalkNow?.(event)}>Talk Now</button>
+          <button className="btn-secondary-sm" onClick={() => onLater?.(event)}>Later</button>
+          <button className="btn-secondary-sm" onClick={() => onGoDynamics?.(event)}>Go to Dynamics</button>
+        </div>
+      </div>
+    </div>
   );
 }

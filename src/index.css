@@ -10046,3 +10046,35 @@ body { background: #111317; }
   .meeting-option { padding-right: 12px; }
   .meeting-risk { position: static; display: inline-flex; margin-top: 6px; }
 }
+
+/* ── App-level morale prompt visibility ───────────────────────────────────── */
+.sb-badge.sb-badge-warning { background: #f59e0b; color: #111827; }
+.app-morale-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1095;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(7, 10, 18, .54);
+}
+.app-morale-prompt {
+  width: min(520px, 100%);
+  border: 1px solid var(--border);
+  border-top: 3px solid #fb923c;
+  border-radius: 12px;
+  background: var(--bg2);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+.app-morale-prompt.sev-critical { border-top-color: #f87171; }
+.app-morale-prompt h3 { margin: 4px 0 12px; color: var(--text-head); }
+.app-morale-prompt p { color: var(--text-dim); line-height: 1.45; margin: 10px 0 0; }
+.app-morale-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.app-morale-grid span { background: rgba(148,163,184,.08); border: 1px solid var(--border); border-radius: 9px; padding: 8px; color: var(--text); font-size: .82rem; }
+.app-morale-grid b { display: block; color: var(--text-dim); text-transform: uppercase; font-size: .66rem; letter-spacing: .08em; margin-bottom: 3px; }
+.app-morale-grid em { font-style: normal; font-weight: 900; }
+.app-morale-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.fm-dynamics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 9px; }
+.fm-dynamics-open { margin: 0 9px 9px; width: calc(100% - 18px); }
