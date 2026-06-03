@@ -15,6 +15,7 @@ import {
   applyBenchEvent, applyPromoteEvent, applyBlockedMoveEvent, applyResultMorale,
   makePromise, evaluateAllPromises, advancePromiseProgress, getConversationFor,
   applyConversationChoice, getSquadMorale, moraleWillingnessDelta, derivePersonality,
+  createMoraleConversationEvent, getActionRequiredMoraleEvents, delayMoraleConversationEvent, getPopupRequiredMoraleEvents,
 } from "../src/engine/moraleEngine.js";
 
 let pass = 0, fail = 0;
@@ -50,6 +51,7 @@ const allEntries = Object.values(old.playerMorale);
 check("all morale values within 0-100", allEntries.every(e => e.level >= 0 && e.level <= 100));
 check("no mass unrest on load (avg >= 60)", getSquadMorale(old).avg >= 60);
 check("empty promises arrays initialized", allEntries.every(e => Array.isArray(e.promises)));
+check("conversation history arrays initialized", allEntries.every(e => Array.isArray(e.conversationHistory)));
 check("idempotent re-hydration keeps entries", Object.keys(migratePlayerMorale(old)).length === Object.keys(old.playerMorale).length);
 
 // ── 2. Personality derivation ────────────────────────────────────────────────
@@ -148,12 +150,49 @@ let s8 = baseState();
 s8.playerMorale = migratePlayerMorale(s8);
 const p6 = s8.players.find(p => p.teamId === s8.userTeamId);
 s8 = applyBenchEvent(s8, p6); // create a playing-time concern
-const convo = getConversationFor(s8, p6);
-check("conversation has intro + 2-4 options", !!convo.intro && convo.options.length >= 2 && convo.options.length <= 4);
+s8 = createMoraleConversationEvent(s8, p6, { topic: "playing_time", trigger: "Diagnostic meeting", severity: "high", force: true });
+const event = getActionRequiredMoraleEvents(s8).find(e => e.playerId === p6.id);
+const convo = getConversationFor(s8, p6, event);
+check("conversation event can be created", !!event);
+check("high severity event appears in action queue", event?.severity === "high" && getActionRequiredMoraleEvents(s8).some(e => e.id === event.id));
+check("high severity event appears in app-level popup queue", getPopupRequiredMoraleEvents(s8).some(e => e.id === event.id));
+check("popup-required event has valid player/topic/options", !!event?.player && !!convo.topic && convo.options.length >= 2);
+check("conversation has varied quote + impact hints", !!convo.quote && convo.options.every(o => o.impact && o.risk));
 const promiseOption = convo.options.find(o => o.promise);
+const refusalOption = convo.options.find(o => !o.promise && (o.morale?.delta ?? 0) <= 0);
 check("a conversation option makes a promise", !!promiseOption);
-s8 = applyConversationChoice(s8, p6, promiseOption);
-check("choosing a promise option logs a promise", getMorale(s8, p6.id).promises.some(pr => pr.status === "active"));
+const beforeChoice = getMorale(s8, p6.id).level;
+s8 = applyConversationChoice(s8, p6, promiseOption, event);
+check("selecting response applies morale effect", getMorale(s8, p6.id).level !== beforeChoice);
+check("promise response creates promise", getMorale(s8, p6.id).promises.some(pr => pr.status === "active"));
+check("conversation history is recorded", getMorale(s8, p6.id).conversationHistory.length > 0);
+check("resolved event leaves action queue", !getActionRequiredMoraleEvents(s8).some(e => e.id === event.id));
+const historyBefore = getMorale(s8, p6.id).conversationHistory.length;
+s8 = createMoraleConversationEvent(s8, p6, { topic: "playing_time", trigger: "Spam test" });
+check("cooldown prevents repeated spam", !getActionRequiredMoraleEvents(s8).some(e => e.trigger === "Spam test"));
+let s8b = baseState();
+s8b.playerMorale = migratePlayerMorale(s8b);
+const p6b = s8b.players.find(p => p.teamId === s8b.userTeamId);
+s8b = applyBenchEvent(s8b, p6b);
+const convoB = getConversationFor(s8b, p6b);
+const noPromiseBefore = getMorale(s8b, p6b.id).promises.length;
+s8b = applyConversationChoice(s8b, p6b, refusalOption || convoB.options.find(o => !o.promise));
+check("refusal response does not create promise", getMorale(s8b, p6b.id).promises.length === noPromiseBefore);
+check("history cap stays short", historyBefore <= 3);
+let delayState = baseState();
+delayState.playerMorale = migratePlayerMorale(delayState);
+const delayPlayer = delayState.players.find(p => p.teamId === delayState.userTeamId);
+delayState = createMoraleConversationEvent(delayState, delayPlayer, { topic: "contract", severity: "high", force: true });
+const delayEvent = getActionRequiredMoraleEvents(delayState)[0];
+delayState = delayMoraleConversationEvent(delayState, delayEvent.id);
+check("delayed event leaves action queue temporarily", !getActionRequiredMoraleEvents(delayState).some(e => e.id === delayEvent.id));
+check("delayed event leaves app popup queue temporarily", !getPopupRequiredMoraleEvents(delayState).some(e => e.id === delayEvent.id));
+let lowState = baseState();
+lowState.playerMorale = migratePlayerMorale(lowState);
+const lowPlayer = lowState.players.find(p => p.teamId === lowState.userTeamId);
+lowState = createMoraleConversationEvent(lowState, lowPlayer, { topic: "playing_time", severity: "low", force: true });
+check("low severity event does not interrupt", getPopupRequiredMoraleEvents(lowState).length === 0);
+check("old save hydration works with conversation fields", Array.isArray(old.playerMorale[userPlayers[0].id].conversationHistory));
 
 // ── 9. Result morale stays bounded across repeated sims ──────────────────────
 console.log("\nResult morale:");

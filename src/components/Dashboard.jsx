@@ -16,6 +16,7 @@ import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 import { isInactivePlayer } from "../utils/playerIdentity.js";
 import { getSecurityBand, bandColor, objStatusColor, objStatusLabel, evalAllObjectives } from "../engine/boardEngine.js";
+import { getActionRequiredMoraleEvents, getPromiseRiskLabel, getSquadMorale } from "../engine/moraleEngine.js";
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
 function placementText(place) {
@@ -293,6 +294,9 @@ export default function Dashboard({ setScreen }) {
     .filter(r => r.winnerId === userTeamId || r.loserId === userTeamId)
     .slice(0, 8);
   const feedTeaser = [...(state.feed ?? [])].reverse().slice(0, 3);
+  const squadMorale = getSquadMorale(state);
+  const moraleActions = getActionRequiredMoraleEvents(state);
+  const promisesAtRisk = squadMorale.activePromises.filter(pr => ["High risk", "Already at risk"].includes(getPromiseRiskLabel(pr, state, pr.player))).length;
   const latestMoves = [...(state.challengerTransactions ?? [])].reverse().slice(0, 3);
   const prospectsToWatch = [...(state.prospects ?? [])]
     .filter(p => !p.teamId && !isInactivePlayer(p))
@@ -409,6 +413,17 @@ export default function Dashboard({ setScreen }) {
         <section className="fm-panel fm-board-widget">
           <PanelTitle title="Owner" action={<button className="fm-panel-link" onClick={() => setScreen?.("board")}>Board ›</button>} />
           <BoardWidget boardState={state.boardState} onOpen={() => setScreen?.("board")} />
+        </section>
+
+        <section className="fm-panel fm-dynamics-widget">
+          <PanelTitle title="Squad Dynamics" action={<button className="fm-panel-link" onClick={() => setScreen?.("dynamics")}>Open ›</button>} />
+          <div className="fm-dynamics-grid">
+            <MiniMetric label="Mood" value={squadMorale.mood} />
+            <MiniMetric label="Action" value={moraleActions.length} tone={moraleActions.length ? "var(--yellow)" : "var(--text-head)"} />
+            <MiniMetric label="Unhappy" value={squadMorale.unhappy.length} tone={squadMorale.unhappy.length ? "var(--yellow)" : "var(--text-head)"} />
+            <MiniMetric label="At Risk" value={promisesAtRisk} tone={promisesAtRisk ? "var(--red)" : "var(--text-head)"} />
+          </div>
+          <button className="btn-secondary-sm fm-dynamics-open" onClick={() => setScreen?.("dynamics")}>Open Dynamics</button>
         </section>
 
         <section className="fm-panel fm-league-table">

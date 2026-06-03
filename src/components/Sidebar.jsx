@@ -5,6 +5,7 @@ import { useGame } from "../store/gameStore.jsx";
 import { getTeamUiTheme } from "../utils/teamTheme.js";
 import { getAcceptedOutgoingTermsOffers } from "../engine/transferEngine.js";
 import { resolveUserTeamMeta, isChallengerMode } from "../utils/userTeam.js";
+import { getActionRequiredMoraleEvents } from "../engine/moraleEngine.js";
 
 const NAV_ITEMS = [
   { id: "home",      icon: "⌂",  label: "Home" },
@@ -66,6 +67,9 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
   const hasDevData  = state.progressionLog?.length > 0;
   const unreadFeed  = (state.feed ?? []).filter(f => !f.read).length;
   const transferActions = getAcceptedOutgoingTermsOffers(state).length;
+  const moraleActions = getActionRequiredMoraleEvents(state);
+  const moraleActionCount = moraleActions.length;
+  const moraleHasHighPriority = moraleActions.some(ev => ev.severity === "high" || ev.severity === "critical");
   const showFreeAgency = phase === "offseason" || phase === "contracts" || !!state.offseason?.freeAgencyOpen;
   const visibleNavItems = NAV_ITEMS.filter(item => !item.offseasonOnly || showFreeAgency);
 
@@ -94,6 +98,7 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
               return item.id === "transfers" && transferActions > 0 ? `${label} (${transferActions})` : label;
             })()}</span>
             {item.id === "devreport" && hasDevData && <span className="sb-dot" />}
+            {item.id === "dynamics" && moraleActionCount > 0 && <span className={`sb-badge ${moraleHasHighPriority ? "sb-badge-warning" : ""}`}>{moraleActionCount > 9 ? "9+" : moraleActionCount}</span>}
             {item.id === "transfers" && transferActions > 0 && <span className="sb-badge">{transferActions > 9 ? "9+" : transferActions}</span>}
           </button>
         ))}

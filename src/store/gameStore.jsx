@@ -24,6 +24,7 @@ import {
   applyBenchEvent, applyPromoteEvent, applyReleaseEvent, applyBlockedMoveEvent,
   applyTransferInterestEvent, applyNewContractEvent, applySignedEvent,
   applyConversationChoice, makePromise, getConversationFor, getMorale, PROMISE_TYPES,
+  ensureMoraleConversationState, delayMoraleConversationEvent, dismissMoraleConversationEvent,
 } from "../engine/moraleEngine.js";
 import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 import { ensureTeamMapProfiles } from "../engine/mapProfile.js";
@@ -292,7 +293,7 @@ function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride =
   finalState.teamMapProfiles = ensureTeamMapProfiles(finalState, { force: true });
   // Squad dynamics: seed neutral-positive morale for every rostered player.
   finalState.playerMorale = migratePlayerMorale(finalState);
-  return finalState;
+  return ensureMoraleConversationState(finalState);
 }
 
 // ── Board objective (re)generation — sets objectives + explanatory meta ───────
@@ -400,7 +401,8 @@ function reducer(state, action) {
       // Player Morale / Squad Dynamics: hydrate safely on old saves. Missing →
       // neutral-positive morale for every rostered player; never mass unrest.
       cleaned.playerMorale = migratePlayerMorale(cleaned);
-      return isValidGameState(cleaned) ? cleaned : null;
+      const moraleCleaned = ensureMoraleConversationState(cleaned);
+      return isValidGameState(moraleCleaned) ? moraleCleaned : null;
     }
 
     // ── Stage sims — detect streaks + standings changes ────────────────────
@@ -1330,16 +1332,24 @@ function reducer(state, action) {
     case "TALK_TO_PLAYER": {
       const player = (state.players || []).concat(state.prospects || []).find(p => p.id === action.playerId);
       if (!player) return addNotif(state, "Player not found.");
-      const convo = getConversationFor(state, player);
+      const event = (state.moraleConversationEvents || []).find(e => e.id === action.eventId);
+      const convo = getConversationFor(state, player, event);
       const option = convo?.options.find(o => o.id === action.optionId);
       if (!option) return addNotif(state, "That conversation option is no longer available.");
-      let next = applyConversationChoice(state, player, option);
+      let next = applyConversationChoice(state, player, option, event);
       next = evaluateAllPromises(next);
       const msg = option.promise
         ? `You spoke with ${player.name}. Promise logged: ${option.label}.`
         : `You spoke with ${player.name}.`;
       return addNotif(next, msg);
     }
+
+
+    case "DELAY_MORALE_CONVERSATION":
+      return delayMoraleConversationEvent(state, action.eventId, action.stages || 1);
+
+    case "DISMISS_MORALE_CONVERSATION":
+      return dismissMoraleConversationEvent(state, action.eventId);
 
     // ── SQUAD DYNAMICS: make a promise to a player directly ───────────────────
     case "MAKE_PROMISE": {

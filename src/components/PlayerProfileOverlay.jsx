@@ -9,7 +9,7 @@ import {
   getPlayerValuation, getAskingPrice, getTransferStatus, getTransferBudget,
   isTransferWindowOpen, fmtFee, getTransferIntel,
 } from "../engine/transferEngine.js";
-import { getMorale, moodForLevel, moraleColor, derivePersonality } from "../engine/moraleEngine.js";
+import { getMorale, moodForLevel, moraleColor, derivePersonality, getPromiseRiskLabel } from "../engine/moraleEngine.js";
 import { isChallengerMode } from "../utils/userTeam.js";
 import ConversationModal from "./ConversationModal.jsx";
 
@@ -205,7 +205,18 @@ export default function PlayerProfileOverlay() {
                 )}
                 {activePromises.length > 0 && (
                   <div className="pm-morale-chips">
-                    {activePromises.map(p => <span key={p.id} className="trait-chip promise-chip">{p.label}</span>)}
+                    {activePromises.map(p => <span key={p.id} className="trait-chip promise-chip">{p.label} · {getPromiseRiskLabel(p, state, player)}</span>)}
+                  </div>
+                )}
+
+                {(m.conversationHistory || []).length > 0 && (
+                  <div className="pm-conversation-history">
+                    <div className="pm-strip-lbl">Recent meetings</div>
+                    {(m.conversationHistory || []).slice(-3).map((h, idx) => (
+                      <div key={`${h.date}-${idx}`} className="pm-history-row">
+                        <b>{h.date} · {h.topic}</b> — {h.response}. {h.promise ? `Promise: ${h.promise}.` : "No promise."}
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div className="pm-transfer-actions">
