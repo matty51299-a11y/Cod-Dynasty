@@ -16,6 +16,7 @@ import {
   makePromise, evaluateAllPromises, advancePromiseProgress, getConversationFor,
   applyConversationChoice, getSquadMorale, moraleWillingnessDelta, derivePersonality,
   createMoraleConversationEvent, getActionRequiredMoraleEvents, delayMoraleConversationEvent, getPopupRequiredMoraleEvents,
+  getConversationTopics, getPlayerTopicResponse, getManagerResponsesForTopic, buildConversationContext,
 } from "../src/engine/moraleEngine.js";
 
 let pass = 0, fail = 0;
@@ -158,6 +159,15 @@ check("high severity event appears in action queue", event?.severity === "high" 
 check("high severity event appears in app-level popup queue", getPopupRequiredMoraleEvents(s8).some(e => e.id === event.id));
 check("popup-required event has valid player/topic/options", !!event?.player && !!convo.topic && convo.options.length >= 2);
 check("conversation has varied quote + impact hints", !!convo.quote && convo.options.every(o => o.impact && o.risk));
+const hubTopics = getConversationTopics(s8, p6);
+check("Talk opens manager-initiated topic list with more than 10 possible topics", hubTopics.length > 10);
+check("action-required event opens relevant topic first", buildConversationContext(s8, p6, event).openingTopic === "playing_time");
+const playResponse = getPlayerTopicResponse(s8, p6, "playing_time");
+const contractResponse = getPlayerTopicResponse(s8, p6, "contract");
+check("selecting topic generates player response", !!playResponse.quote && playResponse.topic === "playing_time");
+check("different topics generate different responses", playResponse.quote !== contractResponse.quote);
+const hubOptions = getManagerResponsesForTopic(s8, p6, "playing_time");
+check("selected topic has manager response options", hubOptions.length >= 3 && hubOptions.every(o => o.impact && o.risk));
 const promiseOption = convo.options.find(o => o.promise);
 const refusalOption = convo.options.find(o => !o.promise && (o.morale?.delta ?? 0) <= 0);
 check("a conversation option makes a promise", !!promiseOption);
@@ -165,7 +175,16 @@ const beforeChoice = getMorale(s8, p6.id).level;
 s8 = applyConversationChoice(s8, p6, promiseOption, event);
 check("selecting response applies morale effect", getMorale(s8, p6.id).level !== beforeChoice);
 check("promise response creates promise", getMorale(s8, p6.id).promises.some(pr => pr.status === "active"));
+check("selecting manager response generates outcome", !!s8.lastMoraleConversationOutcome?.summary);
 check("conversation history is recorded", getMorale(s8, p6.id).conversationHistory.length > 0);
+const afterFirstTopic = getMorale(s8, p6.id).level;
+s8 = applyConversationChoice(s8, p6, { ...getManagerResponsesForTopic(s8, p6, "contract").find(o => o.id === "promise_talks"), meetingId: "diag_multi" });
+check("user can ask multiple topics in one meeting", getMorale(s8, p6.id).conversationHistory.length >= 2);
+check("conversation does not auto-close after one response", !!s8.lastMoraleConversationOutcome && getConversationTopics(s8, p6).length > 10);
+const beforeRepeat = getMorale(s8, p6.id).level;
+s8 = applyConversationChoice(s8, p6, { ...getManagerResponsesForTopic(s8, p6, "contract").find(o => o.id === "wait"), meetingId: "diag_multi" });
+const repeatDelta = Math.abs(getMorale(s8, p6.id).level - beforeRepeat);
+check("repeated same topic does not stack morale infinitely", repeatDelta <= 1);
 check("resolved event leaves action queue", !getActionRequiredMoraleEvents(s8).some(e => e.id === event.id));
 const historyBefore = getMorale(s8, p6.id).conversationHistory.length;
 s8 = createMoraleConversationEvent(s8, p6, { topic: "playing_time", trigger: "Spam test" });
@@ -178,6 +197,10 @@ const convoB = getConversationFor(s8b, p6b);
 const noPromiseBefore = getMorale(s8b, p6b.id).promises.length;
 s8b = applyConversationChoice(s8b, p6b, refusalOption || convoB.options.find(o => !o.promise));
 check("refusal response does not create promise", getMorale(s8b, p6b.id).promises.length === noPromiseBefore);
+let conflictState = makePromise(s8b, p6b.id, "starter_role");
+const conflictOpt = getManagerResponsesForTopic(conflictState, p6b, "playing_time").find(o => o.id === "earn");
+check("conflicting promise warning appears", !!conflictOpt?.conflictWarning);
+check("conversation history records multiple-topic meeting", getMorale(s8, p6.id).conversationHistory.length >= 2);
 check("history cap stays short", historyBefore <= 3);
 let delayState = baseState();
 delayState.playerMorale = migratePlayerMorale(delayState);

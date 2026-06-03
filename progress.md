@@ -1052,3 +1052,11 @@ with 2–4 options. Options either make a promise or apply a direct morale nudge
 - Contract-demand morale effect is intentionally deferred (helper provided).
 - Teammate "ripple" effects (e.g. a release unsettling the room) are not modelled yet.
 - Morale entries persist for players who leave the user team (harmless; keyed by id).
+
+## Update 2026-06-03 (Player Conversation Hub overhaul)
+- Reworked morale conversations into a Player Conversation Hub that supports manager-initiated meetings and player-raised action-required issues without discarding `playerMorale`, `moraleConversationEvents`, `moraleActionRequired`, promises, cooldowns, or conversation history.
+- Added a contextual topic catalogue with role/playing time, performance, future/contracts, transfers, team direction, promises, and dressing-room categories. Normal manager talks typically expose more than 10 topics, while context-only entries such as broken-promise apologies, praise/warnings, contracts, transfers, CDL move, and promise review are filtered by player state.
+- Added topic-specific player responses driven by morale band, personality tone, starter/sub status, form, contract state, transfer/CDL context, active promises, and current concerns. Manager responses now produce an outcome panel and keep the meeting open for more topics.
+- Added meeting anti-spam safeguards: only the first three meaningful topics in a meeting can affect morale/trust, repeated topics do not stack morale, duplicate promises are blocked by existing promise logic, and conflicting response options show warnings.
+- Dynamics now surfaces conversation history count and stance/main-concern fallbacks; Player Profile morale details now include player stance, main concern, last talk, active promises, and still opens the same Conversation Hub.
+- Expanded `scripts/diagnosePlayerMorale.mjs` to cover the topic list, action-required topic routing, multi-topic meetings, response/outcome generation, no auto-close behavior, repeat-topic anti-farming, promise creation, conflict warnings, history recording, cooldowns, and old-save hydration.

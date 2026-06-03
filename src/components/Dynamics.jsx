@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useGame } from "../store/gameStore.jsx";
 import {
   getSquadMorale, getMorale, moodForLevel, moraleColor, moraleTone, derivePersonality, PROMISE_TYPES,
-  getActionRequiredMoraleEvents, getPromiseRiskLabel,
+  getActionRequiredMoraleEvents, getPromiseRiskLabel, buildConversationContext,
 } from "../engine/moraleEngine.js";
 import { getTransferStatus } from "../engine/transferEngine.js";
 import { isChallengerMode } from "../utils/userTeam.js";
@@ -104,7 +104,7 @@ export default function Dynamics() {
             <thead>
               <tr>
                 <th>Player</th><th>Role</th><th>Status</th><th>Morale</th>
-                <th>Concern</th><th>Promise</th><th>Contract</th><th>Transfer</th><th>Action</th>
+                <th>Concern</th><th>Promise</th><th>History</th><th>Contract</th><th>Transfer</th><th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -115,6 +115,7 @@ export default function Dynamics() {
                   const topConcern = morale.concerns[morale.concerns.length - 1];
                   const activePromise = (morale.promises || []).find(p => p.status === "active");
                   const traits = derivePersonality(player);
+                  const talkCtx = buildConversationContext(state, player);
                   return (
                     <tr key={player.id}>
                       <td className="player-name">
@@ -124,8 +125,9 @@ export default function Dynamics() {
                       <td><span className="role-pill ui-pill ui-pill-neutral">{player.primary}</span></td>
                       <td>{player.isSub ? <span className="sub-label">SUB</span> : <span className="sub-label">STARTER</span>}</td>
                       <td><MoraleBadge level={level} /></td>
-                      <td className="dynamics-concern">{topConcern ? topConcern.label : <span className="muted">—</span>}</td>
+                      <td className="dynamics-concern">{topConcern ? topConcern.label : <span className="muted">{talkCtx.transferStance}</span>}</td>
                       <td>{activePromise ? <span className="trait-chip promise-chip">{activePromise.label}</span> : <span className="muted">—</span>}</td>
+                      <td className="muted">{morale.conversationHistory?.length || 0}</td>
                       <td style={{ color: (player.contractYears ?? 2) <= 1 ? "#ff6450" : "var(--text-dim)" }}>
                         {challenger ? "—" : `${player.contractYears ?? "—"} yr`}
                       </td>

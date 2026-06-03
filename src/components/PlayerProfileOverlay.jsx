@@ -9,7 +9,7 @@ import {
   getPlayerValuation, getAskingPrice, getTransferStatus, getTransferBudget,
   isTransferWindowOpen, fmtFee, getTransferIntel,
 } from "../engine/transferEngine.js";
-import { getMorale, moodForLevel, moraleColor, derivePersonality, getPromiseRiskLabel } from "../engine/moraleEngine.js";
+import { getMorale, moodForLevel, moraleColor, derivePersonality, getPromiseRiskLabel, buildConversationContext } from "../engine/moraleEngine.js";
 import { isChallengerMode } from "../utils/userTeam.js";
 import ConversationModal from "./ConversationModal.jsx";
 
@@ -189,6 +189,8 @@ export default function PlayerProfileOverlay() {
             const activePromises = (m.promises || []).filter(p => p.status === "active");
             const lastEvent = m.recentEvents?.[m.recentEvents.length - 1];
             const traits = derivePersonality(player);
+            const talkCtx = buildConversationContext(state, player);
+            const lastMeeting = (m.conversationHistory || []).at(-1);
             return (
               <div className="pm-section pm-morale-section">
                 <div className="pm-section-title">Morale & Dynamics</div>
@@ -196,6 +198,9 @@ export default function PlayerProfileOverlay() {
                   <span><span className="pm-strip-lbl">Mood</span> <b style={{ color: moraleColor(m.level) }}>{m.level} {moodForLevel(m.level)}</b></span>
                   <span><span className="pm-strip-lbl">Trust</span> {m.trust}</span>
                   <span><span className="pm-strip-lbl">Personality</span> {traits.join(", ")}</span>
+                  <span><span className="pm-strip-lbl">Stance</span> {talkCtx.transferStance}</span>
+                  <span><span className="pm-strip-lbl">Main Concern</span> {talkCtx.mainConcern}</span>
+                  {lastMeeting && <span><span className="pm-strip-lbl">Last Talk</span> {lastMeeting.date} · {lastMeeting.topic}</span>}
                   {lastEvent && <span><span className="pm-strip-lbl">Last Event</span> {lastEvent.label}{lastEvent.delta ? ` (${lastEvent.delta > 0 ? "+" : ""}${lastEvent.delta})` : ""}</span>}
                 </div>
                 {m.concerns?.length > 0 && (
