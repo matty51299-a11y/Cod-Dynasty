@@ -10078,3 +10078,39 @@ body { background: #111317; }
 .app-morale-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .fm-dynamics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 9px; }
 .fm-dynamics-open { margin: 0 9px 9px; width: calc(100% - 18px); }
+
+/* ── Player Conversation Hub upgrade ───────────────────────────────────────── */
+.player-meeting-modal.conversation-hub { width: min(1180px, 100%); max-height: 94vh; }
+.hub-head { margin-bottom: 10px; }
+.hub-context-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.hub-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr) 245px; gap: 12px; align-items: start; }
+.hub-topic-panel, .hub-main-panel, .hub-side-panel { min-width: 0; }
+.hub-topic-panel, .hub-main-panel, .hub-side-card { background: rgba(15,23,36,.42); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.hub-topic-panel { max-height: 68vh; overflow: auto; }
+.hub-topic-group { margin-top: 10px; }
+.hub-topic-category { color: var(--text-head); font-size: .76rem; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; margin: 8px 0 5px; }
+.hub-topic-btn { width: 100%; text-align: left; border: 1px solid rgba(42,58,87,.9); background: rgba(148,163,184,.06); color: var(--text); border-radius: 9px; padding: 8px 9px; margin-bottom: 5px; cursor: pointer; }
+.hub-topic-btn:hover, .hub-topic-btn.active { border-color: var(--accent); background: rgba(96,165,250,.12); }
+.hub-topic-btn.asked { border-style: dashed; }
+.hub-topic-btn span { display: block; font-weight: 800; font-size: .8rem; }
+.hub-topic-btn em { display: inline-block; margin-top: 3px; margin-right: 4px; color: var(--text-dim); font-style: normal; font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; }
+.hub-end-btn { width: 100%; margin-top: 10px; border: 1px solid rgba(248,113,113,.35); background: rgba(248,113,113,.1); color: #fecaca; border-radius: 9px; padding: 9px; font-weight: 900; cursor: pointer; }
+.hub-main-panel { min-height: 430px; }
+.hub-empty-state { border: 1px dashed rgba(96,165,250,.28); border-radius: 12px; padding: 22px; color: var(--text-dim); line-height: 1.5; }
+.hub-empty-state h3 { color: var(--text-head); margin: 4px 0 8px; }
+.hub-question { background: rgba(96,165,250,.09); border: 1px solid rgba(96,165,250,.18); border-radius: 10px; padding: 11px; color: var(--text-head); font-weight: 900; margin-bottom: 10px; }
+.hub-question span, .meeting-quote span { display: block; color: var(--text-dim); text-transform: uppercase; letter-spacing: .12em; font-size: .67rem; margin-bottom: 4px; font-weight: 900; }
+.meeting-option.conflict { border-color: rgba(251,191,36,.55); background: rgba(251,191,36,.06); }
+.warning-text { color: #fde68a !important; }
+.hub-promise-detail { background: rgba(15,23,36,.35); border: 1px solid rgba(52,211,153,.2); border-radius: 10px; padding: 10px; color: var(--text-dim); font-size: .82rem; line-height: 1.45; margin-bottom: 12px; }
+.hub-outcome-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.hub-side-panel { display: grid; gap: 10px; }
+.hub-side-card { font-size: .8rem; }
+.hub-promise-row, .hub-history-row { border-top: 1px solid rgba(42,58,87,.75); padding-top: 8px; margin-top: 8px; }
+.hub-promise-row b, .hub-history-row b { display: block; color: var(--text-head); }
+.hub-promise-row span, .hub-history-row span, .hub-promise-row small { display: block; color: var(--text-dim); margin-top: 2px; }
+@media (max-width: 1040px) {
+  .hub-layout { grid-template-columns: 1fr; }
+  .hub-topic-panel { max-height: none; }
+  .hub-context-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

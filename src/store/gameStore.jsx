@@ -23,7 +23,7 @@ import {
   migratePlayerMorale, applyResultMorale, applyMajorMorale, evaluateAllPromises,
   applyBenchEvent, applyPromoteEvent, applyReleaseEvent, applyBlockedMoveEvent,
   applyTransferInterestEvent, applyNewContractEvent, applySignedEvent,
-  applyConversationChoice, makePromise, getConversationFor, getMorale, PROMISE_TYPES,
+  applyConversationChoice, makePromise, getConversationFor, getManagerResponsesForTopic, getMorale, PROMISE_TYPES,
   ensureMoraleConversationState, delayMoraleConversationEvent, dismissMoraleConversationEvent,
 } from "../engine/moraleEngine.js";
 import { getMajorPlacementMap } from "../utils/historyProfiles.js";
@@ -1333,10 +1333,11 @@ function reducer(state, action) {
       const player = (state.players || []).concat(state.prospects || []).find(p => p.id === action.playerId);
       if (!player) return addNotif(state, "Player not found.");
       const event = (state.moraleConversationEvents || []).find(e => e.id === action.eventId);
-      const convo = getConversationFor(state, player, event);
-      const option = convo?.options.find(o => o.id === action.optionId);
+      const convo = action.topic ? null : getConversationFor(state, player, event);
+      const optionPool = action.topic ? getManagerResponsesForTopic(state, player, action.topic) : (convo?.options || []);
+      const option = optionPool.find(o => o.id === action.optionId);
       if (!option) return addNotif(state, "That conversation option is no longer available.");
-      let next = applyConversationChoice(state, player, option, event);
+      let next = applyConversationChoice(state, player, { ...option, topic: action.topic || option.topic, meetingId: action.meetingId }, event);
       next = evaluateAllPromises(next);
       const msg = option.promise
         ? `You spoke with ${player.name}. Promise logged: ${option.label}.`
