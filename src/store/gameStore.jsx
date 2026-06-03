@@ -19,6 +19,13 @@ import { CDL_TEAMS } from "../data/teams.js";
 import { isValidGameState, isValidTeamId, findPhaseInvariantViolations } from "./gameValidation.js";
 import { migrateStaff, hireStaff, fireStaff, ensureTeamStaff, roleLabel } from "../engine/staffEngine.js";
 import { migrateBoardState, buildBoardObjectives, objectivesNeedRegen, BOARD_OBJ_VERSION, nudgeConfidenceAfterMajor, runBoardReview } from "../engine/boardEngine.js";
+import {
+  migratePlayerMorale, applyResultMorale, applyMajorMorale, evaluateAllPromises,
+  applyBenchEvent, applyPromoteEvent, applyReleaseEvent, applyBlockedMoveEvent,
+  applyTransferInterestEvent, applyNewContractEvent, applySignedEvent,
+  applyConversationChoice, makePromise, getConversationFor, getMorale, PROMISE_TYPES,
+} from "../engine/moraleEngine.js";
+import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 import { ensureTeamMapProfiles } from "../engine/mapProfile.js";
 import { migrateUserScouting, applyScout, toggleShortlist } from "../engine/scoutingEngine.js";
 import {
@@ -283,6 +290,8 @@ function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride =
     : regenBoardObjectives(finalState, finalState.boardState);
   // CDL 2026 map pool: generate every team's map/mode profile once at new game.
   finalState.teamMapProfiles = ensureTeamMapProfiles(finalState, { force: true });
+  // Squad dynamics: seed neutral-positive morale for every rostered player.
+  finalState.playerMorale = migratePlayerMorale(finalState);
   return finalState;
 }
 
@@ -306,6 +315,25 @@ function withMajorBoardNudge(beforeState, afterState, majorIdx) {
     return { ...afterState, boardState: nudged };
   }
   return afterState;
+}
+
+// ── Morale nudge helper — applies after a Major / Champs completes ────────────
+// Mirrors withMajorBoardNudge: when a major just completed, derive the user
+// team's finishing placement and nudge squad morale + resolve any due promises.
+// Works for both CDL and Challenger mode (Challenger user team has no CDL major
+// placement, so it only resolves promises by deadline). Modest, bounded effects.
+function withMajorMoraleNudge(beforeState, afterState, majorIdx) {
+  if (majorIdx == null || !afterState) return afterState;
+  const wasCompleted = beforeState.schedule?.majors?.[majorIdx]?.completed ?? true;
+  const nowCompleted = afterState.schedule?.majors?.[majorIdx]?.completed ?? false;
+  if (wasCompleted || !nowCompleted) return afterState;
+  let next = afterState;
+  if (afterState.userTeamType !== "challenger") {
+    const major = afterState.schedule?.majors?.[majorIdx];
+    const placement = getMajorPlacementMap(major)[afterState.userTeamId];
+    if (placement != null) next = applyMajorMorale(next, placement);
+  }
+  return evaluateAllPromises(next);
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -369,6 +397,9 @@ function reducer(state, action) {
       // Challenger manager mode: buyout offers + transfer income (empty on CDL saves).
       cleaned.challengerOffers = Array.isArray(cleaned.challengerOffers) ? cleaned.challengerOffers : [];
       cleaned.challengerFunds = Number.isFinite(cleaned.challengerFunds) ? cleaned.challengerFunds : 0;
+      // Player Morale / Squad Dynamics: hydrate safely on old saves. Missing →
+      // neutral-positive morale for every rostered player; never mass unrest.
+      cleaned.playerMorale = migratePlayerMorale(cleaned);
       return isValidGameState(cleaned) ? cleaned : null;
     }
 
@@ -378,7 +409,7 @@ function reducer(state, action) {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
-      const newState   = simNextMatch({ ...state });
+      const newState   = applyResultMorale(simNextMatch({ ...state }), state);
       return pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
@@ -391,7 +422,7 @@ function reducer(state, action) {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
-      const newState   = simMatchday({ ...state });
+      const newState   = applyResultMorale(simMatchday({ ...state }), state);
       return pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
@@ -404,7 +435,7 @@ function reducer(state, action) {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
-      const newState   = simUserMatchday({ ...state });
+      const newState   = applyResultMorale(simUserMatchday({ ...state }), state);
       return pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
@@ -417,7 +448,7 @@ function reducer(state, action) {
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
-      const newState   = simStage({ ...state });
+      const newState   = applyResultMorale(simStage({ ...state }), state);
       return pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
@@ -432,7 +463,8 @@ function reducer(state, action) {
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajor({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
-      return withMajorBoardNudge(state, withFeed, majorIdx);
+      const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
+      return withMajorMoraleNudge(state, withBoard, majorIdx);
       });
     }
 
@@ -442,7 +474,8 @@ function reducer(state, action) {
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simNextMajorMatch({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
-      return withMajorBoardNudge(state, withFeed, majorIdx);
+      const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
+      return withMajorMoraleNudge(state, withBoard, majorIdx);
       });
     }
 
@@ -452,7 +485,8 @@ function reducer(state, action) {
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const newState     = simMajorRound({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
-      return withMajorBoardNudge(state, withFeed, majorIdx);
+      const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
+      return withMajorMoraleNudge(state, withBoard, majorIdx);
       });
     }
 
@@ -475,7 +509,8 @@ function reducer(state, action) {
         ...(majorIdx != null ? generateMajorFeed(wasCompleted, newState, majorIdx) : []),
       ];
       const result = pushFeed(newState, feedItems);
-      return withMajorBoardNudge(state, result, majorIdx);
+      const withBoard = withMajorBoardNudge(state, result, majorIdx);
+      return majorIdx != null ? withMajorMoraleNudge(state, withBoard, majorIdx) : withBoard;
       });
     }
 
@@ -575,10 +610,17 @@ function reducer(state, action) {
         ));
       }
 
-      return pushFeed(stateWithBoard, [
+      // Squad dynamics: hydrate morale for new-season rosters (new signings get
+      // entries; departed players keep theirs) and resolve any promises whose
+      // deadline has now passed (e.g. contract talks promised "in the offseason").
+      const moraledOffseason = evaluateAllPromises({
+        ...stateWithBoard,
+        playerMorale: migratePlayerMorale(stateWithBoard),
+      });
+      return pushFeed(moraledOffseason, [
         ...boardFeedItems,
-        ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, stateWithBoard, season),
-        ...generateRosterMoveFeed(stateWithBoard, prevMovesLen),
+        ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, moraledOffseason, season),
+        ...generateRosterMoveFeed(moraledOffseason, prevMovesLen),
       ]);
       };
       return state.schedule?.phase === "contracts" ? runAdvance() : runIfUserRosterValid(state, runAdvance);
@@ -600,7 +642,7 @@ function reducer(state, action) {
         }
       }
 
-      return {
+      const resigned = {
         ...state,
         players: state.players.map(p =>
           p.id === playerId
@@ -608,6 +650,8 @@ function reducer(state, action) {
             : p
         ),
       };
+      // Squad dynamics: a fresh deal lifts morale and fulfils contract promises.
+      return evaluateAllPromises(applyNewContractEvent(resigned, player));
     }
 
     // ── SIGN PLAYER ───────────────────────────────────────────────────────────
@@ -665,17 +709,18 @@ function reducer(state, action) {
           ...prospect, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: actualSlot === "sub",
           scouted: true, contractYears: 2, salary: demand, teamHistory: historyUpdated,
         };
+        const signedState = applySignedEvent({
+          ...state,
+          players:  [...state.players, signed],
+          prospects: state.prospects.filter(p => p.id !== playerId),
+          challengerTeams: (state.challengerTeams || []).map(t => t.id === fromChallengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
+          challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
+            type: "CDL_SIGNING", playerId: signed.id, playerName: signed.name, fromTeamId: fromChallengerTeamId, toTeamId: userTeam,
+            note: `${tag} signed ${signed.name} from Challengers`,
+          }),
+        }, signed);
         return pushFeed(
-          addNotif({
-            ...state,
-            players:  [...state.players, signed],
-            prospects: state.prospects.filter(p => p.id !== playerId),
-            challengerTeams: (state.challengerTeams || []).map(t => t.id === fromChallengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
-            challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
-              type: "CDL_SIGNING", playerId: signed.id, playerName: signed.name, fromTeamId: fromChallengerTeamId, toTeamId: userTeam,
-              note: `${tag} signed ${signed.name} from Challengers`,
-            }),
-          }, `${signed.name} signed! ${actualSlot === "starter" ? "Player added to starting roster." : "Roster full: player added as substitute."}`),
+          addNotif(signedState, `${signed.name} signed! ${actualSlot === "starter" ? "Player added to starting roster." : "Roster full: player added as substitute."}`),
           [mkFeed("signing", `${tag} sign ${signed.name} (${actualSlot === "starter" ? "starter" : "bench"})`, state.season, phase)]
         );
       }
@@ -686,26 +731,27 @@ function reducer(state, action) {
 
       const demand = getSigningCost(target);
 
+      const signedFaState = applySignedEvent({
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          const existingHistory = p.teamHistory || [];
+          const historyUpdated  = existingHistory.some(e => e.season === state.season)
+            ? existingHistory
+            : [...existingHistory, { season: state.season, teamId: userTeam }];
+          return {
+            ...p, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: actualSlot === "sub",
+            scouted: true, contractYears: 2, salary: demand, teamHistory: historyUpdated,
+          };
+        }),
+        challengerTeams: (state.challengerTeams || []).map(t => t.id === target.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) } : t),
+        challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
+          type: target.status === "freeAgent" ? "FREE_AGENT_SIGNING" : "CDL_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.previousTeamId ?? target.challengerTeamId ?? null, toTeamId: userTeam,
+          note: target.status === "freeAgent" ? `${tag} signed ${target.name} in free agency` : `${tag} signed ${target.name}`,
+        }),
+      }, target);
       return pushFeed(
-        addNotif({
-          ...state,
-          players: state.players.map(p => {
-            if (p.id !== playerId) return p;
-            const existingHistory = p.teamHistory || [];
-            const historyUpdated  = existingHistory.some(e => e.season === state.season)
-              ? existingHistory
-              : [...existingHistory, { season: state.season, teamId: userTeam }];
-            return {
-              ...p, teamId: userTeam, challengerTeamId: null, status: "cdl", circuit: "cdl", isSub: actualSlot === "sub",
-              scouted: true, contractYears: 2, salary: demand, teamHistory: historyUpdated,
-            };
-          }),
-          challengerTeams: (state.challengerTeams || []).map(t => t.id === target.challengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== target.id) } : t),
-          challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
-            type: target.status === "freeAgent" ? "FREE_AGENT_SIGNING" : "CDL_SIGNING", playerId: target.id, playerName: target.name, fromTeamId: target.previousTeamId ?? target.challengerTeamId ?? null, toTeamId: userTeam,
-            note: target.status === "freeAgent" ? `${tag} signed ${target.name} in free agency` : `${tag} signed ${target.name}`,
-          }),
-        }, `${target.name} signed! ${actualSlot === "starter" ? "Player added to starting roster." : "Roster full: player added as substitute."}`),
+        addNotif(signedFaState, `${target.name} signed! ${actualSlot === "starter" ? "Player added to starting roster." : "Roster full: player added as substitute."}`),
         [mkFeed("signing", `${tag} sign ${target.name} (${actualSlot === "starter" ? "starter" : "bench"})`, state.season, phase)]
       );
     }
@@ -722,19 +768,25 @@ function reducer(state, action) {
       if (swapWithPlayerId) {
         const starter = starters.find(p => p.id === swapWithPlayerId);
         if (!starter) return addNotif(state, "Choose a valid starter to move to the bench.");
-        return addNotif({
+        let swapped = {
           ...state,
           players: state.players.map(p => {
             if (p.id === playerId) return { ...p, isSub: false };
             if (p.id === swapWithPlayerId) return { ...p, isSub: true };
             return p;
           }),
-        }, `${player.name} promoted. ${starter.name} moved to the bench.`);
+        };
+        swapped = applyPromoteEvent(swapped, player);
+        swapped = applyBenchEvent(swapped, starter);
+        swapped = evaluateAllPromises(swapped);
+        return addNotif(swapped, `${player.name} promoted. ${starter.name} moved to the bench.`);
       }
-      return addNotif({
+      let promoted = {
         ...state,
         players: state.players.map(p => p.id === playerId ? { ...p, isSub: false } : p),
-      }, `${player.name} promoted to the starting roster.`);
+      };
+      promoted = evaluateAllPromises(applyPromoteEvent(promoted, player));
+      return addNotif(promoted, `${player.name} promoted to the starting roster.`);
     }
 
     case "MOVE_PLAYER_TO_BENCH": {
@@ -743,7 +795,9 @@ function reducer(state, action) {
       if (!player || player.teamId !== state.userTeamId || player.isSub) return addNotif(state, "Choose a starter to move to the bench.");
       const nextPlayers = state.players.map(p => p.id === playerId ? { ...p, isSub: true } : p);
       const warning = getRosterIncompleteMessage({ ...state, players: nextPlayers });
-      return addNotif({ ...state, players: nextPlayers }, warning ? `${player.name} moved to the bench. ${warning}` : `${player.name} moved to the bench.`);
+      let benched = applyBenchEvent({ ...state, players: nextPlayers }, player);
+      benched = evaluateAllPromises(benched);
+      return addNotif(benched, warning ? `${player.name} moved to the bench. ${warning}` : `${player.name} moved to the bench.`);
     }
 
     case "SWAP_STARTER_SUB": {
@@ -752,14 +806,18 @@ function reducer(state, action) {
       const sub = state.players.find(p => p.id === subId);
       if (!starter || starter.teamId !== state.userTeamId || starter.isSub) return addNotif(state, "Choose a valid starter to swap out.");
       if (!sub || sub.teamId !== state.userTeamId || !sub.isSub) return addNotif(state, "Choose a valid bench player to swap in.");
-      return addNotif({
+      let swap = {
         ...state,
         players: state.players.map(p => {
           if (p.id === starterId) return { ...p, isSub: true };
           if (p.id === subId) return { ...p, isSub: false };
           return p;
         }),
-      }, `${sub.name} swapped into the starting roster. ${starter.name} moved to the bench.`);
+      };
+      swap = applyPromoteEvent(swap, sub);
+      swap = applyBenchEvent(swap, starter);
+      swap = evaluateAllPromises(swap);
+      return addNotif(swap, `${sub.name} swapped into the starting roster. ${starter.name} moved to the bench.`);
     }
 
     case "AUTO_PICK_BEST_STARTERS": {
@@ -789,13 +847,15 @@ function reducer(state, action) {
       const tag   = CDL_TEAMS.find(t => t.id === player.teamId)?.tag ?? player.teamId ?? "FA";
       const phase = state.schedule?.phase ?? "stage";
       const feedItem = mkFeed("release", `${tag} release ${player.name}`, state.season, phase);
+      // Squad dynamics: being released stings (only meaningful for the user's own team).
+      const stateM = player.teamId === state.userTeamId ? applyReleaseEvent(state, player) : state;
 
       if (player.isProspect) {
         const releaseToRetire = shouldRetireOnRelease(player);
         const released = { ...player, teamId: null, isSub: false, challengerTeamId: null };
         return pushFeed(
           addNotif({
-            ...state,
+            ...stateM,
             players:  state.players.filter(p => p.id !== action.playerId),
             prospects: releaseToRetire ? state.prospects : [...state.prospects, released],
             challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
@@ -813,7 +873,7 @@ function reducer(state, action) {
       const txType = releaseToChallengers ? "CDL_RELEASE_TO_CHALLENGERS" : "RETIREMENT";
       return pushFeed(
         addNotif({
-          ...state,
+          ...stateM,
           players: state.players.filter(p => p.id !== action.playerId),
           prospects: releaseToChallengers
             ? [...state.prospects, { ...player, teamId: null, isSub: false, challengerTeamId: null, contractYears: 0 }]
@@ -931,7 +991,11 @@ function reducer(state, action) {
       });
 
       if (action.decision === "reject") {
-        return addNotif(markOffer(state, "rejected"), `Rejected ${CDL_TEAMS.find(t => t.id === offer.fromCdlTeamId)?.name ?? "the"} offer for ${offer.playerName}.`);
+        // Squad dynamics: blocking a CDL buyout can unsettle a player who wanted the move.
+        const blockedPlayer = (state.players || []).concat(state.prospects || []).find(p => p.id === offer.playerId);
+        let rejected = markOffer(state, "rejected");
+        if (blockedPlayer) rejected = evaluateAllPromises(applyBlockedMoveEvent(rejected, blockedPlayer));
+        return addNotif(rejected, `Rejected ${CDL_TEAMS.find(t => t.id === offer.fromCdlTeamId)?.name ?? "the"} offer for ${offer.playerName}.`);
       }
       // accept
       const result = applyChallengerBuyout(state, offer);
@@ -1001,6 +1065,14 @@ function reducer(state, action) {
           return mkFeed("transfer_offer", `${trTeamTag(o.fromTeamId)} table a ${fmtFee(o.fee)} buyout offer for ${p?.name ?? "your player"}`, state.season, phase);
         });
         next = pushFeed(next, feedItems);
+        // Squad dynamics: concrete interest can give an ambitious player itchy feet.
+        const seenOffered = new Set();
+        for (const o of offers) {
+          if (seenOffered.has(o.playerId)) continue;
+          seenOffered.add(o.playerId);
+          const op = state.players.find(pl => pl.id === o.playerId);
+          if (op) next = applyTransferInterestEvent(next, op);
+        }
         const first = offers[0];
         const fp = state.players.find(pl => pl.id === first.playerId);
         next = addNotif(next, `${trTeamName0(first.fromTeamId)} have offered ${fmtFee(first.fee)} for ${fp?.name ?? "your player"}.`);
@@ -1097,17 +1169,20 @@ function reducer(state, action) {
       if (act === "nfs") {
         const withStatus = setNeg({ status: "Rejected", __h: { by: state.userTeamId, action: "reject-nfs" } });
         const tm2 = migrateTransferMarket(withStatus.transferMarket);
-        return addNotif(
-          { ...withStatus, transferMarket: { ...tm2, status: { ...tm2.status, [player.id]: { ...(tm2.status[player.id] || {}), transferStatus: "Not For Sale" } } } },
-          `${player.name} marked Not For Sale; offer rejected.`
-        );
+        let out = { ...withStatus, transferMarket: { ...tm2, status: { ...tm2.status, [player.id]: { ...(tm2.status[player.id] || {}), transferStatus: "Not For Sale" } } } };
+        // Squad dynamics: blocking an offer for your own player can unsettle him.
+        if (userIsSeller) out = evaluateAllPromises(applyBlockedMoveEvent(out, player));
+        return addNotif(out, `${player.name} marked Not For Sale; offer rejected.`);
       }
       // ---- REJECT ----
       if (act === "reject") {
         const cdKey = `${neg.fromTeamId}:${neg.playerId}`;
         const rejected = setNeg({ status: "Rejected", __h: { by: state.userTeamId, action: "reject" } });
         const tm2 = migrateTransferMarket(rejected.transferMarket);
-        return addNotif({ ...rejected, transferMarket: { ...tm2, cooldowns: { ...tm2.cooldowns, [cdKey]: getWindowKey(state) } } }, `Offer for ${player.name} rejected.`);
+        let out = { ...rejected, transferMarket: { ...tm2, cooldowns: { ...tm2.cooldowns, [cdKey]: getWindowKey(state) } } };
+        // Squad dynamics: turning down an offer for your own player can unsettle him.
+        if (userIsSeller) out = evaluateAllPromises(applyBlockedMoveEvent(out, player));
+        return addNotif(out, `Offer for ${player.name} rejected.`);
       }
       // ---- COUNTER ----
       if (act === "counter") {
@@ -1250,6 +1325,33 @@ function reducer(state, action) {
           confidence: 60,
         },
       };
+
+    // ── SQUAD DYNAMICS: talk to a player (apply a conversation choice) ─────────
+    case "TALK_TO_PLAYER": {
+      const player = (state.players || []).concat(state.prospects || []).find(p => p.id === action.playerId);
+      if (!player) return addNotif(state, "Player not found.");
+      const convo = getConversationFor(state, player);
+      const option = convo?.options.find(o => o.id === action.optionId);
+      if (!option) return addNotif(state, "That conversation option is no longer available.");
+      let next = applyConversationChoice(state, player, option);
+      next = evaluateAllPromises(next);
+      const msg = option.promise
+        ? `You spoke with ${player.name}. Promise logged: ${option.label}.`
+        : `You spoke with ${player.name}.`;
+      return addNotif(next, msg);
+    }
+
+    // ── SQUAD DYNAMICS: make a promise to a player directly ───────────────────
+    case "MAKE_PROMISE": {
+      const player = (state.players || []).concat(state.prospects || []).find(p => p.id === action.playerId);
+      if (!player) return addNotif(state, "Player not found.");
+      const before = (getMorale(state, action.playerId).promises || []).length;
+      const next = makePromise(state, action.playerId, action.promiseType);
+      const after = (getMorale(next, action.playerId).promises || []).length;
+      if (after <= before) return addNotif(state, `${player.name} already has that promise.`);
+      const def = PROMISE_TYPES[action.promiseType];
+      return addNotif(next, `Promise made to ${player.name}: ${def?.label ?? action.promiseType}.`);
+    }
 
     case "SHOW_ROSTER_INCOMPLETE":
       return blockIfUserRosterInvalid(state) ?? state;

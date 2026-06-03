@@ -21,6 +21,7 @@ import Standings         from "./components/Standings.jsx";
 import Schedule          from "./components/Schedule.jsx";
 import KDLeaders         from "./components/KDLeaders.jsx";
 import Roster            from "./components/Roster.jsx";
+import Dynamics          from "./components/Dynamics.jsx";
 import BoardObjectives   from "./components/BoardObjectives.jsx";
 import ChallengerBoard   from "./components/ChallengerBoard.jsx";
 import FreeAgency        from "./components/FreeAgency.jsx";
@@ -164,6 +165,7 @@ export default function App() {
           {screen === "schedule"  && <Schedule />}
           {screen === "kdleaders" && <KDLeaders />}
           {screen === "roster"    && <Roster setScreen={setScreen} />}
+          {screen === "dynamics"  && <Dynamics />}
           {screen === "board"     && (challengerMode ? <ChallengerBoard /> : <BoardObjectives />)}
           {screen === "fa"        && <FreeAgency />}
           {screen === "prospects" && <Prospects />}

@@ -945,3 +945,110 @@ UI/context only — no engine, gameplay, format, or diagnostic changes. Only com
 - User signings from Free Agency / Challengers now fill open starter slots by default and go to the bench when four starters already exist. Completed user transfer/buyout signings follow the same starter-open vs bench-full placement rule and notify where the player landed.
 - Matchday validation still blocks user sim/play attempts with fewer than four starters, but the warning now tells the user to promote or sign players before continuing.
 - Added `scripts/diagnoseUserRosterControls.mjs` to verify signing slot selection, promote/swap/auto-pick behavior, duplicate safety, starter-only match usage, incomplete-roster warnings, and transfer placement.
+
+## Update 2026-06-03 (Player Morale, Promises & Squad Dynamics)
+First-pass squad-dynamics layer that makes players react emotionally to roster
+decisions. Read-only over existing systems — does NOT change match simulation,
+roster AI, contracts, budgets, transfer fee logic, awards, brackets, points,
+ratings, logos or history. Effects are deliberately MODEST and never touch OVR.
+
+### Data model (`state.playerMorale`)
+Stored as a separate object keyed by player id (chosen over an inline
+`player.morale` field for save compatibility):
+```js
+playerMorale: {
+  [playerId]: {
+    level,            // 0–100 morale score
+    mood,             // band label derived from level
+    trust,            // 0–100 trust in management (driven by promises)
+    concerns: [{ key, label, season, stage }],
+    promises: [{ id, type, label, madeSeason, madeStage, deadlineSeason,
+                 deadlineStage, status, progress, target, importance }],
+    recentEvents: [{ label, delta, season, stage }],  // capped at 8
+    lastUpdatedSeason, lastUpdatedStage,
+  }
+}
+```
+Engine: `src/engine/moraleEngine.js` (pure, deterministic — no `Math.random`).
+
+### Morale bands
+90–100 Excellent · 75–89 Happy · 60–74 Content · 45–59 Concerned ·
+30–44 Frustrated · 15–29 Unhappy · 0–14 Wants Out. `moodForLevel` /
+`moraleColor` / `moraleTone` drive labels + colour coding.
+
+### Save compatibility / initialization
+`migratePlayerMorale(state)` runs on `NEW_GAME` and `LOAD_GAME`. Old saves with
+no morale hydrate to neutral-positive levels (bounded 55–85 → Content/Happy)
+seeded from starter/sub status, expiring contract and form — never mass unrest.
+Missing entries are created lazily; existing entries are preserved.
+
+### Personality traits (derived, not stored)
+`derivePersonality(player)` returns 1–3 tags (Ambitious, Loyal/Team First,
+Professional, Streaky, Big Match Player, Hard to Manage, Veteran Leader, Young
+Prospect, Ego, High Standards, Coachable) from the existing hidden traits
+(ego/workEthic/tiltResistance/leadership) + age/OVR/POT. No new stored field, so
+no save risk. Negative events scale by temperament (pros shrug off, hot-heads amplify).
+
+### Morale triggers (reducer hooks in `gameStore.jsx`)
+- After stage sims (`SIM_NEXT_MATCH/MATCHDAY/USER_MATCHDAY/STAGE`): `applyResultMorale`
+  nudges ±3 from form, once per stage (guarded by `lastResultKey`).
+- After a Major/Champs completes (`withMajorMoraleNudge`): placement-based nudge
+  (+8 win … −4 missed) + resolves due promises.
+- Benching (`MOVE_PLAYER_TO_BENCH`, swap-out): −10 + benched/wants-start concern.
+- Promotion (`PROMOTE_PLAYER_TO_STARTER`, swap-in): +9, clears bench concerns.
+- Release (`RELEASE_PLAYER`, user team): −14.
+- Re-sign / new contract (`RESIGN_PLAYER`): +10, fulfils contract promises.
+- Signing (`SIGN_PLAYER`): +6 "joined the club".
+- Transfer interest (`RUN_TRANSFER_WAVE`): ambitious players get itchy feet.
+- Blocked move (NFS/reject of an offer for your player; rejected CDL buyout for a
+  Challenger player): −8 + blocked-move concern, −trust.
+- Offseason (`ADVANCE_OFFSEASON`): re-hydrate morale for new rosters + evaluate promises.
+
+### Promises (`PROMISE_TYPES`)
+starter_role, more_maps, no_bench_unless_form, new_contract, contract_talks,
+consider_offers, can_leave_for_contender, roster_upgrade, build_around,
+development_focus. Statuses: active/kept/broken/expired/cancelled. Deadlines use a
+coarse `stageClock` (6 stages/season). `evaluatePromiseOutcome` decides kept/broken
+per type (e.g. starter_role breaks the moment the player is benched; new_contract
+keeps when `progress>=1` via a re-sign, breaks at deadline otherwise).
+`evaluateAllPromises` resolves due promises and applies morale/trust deltas scaled
+by importance.
+
+### Conversations
+`getConversationFor` generates a topic (playing time / CDL move / transfer /
+contract / ambition / development / general) from the player's top concern, each
+with 2–4 options. Options either make a promise or apply a direct morale nudge.
+`TALK_TO_PLAYER` / `MAKE_PROMISE` reducer actions apply the choice. Reusable
+`ConversationModal.jsx` is used by both the Dynamics page and Player Profile.
+
+### Modest controlled effects (where safe)
+- Transfer willingness: `moraleWillingnessDelta` adds a bounded −0.08…+0.22 to
+  the transfer engine's player-terms score (unhappy → keener to move; 0 when no
+  morale data, so AI players are unaffected).
+- `moraleContractMultiplier` (0.95–1.12) and `moraleChemistryDelta` (±3) helpers
+  exist for future use — contract-demand wiring left as TODO (getResignDemand has
+  no `state` param; signature change deferred to avoid risk).
+- Morale never changes OVR/ratings directly.
+
+### UI
+- New **Dynamics** sidebar tab → `Dynamics.jsx`: squad morale summary, dressing-
+  room note, player morale table (Player/Role/Status/Morale/Concern/Promise/
+  Contract/Transfer/Talk), and a promises panel (active + broken, deadline, risk).
+- **Roster** rows show a colour-coded morale flag for the user's own team.
+- **Player Profile** gains a "Morale & Dynamics" section (mood, trust,
+  personality, last event, concern/promise chips, Talk button) for user players.
+- Works in both CDL and Challenger manager mode.
+
+### Diagnostics / testing
+- Added `scripts/diagnosePlayerMorale.mjs` — 29 checks (old-save hydration,
+  0–100 bounds, no mass unrest, bench/promote, promise create/keep/break, blocked
+  move, willingness influence, conversations, result-morale bounds, summary). All pass.
+- `npm run build` ✓ · `diagnoseFullSeasonFlow` PASS · `stressRosterIntegrity` 24/24 ✓ ·
+  `diagnoseTransferMarket` 49/49 ✓ · `diagnoseChallengerManagerMode` 33/33 ✓.
+
+### Known limitations
+- Result/Major morale and the willingness effect only run through the reducer, so
+  the headless full-season harness exercises hydration but not live nudges.
+- Contract-demand morale effect is intentionally deferred (helper provided).
+- Teammate "ripple" effects (e.g. a release unsettling the room) are not modelled yet.
+- Morale entries persist for players who leave the user team (harmless; keyed by id).

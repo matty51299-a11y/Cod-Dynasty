@@ -9903,3 +9903,103 @@ body { background: #111317; }
 .roster-action-stack .btn-danger-sm {
   white-space: nowrap;
 }
+
+/* ── Squad Dynamics / Player Morale ─────────────────────────────────────────── */
+.dynamics-page { padding: 4px 2px; }
+
+.morale-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: rgba(148,163,184,0.10);
+  white-space: nowrap;
+}
+.morale-badge b { font-size: 12px; }
+
+.ui-mini-flag.morale-flag {
+  background: rgba(148,163,184,0.12);
+  border: 1px solid currentColor;
+}
+
+.trait-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin: 1px 3px 1px 0;
+  border-radius: 10px;
+  font-size: .66rem;
+  font-weight: 700;
+  background: rgba(96,165,250,0.14);
+  border: 1px solid rgba(96,165,250,0.30);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.trait-chip.promise-chip { background: rgba(52,211,153,0.14); border-color: rgba(52,211,153,0.34); color: #6ee7b7; }
+.trait-chip.concern-chip { background: rgba(251,146,60,0.14); border-color: rgba(251,146,60,0.34); color: #fdba74; }
+
+.dynamics-traits { margin-top: 2px; line-height: 1.4; }
+.dynamics-concern { color: var(--text-dim); font-size: .8rem; }
+.dynamics-table td { vertical-align: middle; }
+.dynamics-promise-help { font-size: .72rem; margin-top: 8px; }
+
+.dressing-room-note {
+  font-size: .92rem;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.pm-morale-section .pm-morale-chips { margin-top: 6px; }
+
+/* ── Conversation modal ─────────────────────────────────────────────────────── */
+.convo-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8,12,22,0.66);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+}
+.convo-modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  width: min(520px, 100%);
+  padding: 18px 20px 20px;
+}
+.convo-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.convo-title { font-size: 1.1rem; font-weight: 800; color: var(--text-head); }
+.convo-sub { font-size: .82rem; color: var(--text-dim); margin-top: 2px; }
+.convo-dot { margin: 0 6px; opacity: .5; }
+.convo-intro {
+  font-style: italic;
+  color: var(--text);
+  background: var(--bg3);
+  border-left: 3px solid var(--accent);
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin: 14px 0;
+  line-height: 1.45;
+}
+.convo-options { display: flex; flex-direction: column; gap: 8px; }
+.convo-option {
+  text-align: left;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.convo-option:hover { border-color: var(--accent); background: rgba(96,165,250,0.08); }
+.convo-option-label { display: block; font-weight: 700; color: var(--text-head); }
+.convo-option-hint { display: block; font-size: .76rem; color: var(--text-dim); margin-top: 2px; }

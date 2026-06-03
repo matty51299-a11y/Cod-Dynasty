@@ -11,6 +11,7 @@ import { getTeamRosterStatus, getChallengerRosterStatus } from "../utils/rosterV
 import { isChallengerMode, getChallengerRosterPlayers, getUserChallengerTeam } from "../utils/userTeam.js";
 import { sortByOverallDesc } from "../utils/rosterSlots.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
+import { getMorale, moodForLevel, moraleColor } from "../engine/moraleEngine.js";
 import { EmptyState, PageHeader, Pill, SectionCard, StatCard } from "./ui.jsx";
 
 const RATING_KEYS = [
@@ -125,6 +126,10 @@ export default function Roster({ setScreen }) {
             {p.overall >= 85 && <span className="ui-mini-flag star">★</span>}
             {(p.contractYears ?? 2) <= 1 && !userChallengerTab && <span className="ui-mini-flag warn">EXP</span>}
             {(p.form ?? 50) < 45 && <span className="ui-mini-flag danger">FORM</span>}
+            {isUserTab && (() => {
+              const m = getMorale(state, p.id);
+              return <span className="ui-mini-flag morale-flag" style={{ color: moraleColor(m.level), borderColor: moraleColor(m.level) }} title={`Morale ${m.level}`}>{moodForLevel(m.level)}</span>;
+            })()}
             {p.isSub ? <span className="sub-label">SUB</span> : <span className="sub-label">STARTER</span>}
           </td>
           <td>{p.age}</td>

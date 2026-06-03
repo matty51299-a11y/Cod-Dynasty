@@ -17,6 +17,7 @@ import { getTeamCap, getSigningCost, getTeamBudgetTier } from "./rosterAI.js";
 import { calcTeamOvr } from "./teamOvr.js";
 import { isCdlTeamId, isInactivePlayer } from "../utils/playerIdentity.js";
 import { getActiveStarters } from "../utils/rosterValidation.js";
+import { moraleWillingnessDelta } from "./moraleEngine.js";
 
 export const TRANSFER_VERSION = 1;
 
@@ -412,6 +413,9 @@ export function evaluatePlayerTerms(player, buyerTeamId, sellerTeamId, state, op
   if (status === "Recently Signed") w -= 0.35;
   if ((player.contractYears ?? 1) <= 1) w += 0.06;
   if (ovr >= 86 && deltaAttr < -8 && salaryBoost < 0.75) w -= 0.22;
+  // Squad dynamics: morale nudges willingness modestly (unhappy → keener to move,
+  // very happy/settled → slightly more reluctant). Bounded, 0 when no morale data.
+  w += moraleWillingnessDelta(state, player);
 
   w = clamp01(w);
   let reason = "Player is open to the project if the club agreement is in place.";
