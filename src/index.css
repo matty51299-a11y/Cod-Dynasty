@@ -10135,20 +10135,31 @@ body { background: #111317; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   FM-SKIN GLASS REVAMP  (atmospheric scene + translucent glass panel system)
-   Display-only. Overrides earlier flat/grey passes by source order.
-   Goal: themed management-game skin — real background atmosphere, glass panels
-   with backdrop blur, designed headers, module accents, premium shell/buttons.
+   FM-SKIN GLASS REVAMP v3  (atmospheric scene + translucent overlay layers)
+   Display-only. Goal: real background scene visible THROUGH glass panels;
+   dark-glass shell with team accent (not team-colour wallpaper); softer, less
+   boxed panels; FM-style data overlays. Overrides earlier passes by source order.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. Atmospheric background scene (fixed, behind all content) ──────────── */
+/* ── Glass / overlay design tokens ────────────────────────────────────────── */
 .app {
-  background: #06080f !important;
+  --glass-bg:        rgba(11,17,34,0.55);
+  --glass-bg-strong: rgba(13,19,38,0.66);
+  --glass-bg-quiet:  rgba(10,15,30,0.42);
+  --glass-border:    rgba(255,255,255,0.07);
+  --glass-border-hi: rgba(255,255,255,0.12);
+  --glass-blur:      blur(15px) saturate(1.25);
+  --separator:       rgba(255,255,255,0.06);
+  --overlay-surface: rgba(8,13,28,0.6);
+  --team-glow:       color-mix(in srgb, var(--user-accent, #5b9dff) 30%, transparent);
+  --shell-glass:     rgba(11,16,32,0.66);
+  background: #05070f !important;
   position: relative;
   z-index: 0;
   isolation: isolate;
 }
-/* colour / lighting scene */
+
+/* ── 1. Atmospheric background scene (fixed, visible behind everything) ────── */
 .app::before {
   content: "";
   position: fixed;
@@ -10156,14 +10167,18 @@ body { background: #111317; }
   z-index: -2;
   pointer-events: none;
   background:
-    radial-gradient(1200px 820px at 8% -10%, color-mix(in srgb, var(--user-accent, #5b9dff) 42%, transparent), transparent 52%),
-    radial-gradient(1100px 820px at 104% 0%, rgba(140,80,255,0.30), transparent 52%),
-    radial-gradient(1000px 760px at 50% 116%, rgba(24,210,190,0.20), transparent 56%),
-    radial-gradient(900px 700px at 92% 96%, rgba(60,120,255,0.16), transparent 60%),
-    linear-gradient(180deg, #0a1024 0%, #0a0e1e 42%, #07091400 100%),
-    linear-gradient(180deg, #090c18 0%, #06080f 100%);
+    /* stadium spotlights */
+    radial-gradient(1200px 760px at 12% -8%, color-mix(in srgb, var(--user-accent, #5b9dff) 46%, transparent), transparent 50%),
+    radial-gradient(1100px 800px at 100% -6%, rgba(150,86,255,0.32), transparent 52%),
+    radial-gradient(1000px 820px at 50% 122%, rgba(24,214,196,0.20), transparent 56%),
+    radial-gradient(760px 560px at 86% 90%, rgba(60,120,255,0.16), transparent 60%),
+    /* diagonal light beams */
+    linear-gradient(118deg, transparent 28%, rgba(130,165,255,0.07) 40%, transparent 50%),
+    linear-gradient(118deg, transparent 56%, rgba(180,120,255,0.06) 67%, transparent 76%),
+    /* deep base + arena floor */
+    linear-gradient(180deg, #0b1330 0%, #090f24 46%, #070a17 100%);
 }
-/* texture (noise) + faint pitch grid + vignette */
+/* texture + arena grid + vignette overlay */
 .app::after {
   content: "";
   position: fixed;
@@ -10171,22 +10186,20 @@ body { background: #111317; }
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(140% 120% at 50% 38%, transparent 58%, rgba(0,0,0,0.34) 100%),
-    repeating-linear-gradient(0deg, rgba(150,180,255,0.022) 0 1px, transparent 1px 64px),
-    repeating-linear-gradient(90deg, rgba(150,180,255,0.022) 0 1px, transparent 1px 64px),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
-  background-size: auto, auto, auto, 180px 180px;
-  opacity: 0.5;
+    radial-gradient(150% 130% at 50% 30%, transparent 52%, rgba(0,0,0,0.42) 100%),
+    linear-gradient(180deg, transparent 55%, rgba(80,120,220,0.05) 100%),
+    repeating-linear-gradient(0deg, rgba(150,180,255,0.02) 0 1px, transparent 1px 70px),
+    repeating-linear-gradient(90deg, rgba(150,180,255,0.02) 0 1px, transparent 1px 70px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  background-size: auto, auto, auto, auto, 200px 200px;
+  opacity: 0.55;
   mix-blend-mode: soft-light;
 }
 
-/* content area is transparent so the scene shows through glass panels */
-.main-content {
-  background: transparent !important;
-}
+.main-content { background: transparent !important; }
 .app-body { background: transparent; }
 
-/* ── 2. Glass panel system (translucent + backdrop blur + depth) ──────────── */
+/* ── 2. Translucent panel overlays (softer, less boxed) ───────────────────── */
 .fm-panel,
 .card,
 .ui-section-card,
@@ -10201,74 +10214,68 @@ body { background: #111317; }
   --mod: var(--user-accent, #5b9dff);
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(130% 92% at 0% 0%, color-mix(in srgb, var(--mod) 16%, transparent), transparent 56%),
-    linear-gradient(180deg, rgba(32,43,72,0.60), rgba(14,20,38,0.66)) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.28);
-  backdrop-filter: blur(16px) saturate(1.28);
-  border: 1px solid rgba(155,180,240,0.15) !important;
-  border-radius: 13px !important;
+  background: var(--glass-bg) !important;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 12px !important;
   box-shadow:
-    0 20px 44px rgba(2,6,18,0.55),
-    inset 0 1px 0 rgba(255,255,255,0.08),
-    inset 0 0 0 1px rgba(255,255,255,0.015) !important;
+    0 16px 40px rgba(2,5,16,0.42),
+    inset 0 1px 0 rgba(255,255,255,0.05) !important;
 }
-/* top module-accent line */
+/* NO coloured top bar on panels (removed) — keep them quiet/layered */
 .fm-panel::before,
-.db-results-card::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  z-index: 3;
-  background: linear-gradient(90deg, var(--mod), transparent 74%);
-  opacity: 0.95;
-  pointer-events: none;
+.db-results-card::before { content: none !important; }
+
+/* secondary / quieter panels — even more transparent, recede into the scene */
+.fm-news-panel,
+.fm-dev-panel,
+.fm-fixtures-panel,
+.fm-teamstats-panel,
+.fm-needs-panel,
+.fm-results-panel {
+  background: var(--glass-bg-quiet) !important;
+  box-shadow: 0 10px 26px rgba(2,5,16,0.3), inset 0 1px 0 rgba(255,255,255,0.035) !important;
 }
+
 .fm-panel:hover,
 .card:hover,
 .ui-section-card:hover,
 .oh-card:hover {
-  border-color: color-mix(in srgb, var(--mod) 45%, rgba(155,180,240,0.2)) !important;
+  border-color: var(--glass-border-hi) !important;
   box-shadow:
-    0 26px 54px rgba(2,6,18,0.6),
-    0 0 30px color-mix(in srgb, var(--mod) 22%, transparent),
-    inset 0 1px 0 rgba(255,255,255,0.1) !important;
+    0 22px 48px rgba(2,5,16,0.5),
+    0 0 24px color-mix(in srgb, var(--mod) 14%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.07) !important;
 }
 
-/* ── 3. Designed panel headers (header band + chip + accent underline) ────── */
+/* ── 3. Quiet, designed headers (FM label feel — chip accent only) ────────── */
 .fm-panel-title,
 .ui-section-head {
   position: relative;
-  background: linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.012)) !important;
-  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
-}
-.fm-panel-title::after {
-  content: "";
-  position: absolute;
-  left: 0; bottom: -1px;
-  height: 2px; width: 100%;
-  background: linear-gradient(90deg, var(--mod), transparent 58%);
-  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0)) !important;
+  border-bottom: 1px solid var(--separator) !important;
 }
 .fm-panel-title h3 {
-  color: #eaf1ff !important;
-  letter-spacing: 0.07em !important;
+  color: #e3ebff !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
   display: inline-flex;
   align-items: center;
+  font-weight: 850 !important;
 }
 .fm-panel-title h3::before {
   content: "";
-  width: 7px; height: 7px;
-  margin-right: 7px;
+  width: 6px; height: 14px;
+  margin-right: 8px;
   border-radius: 2px;
   background: var(--mod);
-  box-shadow: 0 0 9px var(--mod);
+  box-shadow: 0 0 10px var(--mod);
 }
 
-/* ── 4. Module accent identities ──────────────────────────────────────────── */
+/* module accent (used only for the small header chip + tile edges, not full bars) */
 .fm-next-panel    { --mod: var(--user-accent, #5b9dff); }
-.fm-fixtures-panel{ --mod: #60a5fa; }
+.fm-fixtures-panel{ --mod: #5b9dff; }
 .fm-league-table  { --mod: var(--user-accent, #5b9dff); }
 .fm-board-widget  { --mod: #fbbf3c; }
 .fm-dynamics-widget { --mod: #8b7bff; }
@@ -10280,7 +10287,7 @@ body { background: #111317; }
 .fm-needs-panel   { --mod: #f472b6; }
 .fm-results-panel { --mod: #f59e0b; }
 
-/* ── 5. Hero / feature panels (Level A) ───────────────────────────────────── */
+/* ── 4. Hero / feature overlay (translucent, team glow — not a solid block) ── */
 .fm-club-strip,
 .db-club-banner,
 .cm-hero,
@@ -10289,46 +10296,47 @@ body { background: #111317; }
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(150% 210% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 46%, transparent), transparent 50%),
-    radial-gradient(130% 170% at 100% 0%, rgba(150,90,255,0.26), transparent 58%),
-    radial-gradient(120% 160% at 100% 120%, rgba(34,212,190,0.18), transparent 60%),
-    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 30%, rgba(15,21,40,0.74)) 0%, rgba(13,19,37,0.78) 58%, rgba(11,16,32,0.8) 100%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.45);
-  backdrop-filter: blur(20px) saturate(1.45);
-  border: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 34%, rgba(155,180,240,0.18)) !important;
-  border-left: 4px solid var(--user-accent, #5b9dff) !important;
+    radial-gradient(150% 220% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 30%, transparent), transparent 52%),
+    radial-gradient(130% 180% at 100% 0%, rgba(150,90,255,0.16), transparent 60%),
+    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 16%, var(--glass-bg-strong)) 0%, var(--glass-bg-strong) 62%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  backdrop-filter: blur(18px) saturate(1.35);
+  border: 1px solid var(--glass-border) !important;
+  border-left: 3px solid color-mix(in srgb, var(--user-accent, #5b9dff) 85%, transparent) !important;
   border-radius: 14px !important;
   box-shadow:
-    0 26px 58px rgba(2,6,18,0.62),
-    0 0 46px color-mix(in srgb, var(--user-accent, #5b9dff) 24%, transparent),
-    inset 0 1px 0 rgba(255,255,255,0.12) !important;
+    0 22px 50px rgba(2,5,16,0.5),
+    0 0 44px color-mix(in srgb, var(--user-accent, #5b9dff) 16%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.09) !important;
 }
 .fm-club-strip::after,
 .ui-page-header::after {
   content: "";
   position: absolute;
-  right: -40px; top: -60px;
-  width: 240px; height: 240px;
+  right: -50px; top: -70px;
+  width: 260px; height: 260px;
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--user-accent, #5b9dff) 30%, transparent), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--user-accent, #5b9dff) 26%, transparent), transparent 70%);
   pointer-events: none;
 }
 .fm-club-main h2 {
-  font-size: 20px !important;
+  font-size: 21px !important;
   letter-spacing: 0.2px;
-  text-shadow: 0 2px 16px rgba(0,0,0,0.5);
+  text-shadow: 0 2px 16px rgba(0,0,0,0.55);
 }
 .fm-club-logo,
 .ui-page-header img { filter: drop-shadow(0 6px 16px rgba(0,0,0,0.55)); }
 
-/* ── 6. Stat tiles (premium glass + colour washes) ────────────────────────── */
+/* ── 5. Stat tiles as glass chips ─────────────────────────────────────────── */
 .fm-mini-metric {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)) !important;
-  border: 1px solid rgba(160,185,240,0.14) !important;
+  background: rgba(255,255,255,0.05) !important;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08) !important;
   border-radius: 9px !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px rgba(2,6,18,0.25);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
 }
 .fm-mini-metric::before {
   content: "";
@@ -10337,33 +10345,34 @@ body { background: #111317; }
   width: 3px;
   background: var(--mod, var(--user-accent, #5b9dff));
   box-shadow: 0 0 10px var(--mod, var(--user-accent, #5b9dff));
+  opacity: 0.85;
 }
-.fm-mini-metric strong { color: #fff !important; text-shadow: 0 1px 8px rgba(0,0,0,0.35); }
-.fm-strip-stats > .fm-mini-metric:nth-child(1) { --mod: #5b9dff; background: linear-gradient(180deg, var(--tile-blue), rgba(255,255,255,0.015)) !important; }
-.fm-strip-stats > .fm-mini-metric:nth-child(2) { --mod: #9a6cff; background: linear-gradient(180deg, var(--tile-purple), rgba(255,255,255,0.015)) !important; }
-.fm-strip-stats > .fm-mini-metric:nth-child(3) { --mod: #22d4be; background: linear-gradient(180deg, var(--tile-teal), rgba(255,255,255,0.015)) !important; }
-.fm-strip-stats > .fm-mini-metric:nth-child(4) { --mod: #2ee6a0; background: linear-gradient(180deg, var(--tile-green), rgba(255,255,255,0.015)) !important; }
-.fm-dynamics-grid > .fm-mini-metric:nth-child(1) { --mod: #8b7bff; background: linear-gradient(180deg, var(--tile-purple), rgba(255,255,255,0.015)) !important; }
-.fm-dynamics-grid > .fm-mini-metric:nth-child(2) { --mod: #fbbf3c; background: linear-gradient(180deg, var(--tile-amber), rgba(255,255,255,0.015)) !important; }
-.fm-dynamics-grid > .fm-mini-metric:nth-child(3) { --mod: #f472b6; background: linear-gradient(180deg, var(--tile-red), rgba(255,255,255,0.015)) !important; }
-.fm-dynamics-grid > .fm-mini-metric:nth-child(4) { --mod: #fb6f84; background: linear-gradient(180deg, var(--tile-red), rgba(255,255,255,0.015)) !important; }
-.fm-finance-bars > .fm-mini-metric:nth-child(1) { --mod: #2dd4bf; background: linear-gradient(180deg, var(--tile-teal), rgba(255,255,255,0.015)) !important; }
-.fm-finance-bars > .fm-mini-metric:nth-child(2) { --mod: #5b9dff; background: linear-gradient(180deg, var(--tile-blue), rgba(255,255,255,0.015)) !important; }
-.fm-finance-bars > .fm-mini-metric:nth-child(3) { --mod: #2ee6a0; background: linear-gradient(180deg, var(--tile-green), rgba(255,255,255,0.015)) !important; }
-.fm-finance-bars > .fm-mini-metric:nth-child(4) { --mod: #fbbf3c; background: linear-gradient(180deg, var(--tile-amber), rgba(255,255,255,0.015)) !important; }
+.fm-mini-metric strong { color: #fff !important; text-shadow: 0 1px 8px rgba(0,0,0,0.4); }
+.fm-strip-stats > .fm-mini-metric:nth-child(1) { --mod: #5b9dff; }
+.fm-strip-stats > .fm-mini-metric:nth-child(2) { --mod: #9a6cff; }
+.fm-strip-stats > .fm-mini-metric:nth-child(3) { --mod: #22d4be; }
+.fm-strip-stats > .fm-mini-metric:nth-child(4) { --mod: #2ee6a0; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(1) { --mod: #8b7bff; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(2) { --mod: #fbbf3c; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(3) { --mod: #f472b6; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(4) { --mod: #fb6f84; }
+.fm-finance-bars > .fm-mini-metric:nth-child(1) { --mod: #2dd4bf; }
+.fm-finance-bars > .fm-mini-metric:nth-child(2) { --mod: #5b9dff; }
+.fm-finance-bars > .fm-mini-metric:nth-child(3) { --mod: #2ee6a0; }
+.fm-finance-bars > .fm-mini-metric:nth-child(4) { --mod: #fbbf3c; }
 
-.fm-cap-bar { background: rgba(0,0,0,0.3) !important; border-radius: 4px !important; box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
+.fm-cap-bar { background: rgba(0,0,0,0.32) !important; border-radius: 4px !important; box-shadow: inset 0 1px 3px rgba(0,0,0,0.45); }
 .fm-cap-bar span { background: linear-gradient(90deg, #2dd4bf, #2ee6a0) !important; box-shadow: 0 0 12px rgba(46,230,160,0.5); }
 
 .stat-box, .db-stat-chip, .bracket-match {
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015)) !important;
-  border: 1px solid rgba(160,185,240,0.14) !important;
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
   border-radius: 10px !important;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
-/* ── 7. Buttons (premium gradient + glow) ─────────────────────────────────── */
+/* ── 6. Buttons (vibrant CTAs kept; secondaries are quiet glass) ──────────── */
 .btn-cta, .btn-primary, .btn-primary-sm, .nmo-play-btn, .mto-play-match-btn,
 .filter-btn.active, .ui-action-primary {
   background:
@@ -10374,8 +10383,8 @@ body { background: #111317; }
   font-weight: 800 !important;
   text-shadow: 0 1px 0 rgba(255,255,255,0.18);
   box-shadow:
-    0 10px 22px rgba(2,6,18,0.4),
-    0 0 20px color-mix(in srgb, var(--user-accent, #5b9dff) 38%, transparent),
+    0 10px 22px rgba(2,5,16,0.4),
+    0 0 20px color-mix(in srgb, var(--user-accent, #5b9dff) 36%, transparent),
     inset 0 1px 0 rgba(255,255,255,0.4) !important;
   transition: transform 0.12s, box-shadow 0.18s, filter 0.18s;
 }
@@ -10383,8 +10392,8 @@ body { background: #111317; }
   filter: brightness(1.09) saturate(1.08);
   transform: translateY(-1px);
   box-shadow:
-    0 14px 30px rgba(2,6,18,0.5),
-    0 0 32px color-mix(in srgb, var(--user-accent, #5b9dff) 56%, transparent),
+    0 14px 30px rgba(2,5,16,0.5),
+    0 0 32px color-mix(in srgb, var(--user-accent, #5b9dff) 54%, transparent),
     inset 0 1px 0 rgba(255,255,255,0.45) !important;
 }
 .btn-cta:active, .btn-primary:active { transform: translateY(0); filter: brightness(0.96); }
@@ -10392,16 +10401,14 @@ body { background: #111317; }
 
 .btn-accent {
   background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 46%), linear-gradient(180deg, #34d399, #11a877) !important;
-  border: 1px solid #4ff0b6 !important;
-  color: #05281c !important;
-  font-weight: 800 !important;
-  box-shadow: 0 10px 22px rgba(2,6,18,0.36), 0 0 20px rgba(46,230,160,0.4), inset 0 1px 0 rgba(255,255,255,0.4) !important;
+  border: 1px solid #4ff0b6 !important; color: #05281c !important; font-weight: 800 !important;
+  box-shadow: 0 10px 22px rgba(2,5,16,0.36), 0 0 20px rgba(46,230,160,0.38), inset 0 1px 0 rgba(255,255,255,0.4) !important;
 }
 .btn-accent:hover { filter: brightness(1.08); transform: translateY(-1px); }
 
 .btn-secondary, .btn-secondary-sm, .ui-action-secondary, .nmc-btn {
-  background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03)) !important;
-  border: 1px solid rgba(160,185,240,0.24) !important;
+  background: rgba(255,255,255,0.07) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
   color: var(--text) !important;
   font-weight: 700 !important;
   -webkit-backdrop-filter: blur(8px);
@@ -10409,143 +10416,172 @@ body { background: #111317; }
   transition: border-color 0.15s, background 0.15s, transform 0.12s;
 }
 .btn-secondary:hover, .btn-secondary-sm:hover, .nmc-btn:hover {
-  background: rgba(255,255,255,0.18) !important;
-  border-color: color-mix(in srgb, var(--user-accent, #5b9dff) 50%, rgba(160,185,240,0.3)) !important;
+  background: rgba(255,255,255,0.12) !important;
+  border-color: color-mix(in srgb, var(--user-accent, #5b9dff) 45%, rgba(255,255,255,0.2)) !important;
   transform: translateY(-1px);
 }
 
-/* ── 8. Tables (modern sports-data look) ──────────────────────────────────── */
+/* ── 7. Tables as transparent FM data overlays ────────────────────────────── */
 .standings-table th, .roster-table th, .stats-table th, .kd-history-table th,
 .oh-market-table th, .dev-table th, .kd-table th, .staff-table th {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--user-accent, #5b9dff) 18%, rgba(255,255,255,0.02)), rgba(255,255,255,0.015)) !important;
-  color: #cdd8f4 !important;
+  background: rgba(255,255,255,0.045) !important;
+  color: #c4cfec !important;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  border-bottom: 1px solid rgba(160,185,240,0.2) !important;
+  border-bottom: 1px solid var(--separator) !important;
 }
 .standings-table td, .roster-table td, .stats-table td, .kd-history-table td,
 .oh-market-table td, .dev-table td {
-  background: rgba(255,255,255,0.02) !important;
-  border-color: rgba(160,185,240,0.1) !important;
+  background: transparent !important;
+  border-color: var(--separator) !important;
 }
 .standings-table tbody tr:nth-child(even) td,
-.roster-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.038) !important; }
+.roster-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.025) !important; }
 .standings-table tbody tr:hover td, .roster-table tbody tr:hover td,
 .kd-table tbody tr:hover td, .staff-table tbody tr:hover td,
 .dev-table tbody tr:hover td, .oh-market-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--user-accent, #5b9dff) 16%, transparent) !important;
+  background: color-mix(in srgb, var(--user-accent, #5b9dff) 14%, transparent) !important;
 }
-.fm-table-row { border-bottom: 1px solid rgba(150,180,255,0.05) !important; }
-.fm-table-row:nth-child(even) { background: rgba(255,255,255,0.024) !important; }
-.fm-table-row.is-top { background: linear-gradient(90deg, rgba(46,230,160,0.22), transparent 74%) !important; }
-.fm-table-row.is-bottom { background: linear-gradient(90deg, rgba(251,111,132,0.2), transparent 74%) !important; }
+.fm-table-row { border-bottom: 1px solid var(--separator) !important; }
+.fm-table-row:nth-child(even) { background: rgba(255,255,255,0.018) !important; }
+.fm-table-row.is-top { background: linear-gradient(90deg, rgba(46,230,160,0.16), transparent 76%) !important; }
+.fm-table-row.is-bottom { background: linear-gradient(90deg, rgba(251,111,132,0.15), transparent 76%) !important; }
 .fm-table-row.is-you {
-  background: color-mix(in srgb, var(--user-accent, #5b9dff) 18%, transparent) !important;
-  outline: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--user-accent, #5b9dff) 16%, transparent) !important;
   box-shadow: inset 3px 0 0 var(--user-accent, #5b9dff);
 }
 .fm-dot, .dot { box-shadow: 0 0 8px currentColor, 0 0 0 1px rgba(0,0,0,0.3); }
 
-/* ── 9. Premium shell — translucent team chrome over the scene ─────────────── */
+/* ── 8. Dark-glass shell with team ACCENT (not team-colour wallpaper) ─────── */
 .topbar {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0) 58%),
-    linear-gradient(90deg, color-mix(in srgb, var(--shell-topbar-bg) 82%, transparent) 0%, color-mix(in srgb, var(--shell-topbar-bg) 80%, transparent) 50%, color-mix(in srgb, var(--shell-topbar-secondary) 80%, transparent) 100%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
-  border-bottom: 1px solid rgba(255,255,255,0.14) !important;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1) !important;
+  background: linear-gradient(180deg, var(--shell-glass), rgba(8,12,26,0.6)) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  backdrop-filter: blur(22px) saturate(1.3);
+  border-bottom: 1px solid var(--glass-border) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.42) !important;
+  color: var(--text) !important;
 }
+/* thin team-accent glow line under the topbar */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--user-accent, #5b9dff), transparent 60%);
+  box-shadow: 0 0 16px var(--team-glow);
+  pointer-events: none;
+}
+.app-title { color: #eef3ff !important; text-shadow: 0 1px 10px rgba(0,0,0,0.5); }
 .season-badge {
-  background: rgba(255,255,255,0.16) !important;
-  border: 1px solid rgba(255,255,255,0.28) !important;
-  color: #fff !important;
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.16) !important;
+  color: #dfe7fb !important;
   border-radius: 7px !important;
   font-weight: 800;
 }
 .user-team-badge {
   border-radius: 8px !important;
-  background: linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.1)) !important;
-  border: 1px solid rgba(255,255,255,0.4) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 6px 14px rgba(0,0,0,0.25) !important;
+  background: color-mix(in srgb, var(--user-accent, #5b9dff) 22%, rgba(255,255,255,0.06)) !important;
+  border: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 45%, rgba(255,255,255,0.18)) !important;
+  color: #fff !important;
+  box-shadow: 0 0 18px var(--team-glow), inset 0 1px 0 rgba(255,255,255,0.16) !important;
+}
+.btn-new-game {
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  color: #cdd6ee !important;
 }
 
 .sidebar {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 18%, rgba(0,0,0,0.2) 100%),
-    radial-gradient(130% 50% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 32%, transparent), transparent 58%),
-    linear-gradient(165deg, color-mix(in srgb, var(--shell-sidebar-bg) 84%, transparent) 0%, color-mix(in srgb, var(--shell-sidebar-secondary) 82%, transparent) 100%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(1.3);
-  backdrop-filter: blur(22px) saturate(1.3);
-  border-right: 1px solid rgba(255,255,255,0.14) !important;
-  box-shadow: 8px 0 34px rgba(0,0,0,0.5) !important;
+  position: relative;
+  background: linear-gradient(180deg, var(--shell-glass) 0%, rgba(7,11,24,0.62) 100%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.25);
+  backdrop-filter: blur(24px) saturate(1.25);
+  border-right: 1px solid var(--glass-border) !important;
+  box-shadow: 6px 0 34px rgba(0,0,0,0.45) !important;
+  color: var(--text) !important;
+}
+/* team-accent glow strip down the sidebar edge */
+.sidebar::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--user-accent, #5b9dff), color-mix(in srgb, var(--user-accent, #5b9dff) 30%, transparent) 60%, transparent);
+  box-shadow: 0 0 22px var(--team-glow);
+  pointer-events: none;
 }
 .sb-team-block {
   background:
-    linear-gradient(135deg, rgba(255,255,255,0.24), rgba(255,255,255,0.05)),
-    linear-gradient(90deg, color-mix(in srgb, var(--shell-topbar-bg) 70%, transparent), color-mix(in srgb, var(--shell-sidebar-bg) 60%, transparent)) !important;
-  border-bottom: 1px solid rgba(255,255,255,0.2) !important;
-  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.2);
+    radial-gradient(120% 100% at 0% 0%, var(--team-glow), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0)) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  box-shadow: none !important;
 }
+.sb-team-block::before { background: var(--user-accent, #5b9dff) !important; box-shadow: 0 0 14px var(--team-glow) !important; }
+.sb-team-tag { color: #fff !important; text-shadow: 0 1px 8px rgba(0,0,0,0.4); }
+.sb-season { color: rgba(231,238,255,0.7) !important; }
+/* inactive nav items = quiet (transparent), not coloured blocks */
 .sb-item {
   border-radius: 9px !important;
-  background: rgba(255,255,255,0.04) !important;
+  background: transparent !important;
   border: 1px solid transparent !important;
-  font-weight: 750 !important;
-  transition: background 0.14s, border-color 0.14s, transform 0.12s, box-shadow 0.14s;
+  color: rgba(225,232,250,0.74) !important;
+  font-weight: 650 !important;
+  transition: background 0.14s, color 0.14s, transform 0.12s, box-shadow 0.14s;
 }
-.sb-item .sb-icon {
-  width: 22px; height: 22px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.08);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
-}
+.sb-item .sb-icon { color: inherit; opacity: 0.9; }
 .sb-item:hover {
-  background: rgba(255,255,255,0.14) !important;
-  border-color: rgba(255,255,255,0.22) !important;
+  background: rgba(255,255,255,0.07) !important;
+  color: #fff !important;
   transform: translateX(2px);
 }
+/* active item = the one bright, solid team-accent element */
 .sb-item.active {
-  color: var(--shell-sidebar-active-text) !important;
-  background: linear-gradient(180deg, #ffffff, #e9eefc) !important;
-  border-color: rgba(255,255,255,0.8) !important;
-  box-shadow: 0 12px 26px rgba(0,0,0,0.38), 0 0 22px rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.08) !important;
-  font-weight: 950 !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0) 50%),
+    linear-gradient(180deg, var(--user-accent, #5b9dff), color-mix(in srgb, var(--user-accent, #5b9dff) 85%, #000)) !important;
+  color: var(--readable-accent-text, #06110a) !important;
+  border-color: color-mix(in srgb, var(--user-accent, #5b9dff) 60%, #fff) !important;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.34), 0 0 22px var(--team-glow), inset 0 1px 0 rgba(255,255,255,0.32) !important;
+  font-weight: 900 !important;
 }
-.sb-item.active .sb-icon {
-  background: color-mix(in srgb, var(--user-accent, #5b9dff) 22%, #ffffff);
-  box-shadow: none;
+.sb-item.active .sb-icon, .sb-item.active .sb-label { color: var(--readable-accent-text, #06110a) !important; }
+.sb-footer { background: rgba(0,0,0,0.16) !important; border-top: 1px solid var(--glass-border) !important; }
+.sb-pill {
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  color: rgba(231,238,255,0.82) !important;
 }
-.sb-footer { background: rgba(0,0,0,0.18) !important; border-top: 1px solid rgba(255,255,255,0.16) !important; }
+.sb-pill-live { color: #fff !important; background: var(--team-glow) !important; border-color: color-mix(in srgb, var(--user-accent, #5b9dff) 40%, transparent) !important; }
 
-/* ── 10. Reusable panel-hierarchy helpers ─────────────────────────────────── */
+/* ── 9. Panel-hierarchy helpers ───────────────────────────────────────────── */
 .card-hero {
   background:
-    radial-gradient(150% 210% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 40%, transparent), transparent 52%),
-    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 24%, rgba(15,21,40,0.74)), rgba(13,19,37,0.78));
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 32%, rgba(155,180,240,0.18));
+    radial-gradient(150% 220% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 30%, transparent), transparent 52%),
+    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 16%, var(--glass-bg-strong)), var(--glass-bg-strong));
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  backdrop-filter: blur(18px) saturate(1.35);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--user-accent, #5b9dff);
   border-radius: 14px;
-  box-shadow: 0 26px 58px rgba(2,6,18,0.6), 0 0 40px color-mix(in srgb, var(--user-accent, #5b9dff) 22%, transparent);
+  box-shadow: 0 22px 50px rgba(2,5,16,0.5), 0 0 40px var(--team-glow);
 }
 .card-primary {
-  background: linear-gradient(180deg, rgba(32,43,72,0.6), rgba(14,20,38,0.66));
-  -webkit-backdrop-filter: blur(16px) saturate(1.28);
-  backdrop-filter: blur(16px) saturate(1.28);
-  border: 1px solid rgba(155,180,240,0.15);
-  border-radius: 13px;
-  box-shadow: 0 20px 44px rgba(2,6,18,0.55), inset 0 1px 0 rgba(255,255,255,0.08);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(2,5,16,0.42), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 .card-secondary {
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012));
+  background: var(--glass-bg-quiet);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(160,185,240,0.12);
+  border: 1px solid var(--separator);
   border-radius: 11px;
 }
 
-/* form pips */
-.fm-form-strip .w { background: rgba(46,230,160,0.22) !important; color: #8ff4c4 !important; }
-.fm-form-strip .l { background: rgba(251,111,132,0.2) !important; color: #ffb3bd !important; }
+.fm-form-strip .w { background: rgba(46,230,160,0.2) !important; color: #8ff4c4 !important; }
+.fm-form-strip .l { background: rgba(251,111,132,0.18) !important; color: #ffb3bd !important; }

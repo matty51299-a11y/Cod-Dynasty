@@ -1159,3 +1159,47 @@ panels, designed headers, module accents, premium shell.
 - Uses `backdrop-filter` (already used elsewhere) and `color-mix()`. Atmosphere is
   pure CSS (no binary assets added).
 - Major/Champs tournament overlays keep their own scoped palette by design.
+
+
+## Update 2026-06-14 (FM-skin glass v3 — dark-glass shell + translucent overlays)
+Third visual pass. Display-only; no engine/store/data/save/gameplay changes.
+Only `src/index.css` touched (replaced the v2 FM-SKIN GLASS block).
+
+### What changed vs v2
+- **Background scene more visible**: `.app::before` now adds stadium spotlights
+  (team-accent + purple + teal), two diagonal light beams and an arena-floor wash;
+  `.app::after` keeps SVG noise + a wider pitch grid + a stronger vignette. The
+  scene reads as a real backdrop behind the glass.
+- **Panels are true translucent overlays**: shared panel surfaces switched to
+  `--glass-bg: rgba(11,17,34,0.55)` + `backdrop-filter: blur(15px)` + hairline
+  `--glass-border`. The per-panel coloured top bar was **removed** (`::before {content:none}`),
+  so the dashboard no longer looks like a grid of bright-topped boxes. Secondary
+  modules (news/dev/fixtures/team-stats/roster-needs/results) use an even quieter
+  `--glass-bg-quiet` so they recede.
+- **Quiet FM-style headers**: header band + uppercase label + a single small module
+  chip (no full coloured bar).
+- **Dark-glass shell (not team-colour wallpaper)**: topbar + sidebar are now dark
+  translucent glass with `backdrop-filter`; team identity is an **accent** — a thin
+  glowing accent line under the topbar, an accent glow strip down the sidebar edge,
+  an accent-tinted team pill, and the active nav item as the one bright solid
+  team-accent element. Inactive nav items are transparent/quiet (no green blocks).
+- **Tables as data overlays**: transparent row backgrounds, hairline `--separator`
+  rows, soft accent hover + user-row, translucent header band.
+- **Hero**: translucent team-gradient overlay with soft glow + corner light orb,
+  not a solid block.
+- **New tokens** on `.app`: `--glass-bg`, `--glass-bg-strong`, `--glass-bg-quiet`,
+  `--glass-border`, `--glass-border-hi`, `--glass-blur`, `--separator`,
+  `--overlay-surface`, `--team-glow`, `--shell-glass`. Hard-coded opaque panel /
+  solid team-colour topbar+sidebar fills from earlier passes are overridden with
+  these glass tokens.
+
+### Verified
+- `npm run build` ok
+- Playwright: Home/Roster/Dynamics (Boston green) + Home/Transfers (Toronto purple)
+  — atmospheric scene visible, glass panels, dark-glass shell with accent, tables
+  readable.
+
+### Limitations
+- Relies on `backdrop-filter`; on browsers without it panels fall back to their
+  semi-opaque rgba (still readable, less blur).
+- Major/Champs overlays keep their own scoped palette by design.
