@@ -1060,3 +1060,53 @@ with 2–4 options. Options either make a promise or apply a direct morale nudge
 - Added meeting anti-spam safeguards: only the first three meaningful topics in a meeting can affect morale/trust, repeated topics do not stack morale, duplicate promises are blocked by existing promise logic, and conflicting response options show warnings.
 - Dynamics now surfaces conversation history count and stance/main-concern fallbacks; Player Profile morale details now include player stance, main concern, last talk, active promises, and still opens the same Conversation Hub.
 - Expanded `scripts/diagnosePlayerMorale.mjs` to cover the topic list, action-required topic routing, multi-topic meetings, response/outcome generation, no auto-close behavior, repeat-topic anti-farming, promise creation, conflict warnings, history recording, cooldowns, and old-save hydration.
+
+## Update 2026-06-14 (Vibrant esports UI visual revamp)
+Display-only visual system overhaul — no engine, store, data, gameplay, save,
+ratings, brackets, points, contracts, morale or logic changes. Only `src/index.css`
+and `progress.md` touched.
+
+### What changed
+- **Theme variables (`:root`)**: replaced the old light-green palette with a vibrant
+  dark esports system — deep navy-black base (`--bg #0a0e1a`), richer surfaces
+  (`--bg2/--bg3`, `--surface-1/2/elevated`, `--surface-glass`), brighter accents
+  (`--green`, `--red`, `--yellow`, `--info`), gradient wash tokens
+  (`--bg-grad-1/2/3`), colourful stat-tile tints (`--tile-blue/purple/teal/green/amber/red`),
+  and depth/glow shadows (`--shadow`, `--shadow-glow`). Existing var names kept so the
+  whole app cascades to the new theme; per-team `--user-accent*` / `--shell-*` tokens
+  from `teamTheme.js` are now fully leveraged.
+- **New "VIBRANT ESPORTS REVAMP" block appended at end of `index.css`** (wins by source
+  order over the older flat-grey "FM override" and "polish" passes). It contains the
+  central shared-class system:
+  - **Background**: `.app` + `.main-content` now layer blue/purple/teal radial gradients
+    (driven by team accent) + faint grid texture + deep navy base, visible around/behind cards.
+  - **Cards**: `.fm-panel`, `.card`, `.ui-section-card`, `.oh-card`, `.db-club-banner`,
+    `.cm-hero`, `.profile-stat`, `.th-panel`, `.nf-panel`, etc. converted from flat
+    `#202328` grey to glassy gradient surfaces with soft shadows, inner highlights,
+    coloured top-accent bars and accent-glow hover.
+  - **Hero**: `.fm-club-strip` (dashboard hero) rebuilt as a team-accent gradient command
+    bar with glow, vignette and stronger identity.
+  - **Stat tiles**: `.fm-mini-metric` glassy with accent edge; the four hero/dynamics tiles
+    get restrained blue/purple/teal/green colour washes (not just text colour). Finance
+    cap bar uses a green gradient fill.
+  - **Buttons**: `.btn-cta/.btn-primary/.nmo-play-btn/.mto-play-match-btn` are vivid
+    team-accent gradients with glow + lift on hover and clear disabled state; `.btn-accent`
+    green gradient; `.btn-secondary` designed glass.
+  - **Tables**: gradient header bars, zebra rows, accent hover, glowing team dots, and a
+    strong team-accent user-row highlight (`.fm-table-row.is-you`, `.user-row`).
+  - **Shell**: topbar + sidebar keep franchise colour but gain glass sheen, depth shadows
+    and an accent glow; active sidebar item is bolder.
+  - **Reusable tiers**: `.card-hero`, `.card-primary`, `.card-secondary` for future shared use.
+
+### Verified
+- `npm run build` ✓
+- Playwright screenshots of Home, Roster, Standings, Dynamics, Transfers, Board, Challengers
+  across three distinct team colours (Boston/OpTic green, Toronto purple, Vancouver cyan) —
+  all render with the new vibrant look, tables stay compact/readable, no broken styling.
+
+### Known limitations
+- Dashboard's `ensureContrast()` (display JS) darkens team-colour text against a white
+  reference; on the dark Next-Match line this can read slightly muted (pre-existing, JS left
+  untouched to avoid gameplay-file changes).
+- A few deep overlay-scoped palettes (Major/Champs tournament overlays) keep their own
+  navy tokens by design and were intentionally not re-themed.
