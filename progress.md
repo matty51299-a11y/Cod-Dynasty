@@ -1110,3 +1110,52 @@ and `progress.md` touched.
   untouched to avoid gameplay-file changes).
 - A few deep overlay-scoped palettes (Major/Champs tournament overlays) keep their own
   navy tokens by design and were intentionally not re-themed.
+
+
+## Update 2026-06-14 (FM-skin glass UI revamp — atmospheric scene + glass panels)
+Second, deeper visual pass on top of the vibrant-theme work. Display-only — no
+engine/store/data/save/gameplay changes. Touched only `src/index.css`,
+`src/components/Dashboard.jsx` (added semantic panel classNames — display only)
+and `progress.md`.
+
+### Goal
+Move from "dark dashboard of boxes" to a themed management-game skin (FM custom
+skin / sports-management UI feel): real background atmosphere, translucent glass
+panels, designed headers, module accents, premium shell.
+
+### Shared system rebuilt (appended "FM-SKIN GLASS REVAMP" block, wins by order)
+- **Atmospheric background**: `.app::before` (fixed) paints a layered scene —
+  team-accent + purple + teal light blooms, deep navy gradients and an "arena
+  floor" wash; `.app::after` (fixed) overlays an SVG fractal-noise texture, a
+  faint pitch grid and a vignette via `mix-blend-mode: soft-light`. `.main-content`
+  is now transparent so the scene shows through the glass.
+- **Glass panel system**: panels are translucent `rgba` surfaces with
+  `backdrop-filter: blur(16px) saturate`, corner module-bloom, inner highlights and
+  deep shadows — real glass over the scene instead of flat opaque boxes.
+- **Designed headers**: header band + accent underline + coloured chip before title.
+- **Module accent identities** (`--mod` per panel): Next/League = team accent,
+  Board = amber, Dynamics = blue-purple, Finance = teal, Stats = blue, Team Stats =
+  sky, News = violet, Dev = green, Roster Needs = pink, Results = orange.
+- **Hero / Level-A panels**: `.fm-club-strip`, `.ui-page-header`, `.cm-hero`,
+  `.db-club-banner`, `.oh-hero` rebuilt as team-accent gradient showpieces with
+  multi-bloom backgrounds, blur, accent border, corner glow orb and glow shadow.
+- **Stat tiles**: glassy with accent edge + per-position colour washes; teal->green
+  cap bar with glow.
+- **Buttons**: layered team-accent gradient primaries with sheen/glow/lift + pressed
+  + disabled states; green `.btn-accent`; glass secondaries.
+- **Tables**: accent header bands, zebra rows, accent hover, glowing team dots,
+  strong team-accent user-row — density kept.
+- **Premium shell**: translucent blurred team chrome (topbar + sidebar), sidebar
+  nav as glass pills with icon chips and a bright high-contrast active pill.
+- **Hierarchy helpers**: `.card-hero` / `.card-primary` / `.card-secondary`.
+
+### Verified
+- `npm run build` ok
+- Playwright screenshots of Home, Roster, Dynamics, Transfers, Board across Boston
+  (green) and Toronto (purple) — atmospheric scene + glass render, tables readable,
+  no broken styling, distinct per-team identity.
+
+### Notes / limitations
+- Uses `backdrop-filter` (already used elsewhere) and `color-mix()`. Atmosphere is
+  pure CSS (no binary assets added).
+- Major/Champs tournament overlays keep their own scoped palette by design.

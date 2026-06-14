@@ -10135,309 +10135,417 @@ body { background: #111317; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   VIBRANT ESPORTS REVAMP  (central visual system — overrides flat grey passes)
-   Dark navy/black base · blue/purple/teal atmosphere · glassy gradient cards ·
-   team-accent integration · premium buttons · modern sports-data tables.
-   Display-only. No structural / gameplay changes.
+   FM-SKIN GLASS REVAMP  (atmospheric scene + translucent glass panel system)
+   Display-only. Overrides earlier flat/grey passes by source order.
+   Goal: themed management-game skin — real background atmosphere, glass panels
+   with backdrop blur, designed headers, module accents, premium shell/buttons.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. App base + atmospheric background ─────────────────────────────────── */
+/* ── 1. Atmospheric background scene (fixed, behind all content) ──────────── */
 .app {
-  background:
-    radial-gradient(1200px 760px at 6% -12%, color-mix(in srgb, var(--user-accent, #5b9dff) 22%, transparent), transparent 56%),
-    radial-gradient(1100px 760px at 112% 2%, rgba(150,90,255,0.20), transparent 55%),
-    radial-gradient(900px 680px at 50% 120%, rgba(26,214,192,0.13), transparent 60%),
-    linear-gradient(180deg, #0c1326 0%, #090d1c 55%, #070914 100%);
+  background: #06080f !important;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
 }
-
-.main-content {
-  background:
-    repeating-linear-gradient(0deg, rgba(150,180,255,0.018) 0 1px, transparent 1px 58px),
-    repeating-linear-gradient(90deg, rgba(150,180,255,0.018) 0 1px, transparent 1px 58px),
-    radial-gradient(1100px 720px at 4% -10%, color-mix(in srgb, var(--user-accent, #5b9dff) 16%, transparent), transparent 56%),
-    radial-gradient(1000px 700px at 108% 0%, rgba(150,90,255,0.16), transparent 55%),
-    radial-gradient(820px 640px at 50% 118%, rgba(26,214,192,0.10), transparent 60%),
-    linear-gradient(180deg, #0b1124 0%, #090d1b 60%, #080b16 100%);
-}
-/* soft inner vignette so cards read as floating over atmosphere */
-.main-content::after {
+/* colour / lighting scene */
+.app::before {
   content: "";
-  position: sticky;
-  bottom: 0; left: 0;
-  display: block;
-  height: 0;
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 820px at 8% -10%, color-mix(in srgb, var(--user-accent, #5b9dff) 42%, transparent), transparent 52%),
+    radial-gradient(1100px 820px at 104% 0%, rgba(140,80,255,0.30), transparent 52%),
+    radial-gradient(1000px 760px at 50% 116%, rgba(24,210,190,0.20), transparent 56%),
+    radial-gradient(900px 700px at 92% 96%, rgba(60,120,255,0.16), transparent 60%),
+    linear-gradient(180deg, #0a1024 0%, #0a0e1e 42%, #07091400 100%),
+    linear-gradient(180deg, #090c18 0%, #06080f 100%);
+}
+/* texture (noise) + faint pitch grid + vignette */
+.app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(140% 120% at 50% 38%, transparent 58%, rgba(0,0,0,0.34) 100%),
+    repeating-linear-gradient(0deg, rgba(150,180,255,0.022) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(90deg, rgba(150,180,255,0.022) 0 1px, transparent 1px 64px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: auto, auto, auto, 180px 180px;
+  opacity: 0.5;
+  mix-blend-mode: soft-light;
 }
 
-/* ── 2. Card system overhaul (glassy gradient surfaces with depth) ────────── */
-.fm-club-strip,
+/* content area is transparent so the scene shows through glass panels */
+.main-content {
+  background: transparent !important;
+}
+.app-body { background: transparent; }
+
+/* ── 2. Glass panel system (translucent + backdrop blur + depth) ──────────── */
 .fm-panel,
 .card,
 .ui-section-card,
 .oh-card,
+.db-results-card,
 .profile-stat,
-.major-event-banner,
-.ui-page-header,
-.db-club-banner,
-.cm-hero,
 .th-panel,
 .nf-panel,
 .pm-section,
-.db-results-card,
+.major-event-banner,
 .staff-panel .card {
+  --mod: var(--user-accent, #5b9dff);
+  position: relative;
+  overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0) 42%),
-    linear-gradient(158deg, var(--surface-1) 0%, var(--surface-2) 100%) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 26px rgba(4,8,22,0.42), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+    radial-gradient(130% 92% at 0% 0%, color-mix(in srgb, var(--mod) 16%, transparent), transparent 56%),
+    linear-gradient(180deg, rgba(32,43,72,0.60), rgba(14,20,38,0.66)) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.28);
+  backdrop-filter: blur(16px) saturate(1.28);
+  border: 1px solid rgba(155,180,240,0.15) !important;
+  border-radius: 13px !important;
+  box-shadow:
+    0 20px 44px rgba(2,6,18,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 0 0 1px rgba(255,255,255,0.015) !important;
 }
-
-.fm-panel,
-.card,
-.ui-section-card,
-.oh-card,
-.db-results-card { position: relative; overflow: hidden; }
-
-/* coloured top accent bar on panels */
+/* top module-accent line */
 .fm-panel::before,
 .db-results-card::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--user-accent, #5b9dff), transparent 70%);
-  opacity: 0.85;
+  height: 3px;
+  z-index: 3;
+  background: linear-gradient(90deg, var(--mod), transparent 74%);
+  opacity: 0.95;
   pointer-events: none;
-  z-index: 2;
 }
-
 .fm-panel:hover,
 .card:hover,
 .ui-section-card:hover,
 .oh-card:hover {
-  border-color: var(--user-accent-border, rgba(130,155,220,0.34)) !important;
-  box-shadow: 0 14px 36px rgba(4,8,22,0.5), 0 0 22px color-mix(in srgb, var(--user-accent, #5b9dff) 16%, transparent), inset 0 1px 0 rgba(255,255,255,0.06) !important;
-}
-
-.fm-panel-title {
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)) !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-
-/* ── 3. Dashboard hero (club strip) — command-centre identity ─────────────── */
-.fm-club-strip {
-  border: 1px solid var(--user-accent-border, var(--border)) !important;
-  border-top: 0 !important;
-  border-left: 4px solid var(--user-accent, #5b9dff) !important;
-  background:
-    radial-gradient(130% 180% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 30%, transparent), transparent 56%),
-    radial-gradient(120% 160% at 100% 0%, rgba(150,90,255,0.18), transparent 60%),
-    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 16%, #141b30) 0%, #131a2c 52%, #10162600 100%),
-    linear-gradient(180deg, var(--surface-1), var(--surface-2)) !important;
+  border-color: color-mix(in srgb, var(--mod) 45%, rgba(155,180,240,0.2)) !important;
   box-shadow:
-    0 12px 34px rgba(4,8,22,0.5),
-    0 0 30px color-mix(in srgb, var(--user-accent, #5b9dff) 18%, transparent),
-    inset 0 1px 0 rgba(255,255,255,0.07) !important;
+    0 26px 54px rgba(2,6,18,0.6),
+    0 0 30px color-mix(in srgb, var(--mod) 22%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.1) !important;
 }
-.fm-club-strip::after {
+
+/* ── 3. Designed panel headers (header band + chip + accent underline) ────── */
+.fm-panel-title,
+.ui-section-head {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.012)) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+}
+.fm-panel-title::after {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  box-shadow: inset 0 0 60px rgba(0,0,0,0.18);
+  left: 0; bottom: -1px;
+  height: 2px; width: 100%;
+  background: linear-gradient(90deg, var(--mod), transparent 58%);
   pointer-events: none;
 }
-.fm-club-strip { position: relative; }
-.fm-club-main h2 {
-  font-size: 19px;
-  letter-spacing: 0.2px;
-  text-shadow: 0 2px 12px rgba(0,0,0,0.45);
+.fm-panel-title h3 {
+  color: #eaf1ff !important;
+  letter-spacing: 0.07em !important;
+  display: inline-flex;
+  align-items: center;
 }
-.fm-club-logo { filter: drop-shadow(0 4px 12px rgba(0,0,0,0.45)); }
+.fm-panel-title h3::before {
+  content: "";
+  width: 7px; height: 7px;
+  margin-right: 7px;
+  border-radius: 2px;
+  background: var(--mod);
+  box-shadow: 0 0 9px var(--mod);
+}
 
-/* ── 4. Colourful stat tiles ──────────────────────────────────────────────── */
-.fm-mini-metric {
-  background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015)) !important;
-  border: 1px solid rgba(150,175,235,0.12) !important;
-  border-radius: 8px !important;
+/* ── 4. Module accent identities ──────────────────────────────────────────── */
+.fm-next-panel    { --mod: var(--user-accent, #5b9dff); }
+.fm-fixtures-panel{ --mod: #60a5fa; }
+.fm-league-table  { --mod: var(--user-accent, #5b9dff); }
+.fm-board-widget  { --mod: #fbbf3c; }
+.fm-dynamics-widget { --mod: #8b7bff; }
+.fm-stats-panel   { --mod: #5b9dff; }
+.fm-teamstats-panel { --mod: #38bdf8; }
+.fm-finance-panel { --mod: #2dd4bf; }
+.fm-news-panel    { --mod: #a78bfa; }
+.fm-dev-panel     { --mod: #34d399; }
+.fm-needs-panel   { --mod: #f472b6; }
+.fm-results-panel { --mod: #f59e0b; }
+
+/* ── 5. Hero / feature panels (Level A) ───────────────────────────────────── */
+.fm-club-strip,
+.db-club-banner,
+.cm-hero,
+.ui-page-header,
+.oh-hero {
   position: relative;
   overflow: hidden;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  background:
+    radial-gradient(150% 210% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 46%, transparent), transparent 50%),
+    radial-gradient(130% 170% at 100% 0%, rgba(150,90,255,0.26), transparent 58%),
+    radial-gradient(120% 160% at 100% 120%, rgba(34,212,190,0.18), transparent 60%),
+    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 30%, rgba(15,21,40,0.74)) 0%, rgba(13,19,37,0.78) 58%, rgba(11,16,32,0.8) 100%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.45);
+  backdrop-filter: blur(20px) saturate(1.45);
+  border: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 34%, rgba(155,180,240,0.18)) !important;
+  border-left: 4px solid var(--user-accent, #5b9dff) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    0 26px 58px rgba(2,6,18,0.62),
+    0 0 46px color-mix(in srgb, var(--user-accent, #5b9dff) 24%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.12) !important;
+}
+.fm-club-strip::after,
+.ui-page-header::after {
+  content: "";
+  position: absolute;
+  right: -40px; top: -60px;
+  width: 240px; height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--user-accent, #5b9dff) 30%, transparent), transparent 70%);
+  pointer-events: none;
+}
+.fm-club-main h2 {
+  font-size: 20px !important;
+  letter-spacing: 0.2px;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.5);
+}
+.fm-club-logo,
+.ui-page-header img { filter: drop-shadow(0 6px 16px rgba(0,0,0,0.55)); }
+
+/* ── 6. Stat tiles (premium glass + colour washes) ────────────────────────── */
+.fm-mini-metric {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)) !important;
+  border: 1px solid rgba(160,185,240,0.14) !important;
+  border-radius: 9px !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px rgba(2,6,18,0.25);
 }
 .fm-mini-metric::before {
   content: "";
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 3px;
-  background: var(--user-accent, #5b9dff);
-  opacity: 0.85;
+  background: var(--mod, var(--user-accent, #5b9dff));
+  box-shadow: 0 0 10px var(--mod, var(--user-accent, #5b9dff));
 }
-.fm-mini-metric strong { color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+.fm-mini-metric strong { color: #fff !important; text-shadow: 0 1px 8px rgba(0,0,0,0.35); }
+.fm-strip-stats > .fm-mini-metric:nth-child(1) { --mod: #5b9dff; background: linear-gradient(180deg, var(--tile-blue), rgba(255,255,255,0.015)) !important; }
+.fm-strip-stats > .fm-mini-metric:nth-child(2) { --mod: #9a6cff; background: linear-gradient(180deg, var(--tile-purple), rgba(255,255,255,0.015)) !important; }
+.fm-strip-stats > .fm-mini-metric:nth-child(3) { --mod: #22d4be; background: linear-gradient(180deg, var(--tile-teal), rgba(255,255,255,0.015)) !important; }
+.fm-strip-stats > .fm-mini-metric:nth-child(4) { --mod: #2ee6a0; background: linear-gradient(180deg, var(--tile-green), rgba(255,255,255,0.015)) !important; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(1) { --mod: #8b7bff; background: linear-gradient(180deg, var(--tile-purple), rgba(255,255,255,0.015)) !important; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(2) { --mod: #fbbf3c; background: linear-gradient(180deg, var(--tile-amber), rgba(255,255,255,0.015)) !important; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(3) { --mod: #f472b6; background: linear-gradient(180deg, var(--tile-red), rgba(255,255,255,0.015)) !important; }
+.fm-dynamics-grid > .fm-mini-metric:nth-child(4) { --mod: #fb6f84; background: linear-gradient(180deg, var(--tile-red), rgba(255,255,255,0.015)) !important; }
+.fm-finance-bars > .fm-mini-metric:nth-child(1) { --mod: #2dd4bf; background: linear-gradient(180deg, var(--tile-teal), rgba(255,255,255,0.015)) !important; }
+.fm-finance-bars > .fm-mini-metric:nth-child(2) { --mod: #5b9dff; background: linear-gradient(180deg, var(--tile-blue), rgba(255,255,255,0.015)) !important; }
+.fm-finance-bars > .fm-mini-metric:nth-child(3) { --mod: #2ee6a0; background: linear-gradient(180deg, var(--tile-green), rgba(255,255,255,0.015)) !important; }
+.fm-finance-bars > .fm-mini-metric:nth-child(4) { --mod: #fbbf3c; background: linear-gradient(180deg, var(--tile-amber), rgba(255,255,255,0.015)) !important; }
 
-/* Distinct restrained colour washes for the four hero tiles + dynamics grid */
-.fm-strip-stats > .fm-mini-metric:nth-child(1),
-.fm-dynamics-grid > .fm-mini-metric:nth-child(1) { background: linear-gradient(180deg, var(--tile-blue), rgba(255,255,255,0.012)) !important; }
-.fm-strip-stats > .fm-mini-metric:nth-child(1)::before,
-.fm-dynamics-grid > .fm-mini-metric:nth-child(1)::before { background: #5b9dff; }
-.fm-strip-stats > .fm-mini-metric:nth-child(2),
-.fm-dynamics-grid > .fm-mini-metric:nth-child(2) { background: linear-gradient(180deg, var(--tile-purple), rgba(255,255,255,0.012)) !important; }
-.fm-strip-stats > .fm-mini-metric:nth-child(2)::before,
-.fm-dynamics-grid > .fm-mini-metric:nth-child(2)::before { background: #9a6cff; }
-.fm-strip-stats > .fm-mini-metric:nth-child(3),
-.fm-dynamics-grid > .fm-mini-metric:nth-child(3) { background: linear-gradient(180deg, var(--tile-teal), rgba(255,255,255,0.012)) !important; }
-.fm-strip-stats > .fm-mini-metric:nth-child(3)::before,
-.fm-dynamics-grid > .fm-mini-metric:nth-child(3)::before { background: #22d4be; }
-.fm-strip-stats > .fm-mini-metric:nth-child(4),
-.fm-dynamics-grid > .fm-mini-metric:nth-child(4) { background: linear-gradient(180deg, var(--tile-green), rgba(255,255,255,0.012)) !important; }
-.fm-strip-stats > .fm-mini-metric:nth-child(4)::before,
-.fm-dynamics-grid > .fm-mini-metric:nth-child(4)::before { background: #2ee6a0; }
+.fm-cap-bar { background: rgba(0,0,0,0.3) !important; border-radius: 4px !important; box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
+.fm-cap-bar span { background: linear-gradient(90deg, #2dd4bf, #2ee6a0) !important; box-shadow: 0 0 12px rgba(46,230,160,0.5); }
 
-/* generic stat boxes / chips get the glass treatment too */
-.stat-box,
-.db-stat-chip,
-.bracket-match {
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012)) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 9px !important;
+.stat-box, .db-stat-chip, .bracket-match {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015)) !important;
+  border: 1px solid rgba(160,185,240,0.14) !important;
+  border-radius: 10px !important;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
-/* finance cap bar — visual gradient fill */
-.fm-cap-bar { background: rgba(255,255,255,0.08) !important; border-radius: 4px !important; }
-.fm-cap-bar span { background: linear-gradient(90deg, var(--green), #1fae84) !important; }
-
-/* ── 5. Buttons — vibrant gradient + glow ─────────────────────────────────── */
-.btn-cta,
-.btn-primary,
-.btn-primary-sm,
-.nmo-play-btn,
-.mto-play-match-btn,
-.filter-btn.active,
-.ui-action-primary {
-  background: linear-gradient(180deg,
-      color-mix(in srgb, var(--user-accent, #5b9dff) 88%, #ffffff 12%),
-      var(--user-accent, #5b9dff)) !important;
-  border: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 70%, #ffffff) !important;
+/* ── 7. Buttons (premium gradient + glow) ─────────────────────────────────── */
+.btn-cta, .btn-primary, .btn-primary-sm, .nmo-play-btn, .mto-play-match-btn,
+.filter-btn.active, .ui-action-primary {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0) 46%),
+    linear-gradient(180deg, color-mix(in srgb, var(--user-accent, #5b9dff) 84%, #fff 16%), color-mix(in srgb, var(--user-accent, #5b9dff) 96%, #000 4%)) !important;
+  border: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 64%, #fff) !important;
   color: var(--readable-accent-text, #06110a) !important;
-  box-shadow: 0 8px 20px rgba(4,8,22,0.34),
-              0 0 18px color-mix(in srgb, var(--user-accent, #5b9dff) 34%, transparent),
-              inset 0 1px 0 rgba(255,255,255,0.28) !important;
-  font-weight: 800;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.18);
+  box-shadow:
+    0 10px 22px rgba(2,6,18,0.4),
+    0 0 20px color-mix(in srgb, var(--user-accent, #5b9dff) 38%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.4) !important;
   transition: transform 0.12s, box-shadow 0.18s, filter 0.18s;
 }
-.btn-cta:hover,
-.btn-primary:hover,
-.btn-primary-sm:hover,
-.nmo-play-btn:hover,
-.mto-play-match-btn:hover {
-  filter: brightness(1.08) saturate(1.06);
+.btn-cta:hover, .btn-primary:hover, .btn-primary-sm:hover, .nmo-play-btn:hover, .mto-play-match-btn:hover {
+  filter: brightness(1.09) saturate(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(4,8,22,0.42),
-              0 0 28px color-mix(in srgb, var(--user-accent, #5b9dff) 50%, transparent),
-              inset 0 1px 0 rgba(255,255,255,0.32) !important;
+  box-shadow:
+    0 14px 30px rgba(2,6,18,0.5),
+    0 0 32px color-mix(in srgb, var(--user-accent, #5b9dff) 56%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.45) !important;
 }
-.btn-cta:disabled,
-.btn-primary:disabled { filter: grayscale(0.5) brightness(0.7); box-shadow: none !important; cursor: not-allowed; }
+.btn-cta:active, .btn-primary:active { transform: translateY(0); filter: brightness(0.96); }
+.btn-cta:disabled, .btn-primary:disabled { filter: grayscale(0.55) brightness(0.66); box-shadow: none !important; cursor: not-allowed; }
 
 .btn-accent {
-  background: linear-gradient(180deg, #34d399, #11a877) !important;
-  border: 1px solid #3fe7ab !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 46%), linear-gradient(180deg, #34d399, #11a877) !important;
+  border: 1px solid #4ff0b6 !important;
   color: #05281c !important;
-  box-shadow: 0 8px 20px rgba(4,8,22,0.32), 0 0 18px rgba(46,230,160,0.32), inset 0 1px 0 rgba(255,255,255,0.28) !important;
-  font-weight: 800;
+  font-weight: 800 !important;
+  box-shadow: 0 10px 22px rgba(2,6,18,0.36), 0 0 20px rgba(46,230,160,0.4), inset 0 1px 0 rgba(255,255,255,0.4) !important;
 }
 .btn-accent:hover { filter: brightness(1.08); transform: translateY(-1px); }
 
-.btn-secondary,
-.btn-secondary-sm,
-.ui-action-secondary {
-  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)) !important;
-  border: 1px solid rgba(150,175,235,0.22) !important;
+.btn-secondary, .btn-secondary-sm, .ui-action-secondary, .nmc-btn {
+  background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03)) !important;
+  border: 1px solid rgba(160,185,240,0.24) !important;
   color: var(--text) !important;
-  font-weight: 700;
-  transition: border-color 0.15s, background 0.15s;
+  font-weight: 700 !important;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.15s, background 0.15s, transform 0.12s;
 }
-.btn-secondary:hover,
-.btn-secondary-sm:hover {
-  background: rgba(255,255,255,0.12) !important;
-  border-color: var(--user-accent-border, rgba(150,175,235,0.4)) !important;
+.btn-secondary:hover, .btn-secondary-sm:hover, .nmc-btn:hover {
+  background: rgba(255,255,255,0.18) !important;
+  border-color: color-mix(in srgb, var(--user-accent, #5b9dff) 50%, rgba(160,185,240,0.3)) !important;
+  transform: translateY(-1px);
 }
 
-/* ── 6. Tables — modern sports-data look ──────────────────────────────────── */
+/* ── 8. Tables (modern sports-data look) ──────────────────────────────────── */
 .standings-table th, .roster-table th, .stats-table th, .kd-history-table th,
 .oh-market-table th, .dev-table th, .kd-table th, .staff-table th {
-  background: linear-gradient(180deg, rgba(91,157,255,0.10), rgba(255,255,255,0.02)) !important;
-  color: #c3cdea !important;
-  border-bottom: 1px solid var(--border) !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--user-accent, #5b9dff) 18%, rgba(255,255,255,0.02)), rgba(255,255,255,0.015)) !important;
+  color: #cdd8f4 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid rgba(160,185,240,0.2) !important;
 }
 .standings-table td, .roster-table td, .stats-table td, .kd-history-table td,
 .oh-market-table td, .dev-table td {
-  background: rgba(255,255,255,0.018) !important;
-  border-color: var(--border) !important;
+  background: rgba(255,255,255,0.02) !important;
+  border-color: rgba(160,185,240,0.1) !important;
 }
 .standings-table tbody tr:nth-child(even) td,
-.roster-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.035) !important; }
-.standings-table tbody tr:hover td,
-.roster-table tbody tr:hover td,
-.kd-table tbody tr:hover td,
-.staff-table tbody tr:hover td,
-.dev-table tbody tr:hover td,
-.oh-market-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--user-accent, #5b9dff) 12%, transparent) !important;
-}
-
-/* dashboard mini league table rows */
-.fm-table-row { border-bottom: 1px solid rgba(150,180,255,0.05) !important; }
-.fm-table-row:nth-child(even) { background: rgba(255,255,255,0.022) !important; }
-.fm-table-row.is-top { background: linear-gradient(90deg, rgba(46,230,160,0.20), transparent 72%) !important; }
-.fm-table-row.is-bottom { background: linear-gradient(90deg, rgba(251,111,132,0.18), transparent 72%) !important; }
-.fm-table-row.is-you {
+.roster-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.038) !important; }
+.standings-table tbody tr:hover td, .roster-table tbody tr:hover td,
+.kd-table tbody tr:hover td, .staff-table tbody tr:hover td,
+.dev-table tbody tr:hover td, .oh-market-table tbody tr:hover td {
   background: color-mix(in srgb, var(--user-accent, #5b9dff) 16%, transparent) !important;
-  outline: 1px solid var(--user-accent-border, rgba(91,157,255,0.5)) !important;
+}
+.fm-table-row { border-bottom: 1px solid rgba(150,180,255,0.05) !important; }
+.fm-table-row:nth-child(even) { background: rgba(255,255,255,0.024) !important; }
+.fm-table-row.is-top { background: linear-gradient(90deg, rgba(46,230,160,0.22), transparent 74%) !important; }
+.fm-table-row.is-bottom { background: linear-gradient(90deg, rgba(251,111,132,0.2), transparent 74%) !important; }
+.fm-table-row.is-you {
+  background: color-mix(in srgb, var(--user-accent, #5b9dff) 18%, transparent) !important;
+  outline: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 55%, transparent) !important;
   box-shadow: inset 3px 0 0 var(--user-accent, #5b9dff);
 }
-.fm-dot, .dot { box-shadow: 0 0 7px currentColor, 0 0 0 1px rgba(0,0,0,0.25); }
+.fm-dot, .dot { box-shadow: 0 0 8px currentColor, 0 0 0 1px rgba(0,0,0,0.3); }
 
-/* ── 7. Topbar + sidebar — premium glass + team identity glow ─────────────── */
+/* ── 9. Premium shell — translucent team chrome over the scene ─────────────── */
 .topbar {
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 60%),
-    linear-gradient(90deg, var(--shell-topbar-bg) 0%, var(--shell-topbar-bg) 50%, var(--shell-topbar-secondary) 100%) !important;
-  box-shadow: 0 10px 26px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,255,255,0.05) inset !important;
+    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0) 58%),
+    linear-gradient(90deg, color-mix(in srgb, var(--shell-topbar-bg) 82%, transparent) 0%, color-mix(in srgb, var(--shell-topbar-bg) 80%, transparent) 50%, color-mix(in srgb, var(--shell-topbar-secondary) 80%, transparent) 100%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid rgba(255,255,255,0.14) !important;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1) !important;
+}
+.season-badge {
+  background: rgba(255,255,255,0.16) !important;
+  border: 1px solid rgba(255,255,255,0.28) !important;
+  color: #fff !important;
+  border-radius: 7px !important;
+  font-weight: 800;
+}
+.user-team-badge {
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.1)) !important;
+  border: 1px solid rgba(255,255,255,0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 6px 14px rgba(0,0,0,0.25) !important;
 }
 
 .sidebar {
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 16%, rgba(0,0,0,0.10) 100%),
-    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 26%, transparent), transparent 60%),
-    linear-gradient(160deg, var(--shell-sidebar-bg) 0%, var(--shell-sidebar-secondary) 100%) !important;
-  box-shadow: 6px 0 24px rgba(0,0,0,0.42) !important;
+    linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 18%, rgba(0,0,0,0.2) 100%),
+    radial-gradient(130% 50% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 32%, transparent), transparent 58%),
+    linear-gradient(165deg, color-mix(in srgb, var(--shell-sidebar-bg) 84%, transparent) 0%, color-mix(in srgb, var(--shell-sidebar-secondary) 82%, transparent) 100%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  backdrop-filter: blur(22px) saturate(1.3);
+  border-right: 1px solid rgba(255,255,255,0.14) !important;
+  box-shadow: 8px 0 34px rgba(0,0,0,0.5) !important;
 }
-.sb-item { transition: background 0.14s, border-color 0.14s, transform 0.12s, box-shadow 0.14s; }
+.sb-team-block {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.24), rgba(255,255,255,0.05)),
+    linear-gradient(90deg, color-mix(in srgb, var(--shell-topbar-bg) 70%, transparent), color-mix(in srgb, var(--shell-sidebar-bg) 60%, transparent)) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.2);
+}
+.sb-item {
+  border-radius: 9px !important;
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid transparent !important;
+  font-weight: 750 !important;
+  transition: background 0.14s, border-color 0.14s, transform 0.12s, box-shadow 0.14s;
+}
+.sb-item .sb-icon {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.sb-item:hover {
+  background: rgba(255,255,255,0.14) !important;
+  border-color: rgba(255,255,255,0.22) !important;
+  transform: translateX(2px);
+}
 .sb-item.active {
-  box-shadow: 0 10px 22px rgba(0,0,0,0.32), 0 0 18px rgba(255,255,255,0.12), inset 0 -2px 0 rgba(0,0,0,0.08) !important;
+  color: var(--shell-sidebar-active-text) !important;
+  background: linear-gradient(180deg, #ffffff, #e9eefc) !important;
+  border-color: rgba(255,255,255,0.8) !important;
+  box-shadow: 0 12px 26px rgba(0,0,0,0.38), 0 0 22px rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.08) !important;
+  font-weight: 950 !important;
 }
+.sb-item.active .sb-icon {
+  background: color-mix(in srgb, var(--user-accent, #5b9dff) 22%, #ffffff);
+  box-shadow: none;
+}
+.sb-footer { background: rgba(0,0,0,0.18) !important; border-top: 1px solid rgba(255,255,255,0.16) !important; }
 
-/* ── 8. Reusable card tiers (for future / shared use) ─────────────────────── */
+/* ── 10. Reusable panel-hierarchy helpers ─────────────────────────────────── */
 .card-hero {
   background:
-    radial-gradient(130% 180% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 28%, transparent), transparent 56%),
-    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 14%, #141b30), var(--surface-2));
-  border: 1px solid var(--user-accent-border, var(--border));
+    radial-gradient(150% 210% at 0% 0%, color-mix(in srgb, var(--user-accent, #5b9dff) 40%, transparent), transparent 52%),
+    linear-gradient(135deg, color-mix(in srgb, var(--user-accent, #5b9dff) 24%, rgba(15,21,40,0.74)), rgba(13,19,37,0.78));
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--user-accent, #5b9dff) 32%, rgba(155,180,240,0.18));
   border-radius: 14px;
-  box-shadow: 0 12px 34px rgba(4,8,22,0.5), 0 0 30px color-mix(in srgb, var(--user-accent, #5b9dff) 16%, transparent);
+  box-shadow: 0 26px 58px rgba(2,6,18,0.6), 0 0 40px color-mix(in srgb, var(--user-accent, #5b9dff) 22%, transparent);
 }
 .card-primary {
-  background: linear-gradient(158deg, var(--surface-1), var(--surface-2));
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 8px 26px rgba(4,8,22,0.42), inset 0 1px 0 rgba(255,255,255,0.05);
+  background: linear-gradient(180deg, rgba(32,43,72,0.6), rgba(14,20,38,0.66));
+  -webkit-backdrop-filter: blur(16px) saturate(1.28);
+  backdrop-filter: blur(16px) saturate(1.28);
+  border: 1px solid rgba(155,180,240,0.15);
+  border-radius: 13px;
+  box-shadow: 0 20px 44px rgba(2,6,18,0.55), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .card-secondary {
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-  border: 1px solid rgba(150,175,235,0.12);
-  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.012));
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(160,185,240,0.12);
+  border-radius: 11px;
 }
 
-/* keep the old "flatten everything" pass from re-flattening newer surfaces */
-.fm-form-strip .w { background: rgba(46,230,160,0.20) !important; color: #8ff4c4 !important; }
-.fm-form-strip .l { background: rgba(251,111,132,0.18) !important; color: #ffb3bd !important; }
+/* form pips */
+.fm-form-strip .w { background: rgba(46,230,160,0.22) !important; color: #8ff4c4 !important; }
+.fm-form-strip .l { background: rgba(251,111,132,0.2) !important; color: #ffb3bd !important; }
