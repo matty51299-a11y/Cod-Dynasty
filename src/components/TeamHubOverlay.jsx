@@ -115,7 +115,7 @@ export default function TeamHubOverlay() {
             {isUser && <span className="th-you">YOU</span>}
           </div>
           <div className="th-rank muted">
-            {isCdl ? `#${rank} in league · ` : `${team.region ?? "Challengers"} · `}{seasonRec.wins}W–{seasonRec.losses}L · {isCdl ? `${seasonRec.points} CDL pts` : `${team.circuitPoints ?? seasonRec.points ?? 0} circuit pts`}
+            {isCdl ? `#${rank} in league · ` : `${team.region ?? "Open Circuit"} · `}{seasonRec.wins}W–{seasonRec.losses}L · {isCdl ? `${seasonRec.points} league pts` : `${team.circuitPoints ?? seasonRec.points ?? 0} circuit pts`}
           </div>
           <div className="th-ovr-row">
             <span className="th-ovr-label">Team OVR</span>

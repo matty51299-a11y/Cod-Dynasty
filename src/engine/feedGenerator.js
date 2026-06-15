@@ -109,10 +109,10 @@ export function generateMajorFeed(wasCompleted, newState, majorIdx) {
       if (top4.has(cId)) {
         const cName = cTeam?.name ?? cId;
         items.push(makeItem("major_upset",
-          `${cName} (Challengers) reach top 4 at ${major.name}`, season, "major",
+          `${cName} (Open Circuit) reach top 4 at ${major.name}`, season, "major",
           {
             title:      `${cName} make top 4 at ${major.name}`,
-            body:       `Challenger squad ${cName} upset CDL pros.`,
+            body:       `Amateur squad ${cName} upset CDL pros.`,
             importance: "high",
           }
         ));
@@ -194,7 +194,7 @@ export function generateChallengerQualFeed(newState, majorIdx) {
     `${w.teamName} win the Qualifier for ${majorName}`, season, "challengerQualifier",
     {
       title:      `${w.teamName} earn a Major spot`,
-      body:       `${w.teamName} top the Challenger Qualifier for ${majorName}.`,
+      body:       `${w.teamName} top the Open Qualifier for ${majorName}.`,
       importance: "high",
     }
   ));
@@ -293,11 +293,11 @@ export function generateOffseasonFeed(prevRetiredLen, prevFreeIds, newState, sea
   const lastLog = newState.challengersLog?.slice(-1)[0];
   if ((lastLog?.annualIntake ?? 0) > 0) {
     items.push(makeItem("prospect_class",
-      `Season ${newState.season} draft class: ${lastLog.annualIntake} new challengers`,
+      `Season ${newState.season} draft class: ${lastLog.annualIntake} new prospects`,
       season, "offseason",
       {
         title: `Season ${newState.season} draft class arrives`,
-        body:  `${lastLog.annualIntake} new challengers enter the pool.`,
+        body:  `${lastLog.annualIntake} new prospects enter the amateur pool.`,
       }
     ));
   }

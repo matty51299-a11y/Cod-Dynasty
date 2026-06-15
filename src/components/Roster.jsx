@@ -53,7 +53,7 @@ export default function Roster({ setScreen }) {
     : players.filter(p => p.teamId === selectedTeam);
 
   const team = userChallengerTab
-    ? { name: challengerTeam?.name ?? "Your Challenger Team", color: challengerTeam?.color, tag: challengerTeam?.tag }
+    ? { name: challengerTeam?.name ?? "Your Open Circuit Team", color: challengerTeam?.color, tag: challengerTeam?.tag }
     : CDL_TEAMS.find(t => t.id === selectedTeam);
 
   const starters = sortByOverallDesc(myPlayers.filter(p => !p.isSub));
@@ -202,10 +202,10 @@ export default function Roster({ setScreen }) {
       </div>
 
       <PageHeader
-        eyebrow={userChallengerTab ? "Challenger Squad" : "Squad Management"}
+        eyebrow={userChallengerTab ? "Open Circuit Squad" : "Squad Management"}
         title={team?.name}
         subtitle={userChallengerTab
-          ? "Manage your Challenger roster. Sign players from the Market; releasing below 4 blocks match play."
+          ? "Manage your Open Circuit roster. Sign players from the Market; releasing below 4 blocks match play."
           : "Manage the active Starting 4 separately from substitutes. Matchday uses the selected starters."}
         accent={team?.color}
         action={userChallengerTab && setScreen ? <button className="btn-cta" onClick={() => setScreen("prospects")}>Open Market ›</button> : canManageCdlSlots ? <button className="btn-cta" onClick={() => { dispatch({ type: "AUTO_PICK_BEST_STARTERS" }); clearSwapState(); }}>Auto Pick Best 4</button> : null}
@@ -237,7 +237,7 @@ export default function Roster({ setScreen }) {
 
       {myPlayers.length === 0 ? (
         <SectionCard title="Roster" subtitle="No active players are assigned to this team.">
-          <EmptyState title="No players on this roster" detail={userChallengerTab ? "Use the Market to add players." : "Use Free Agency or Challengers to add players."} />
+          <EmptyState title="No players on this roster" detail={userChallengerTab ? "Use the Market to add players." : "Use Free Agency or the Amateur Pool to add players."} />
         </SectionCard>
       ) : (
         <>

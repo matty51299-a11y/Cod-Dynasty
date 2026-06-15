@@ -59,22 +59,22 @@ function ChallengerTransferCentre() {
   const offerByPlayer = new Set(pending.map(o => o.playerId));
 
   const TABS = [
-    ["interest", `CDL Interest (${pending.length})`],
-    ["squad", "My Challenger Squad"],
+    ["interest", `Pro Interest (${pending.length})`],
+    ["squad", "My Open Circuit Squad"],
   ];
 
   return (
     <div className="transfer-centre">
       <PageHeader
-        eyebrow="Recruitment — Road to CDL"
+        eyebrow="Recruitment — Road to Pro Circuit"
         title="Transfer Centre"
-        subtitle="CDL teams buy out your best Challenger talent. Sell for transfer income, or hold on and keep developing. Develop players, but bigger teams will come calling."
+        subtitle="Pro teams buy out your best talent. Sell for transfer income, or hold on and keep developing."
         accent={team?.color}
         meta={(
           <div className="ui-stat-grid compact">
             <StatCard label="Transfer Funds" value={k(state.challengerFunds)} tone={state.challengerFunds ? "success" : "neutral"} />
             <StatCard label="Open Offers" value={pending.length} tone={pending.length ? "warning" : "neutral"} />
-            <StatCard label="Window" value={windowOpen ? "Open" : "Closed"} tone={windowOpen ? "success" : "warning"} hint={windowOpen ? "CDL teams can make offers" : "Closed during live events"} />
+            <StatCard label="Window" value={windowOpen ? "Open" : "Closed"} tone={windowOpen ? "success" : "warning"} hint={windowOpen ? "Pro teams can make offers" : "Closed during live events"} />
           </div>
         )}
       />
@@ -84,12 +84,12 @@ function ChallengerTransferCentre() {
       </div>
 
       {tab === "interest" && (
-        <SectionCard title="CDL Interest" subtitle="Buyout offers from CDL teams for your players. Accept for transfer income, or reject to keep developing them.">
+        <SectionCard title="Pro Interest" subtitle="Buyout offers from pro teams for your players. Accept for transfer income, or reject to keep developing them.">
           {pending.length === 0 ? (
-            <EmptyState title="No live offers" detail="Transfer activity will appear here when CDL teams make offers for your players. Strong qualifier and Major runs attract more interest." />
+            <EmptyState title="No live offers" detail="Transfer activity will appear here when pro teams make offers for your players. Strong qualifier and Major runs attract more interest." />
           ) : (
             <div className="ui-table-wrap"><table className="roster-table data-table">
-              <thead><tr><th>CDL Team</th><th>Player</th><th>Buyout Fee</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Pro Team</th><th>Player</th><th>Buyout Fee</th><th>Actions</th></tr></thead>
               <tbody>
                 {pending.map(o => {
                   const buyer = CDL_TEAMS.find(t => t.id === o.fromCdlTeamId);
@@ -120,9 +120,9 @@ function ChallengerTransferCentre() {
       )}
 
       {tab === "squad" && (
-        <SectionCard title="My Challenger Squad" subtitle="Your developing roster. Buyout risk rises as players improve — a sale brings transfer income but opens a roster hole to fill.">
+        <SectionCard title="My Open Circuit Squad" subtitle="Your developing roster. Buyout risk rises as players improve — a sale brings transfer income but opens a roster hole to fill.">
           {roster.length === 0 ? (
-            <EmptyState title="No players signed" detail="Sign players from the Market screen to build your Challenger roster." />
+            <EmptyState title="No players signed" detail="Sign players from the Amateur Market to build your roster." />
           ) : (
             <div className="ui-table-wrap"><table className="roster-table data-table">
               <thead><tr><th>Player</th><th>Role</th><th>Age</th><th>OVR</th><th>POT</th><th>Development Value</th><th>Buyout Risk</th><th>CDL Interest</th></tr></thead>

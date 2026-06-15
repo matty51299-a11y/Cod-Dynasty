@@ -37,11 +37,11 @@ const TAB_KEYS = ["all", "veterans", "prospects", "proam", "shortlist"];
 
 function transactionLabel(type) {
   return {
-    CDL_RELEASE_TO_CHALLENGERS: "CDL release to Challengers",
-    CHALLENGER_TO_POOL: "Moved to Challengers pool",
-    CHALLENGER_REPLACED: "Challenger replacement",
-    CHALLENGER_REFILL: "Challenger roster fill",
-    CDL_SIGNING: "CDL signing",
+    CDL_RELEASE_TO_CHALLENGERS: "Released to Amateur Pool",
+    CHALLENGER_TO_POOL: "Moved to Amateur Pool",
+    CHALLENGER_REPLACED: "Open Circuit replacement",
+    CHALLENGER_REFILL: "Open Circuit roster fill",
+    CDL_SIGNING: "Pro signing",
     INACTIVE: "Inactive",
     RETIREMENT: "Retirement",
   }[type] || String(type || "Move").replaceAll("_", " ").toLowerCase().replace(/^./, c => c.toUpperCase());
@@ -52,7 +52,7 @@ function challengerStockLabel(p) {
   const pot = p.potential ?? p.scoutedPotential ?? ovr;
   if ((p.ego ?? 50) >= 80 && (p.composure ?? 70) <= 60) return "High Risk";
   if (ovr >= 80 && pot >= 88) return "Blue Chip";
-  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "CDL Ready";
+  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "Pro Ready";
   if (p.age >= 28 && !p.teamId) return "Veteran";
   if ((p.form ?? 0) >= 2) return "Rising";
   if ((p.form ?? 0) <= -2) return "Falling";
@@ -148,10 +148,10 @@ export default function Prospects() {
   return (
     <div className="prospects-page">
       <PageHeader
-        eyebrow={challengerMode ? "Challenger Market — Road to CDL" : "Challengers Circuit"}
+        eyebrow={challengerMode ? "Amateur Market — Road to Pro Circuit" : "Open Circuit"}
         title={challengerMode ? "Recruitment Market" : "Scouting & Pro-Am Market"}
         subtitle={challengerMode
-          ? "Sign affordable talent, hidden gems and players with a route back to CDL. Replace players poached by CDL teams and build toward Pro-Am Majors."
+          ? "Sign affordable talent, hidden gems and players with a route to the Pro Circuit. Replace players poached by pro teams and build toward Pro-Am Majors."
           : "Track challenger teams, qualifier history, latest moves and available player pool."}
         meta={(
           <div className="ui-stat-grid compact">
@@ -165,7 +165,7 @@ export default function Prospects() {
       <div className="cm-hero ui-budget-panel">
         <div className="cm-chip-row">
           <Pill>Available <strong>{available.length}</strong></Pill>
-          <Pill>CDL Veterans <strong>{stats.vets}</strong></Pill>
+          <Pill>Pro Veterans <strong>{stats.vets}</strong></Pill>
           <Pill>Prospects <strong>{stats.prospectsCount}</strong></Pill>
           <Pill tone="success">Pro-Am Eligible <strong>{stats.proAmEligible}</strong></Pill>
           {challengerMode
@@ -176,7 +176,7 @@ export default function Prospects() {
           <div className="cm-chip-row">
             {stats.top && <Pill tone="accent">Top Available <button className="link-button player-link" onClick={() => openPlayerProfile(stats.top)}>{stats.top.name}</button></Pill>}
             {stats.topPot && <Pill tone="gold">Highest Potential <button className="link-button player-link" onClick={() => openPlayerProfile(stats.topPot)}>{stats.topPot.name}</button></Pill>}
-            <Pill>Sign players who will play Challengers and have a route back to CDL</Pill>
+            <Pill>Sign players who will compete in the Open Circuit and have a route to the Pro Circuit</Pill>
           </div>
         ) : (<>
         <div className="cm-chip-row">
@@ -193,7 +193,7 @@ export default function Prospects() {
         ⚠ Ratings shown are <em>scouted estimates</em> – true values revealed on signing.
       </p>
       {!!challengerTeams?.length && (
-        <SectionCard title="Challenger Teams" subtitle="Circuit organizations, active rosters, form and latest qualifier placement.">
+        <SectionCard title="Open Circuit Teams" subtitle="Circuit organizations, active rosters, form and latest qualifier placement.">
           <div className="ui-table-wrap"><table className="roster-table data-table">
             <thead><tr><th>Team</th><th>Region</th><th>OVR</th><th>Roster</th><th>Circuit</th><th>Form</th><th>Last Qual</th></tr></thead>
             <tbody>{challengerTeams.map(t => {
@@ -204,7 +204,7 @@ export default function Prospects() {
           </table></div>
         </SectionCard>
       )}
-      <SectionCard title="Challenger Qualifier" subtitle="Recent qualifier placements, circuit points and qualification status.">
+      <SectionCard title="Open Qualifier" subtitle="Recent qualifier placements, circuit points and qualification status.">
         <h4 style={{ marginBottom: 8 }}>Latest Qualifier Results</h4>
         {!latestQualifier ? (
           <EmptyState title="No qualifier played yet" detail="Qualifier results will appear here after the circuit event runs." />
@@ -240,8 +240,8 @@ export default function Prospects() {
           </details>;
         })}
       </SectionCard>
-      <SectionCard title="Latest Moves" subtitle="Recent CDL releases, signings and challenger-pool changes.">
-        {!(challengerTransactions || []).length ? <EmptyState title="No recent challenger/CDL moves yet" /> : (
+      <SectionCard title="Latest Moves" subtitle="Recent pro releases, signings and amateur pool changes.">
+        {!(challengerTransactions || []).length ? <EmptyState title="No recent moves yet" /> : (
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {(challengerTransactions || []).slice(-10).reverse().map((tx, i) => (
               <li key={`${tx.playerId}_${tx.season}_${i}`} style={{ marginBottom: 4 }}>
@@ -252,7 +252,7 @@ export default function Prospects() {
         )}
       </SectionCard>
       <div className="cm-tabs ui-tabs">
-        {TAB_KEYS.map(k => <button key={k} className={`filter-btn ${tab===k?"active":""}`} onClick={()=>setTab(k)}>{k==="all"?"All Players":k==="veterans"?"CDL Veterans":k==="prospects"?"Prospects":k==="proam"?"Pro-Am Eligible":"Shortlist"}</button>)}
+        {TAB_KEYS.map(k => <button key={k} className={`filter-btn ${tab===k?"active":""}`} onClick={()=>setTab(k)}>{k==="all"?"All Players":k==="veterans"?"Pro Veterans":k==="prospects"?"Prospects":k==="proam"?"Pro-Am Eligible":"Shortlist"}</button>)}
       </div>
 
       <div className="filters">

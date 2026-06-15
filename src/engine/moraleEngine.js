@@ -258,7 +258,7 @@ export const CONCERNS = {
   WANTS_CONTRACT:    { key: "wants_contract",    label: "Wants new contract" },
   EXPIRING:          { key: "expiring",          label: "Concerned about expiring deal" },
   LOW_OFFER:         { key: "low_offer",         label: "Unhappy with low offer" },
-  WANTS_CDL_MOVE:    { key: "wants_cdl_move",    label: "Wants CDL move" },
+  WANTS_CDL_MOVE:    { key: "wants_cdl_move",    label: "Wants pro move" },
   WANTS_MOVE:        { key: "wants_move",        label: "Interested in transfer" },
   BLOCKED_MOVE:      { key: "blocked_move",      label: "Angry at blocked move" },
   LOSING:            { key: "losing",            label: "Frustrated by losing" },
@@ -806,7 +806,7 @@ function topicTitle(topic) {
     ambition: "Team direction",
     poor_form: "Backing after poor form",
     broken_promise: "A broken promise",
-    cdl_move: "A CDL opportunity",
+    cdl_move: "A pro opportunity",
     development: "His development plan",
     general: "His squad status",
   })[topic] || "Squad dynamics";
@@ -826,7 +826,7 @@ const TOPIC_QUOTES = {
     "I'm not asking for madness. I just want something fair.",
   ],
   transfer: [
-    "A CDL team came in. I want to hear them out.",
+    "A pro team came in. I want to hear them out.",
     "I don't want my buyout blocking every opportunity.",
     "If a contender calls, I need you to be realistic.",
     "You said you'd consider serious offers. That one was serious.",
@@ -850,9 +850,9 @@ const TOPIC_QUOTES = {
     "I'm not interested in another promise if the last one didn't mean anything.",
   ],
   cdl_move: [
-    "I want the CDL shot. That's why I'm here.",
+    "I want the pro shot. That's why I'm here.",
     "I'm not trying to disrespect the team, but I've earned a look.",
-    "If you block every CDL offer, what's the point?",
+    "If you block every pro offer, what's the point?",
     "I'll give everything while I'm here, but I need a route up.",
   ],
   development: [
@@ -908,10 +908,10 @@ function optionsForTopic(topic, player) {
       { id: "reset", label: "Offer a clean slate after the next Major", promise: "development_focus", hint: "Lower-risk promise; may not satisfy stars." },
     ],
     cdl_move: [
-      { id: "promise_consider", label: "Promise to consider fair CDL offers", promise: "consider_offers", hint: "Morale boost, increases move risk." },
-      { id: "route_up", label: "Lay out a route to a CDL shot", promise: "development_focus", hint: "Good for prospects if you keep developing him." },
+      { id: "promise_consider", label: "Promise to consider fair pro offers", promise: "consider_offers", hint: "Morale boost, increases move risk." },
+      { id: "route_up", label: "Lay out a route to a pro shot", promise: "development_focus", hint: "Good for prospects if you keep developing him." },
       { id: "promise_build", label: "Promise to build around him here", promise: "build_around", hint: "High-stakes retention promise." },
-      { id: "block", label: "Say the team comes first", morale: { delta: -5, label: "CDL route blocked", trustDelta: -3 }, concern: "blocked_move", hint: "Can make him feel trapped." },
+      { id: "block", label: "Say the team comes first", morale: { delta: -5, label: "Pro route blocked", trustDelta: -3 }, concern: "blocked_move", hint: "Can make him feel trapped." },
     ],
     development: [
       { id: "promise_dev", label: "Promise a development focus", promise: "development_focus", hint: "Low promise risk, clear pathway." },
@@ -1094,7 +1094,7 @@ const HUB_TOPIC_DEFS = [
   { id: "future", category: "Future & Contracts", label: "Discuss future plans", question: "Where do you want your career to go from here?" },
   { id: "transfer", category: "Transfers", label: "Discuss transfer interest", question: "Have you been thinking about interest from other teams?", needs: "transfer" },
   { id: "buyout", category: "Transfers", label: "Discuss buyout / asking price", question: "Do you feel your buyout or asking price is fair?", needs: "transfer" },
-  { id: "cdl_move", category: "Transfers", label: "Discuss CDL move", question: "Would you want to hear about a CDL opportunity?", needs: "cdl" },
+  { id: "cdl_move", category: "Transfers", label: "Discuss pro move", question: "Would you want to hear about a pro opportunity?", needs: "cdl" },
   { id: "ambition", category: "Team Direction", label: "Ask about team direction", question: "What do you think about the direction of the team?" },
   { id: "roster_strength", category: "Team Direction", label: "Ask about roster strength", question: "Do you think this roster is strong enough?" },
   { id: "staff", category: "Team Direction", label: "Ask about staff/coaching", question: "Are you getting what you need from the staff?" },
@@ -1126,7 +1126,7 @@ export function buildConversationContext(state, player, event = null) {
   const challenger = isChallengerMode(state) || !!player?.challengerTeamId;
   const form = playerFormState(state, player);
   const contractYears = player?.contractYears ?? null;
-  const stance = entry.concerns?.some(c => c.key === "wants_cdl_move") ? "Wants CDL move"
+  const stance = entry.concerns?.some(c => c.key === "wants_cdl_move") ? "Wants pro move"
     : entry.concerns?.some(c => c.key === "blocked_move" || c.key === "wants_move") ? "Open to move"
     : entry.concerns?.some(c => c.key === "wants_contract" || c.key === "expiring") ? "Contract concern"
     : entry.concerns?.some(c => c.key === "wants_start" || c.key === "benched") ? "Wants more maps"

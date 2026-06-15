@@ -13,6 +13,12 @@ check("Ghosts roster size is 4", ghosts.rosterSize === 4, String(ghosts.rosterSi
 check("Ghosts modes are Domination, Search and Destroy and Blitz", ["Domination", "Search and Destroy", "Blitz"].every(mode => ghosts.modes.includes(mode)), ghosts.modes.join(", "));
 check("Ghosts modes exclude Hardpoint", !ghosts.modes.includes("Hardpoint"), ghosts.modes.join(", "));
 
+// Ghosts → AW transition checks
+const aw = getEra("advanced_warfare");
+check("Ghosts nextEraId points to advanced_warfare", ghosts.nextEraId === "advanced_warfare");
+check("AW era is accessible from Ghosts", !!aw && aw.id === "advanced_warfare");
+check("AW is a jetpack era", aw.movementStyle === "jetpack");
+
 if (failures.length) {
   console.error(`Ghosts era diagnostic FAILED with ${failures.length} problem(s).`);
   process.exit(1);

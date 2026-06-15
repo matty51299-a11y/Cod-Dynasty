@@ -30,7 +30,7 @@ function stockLabel(player) {
   const pot = player?.potential ?? player?.scoutedPotential ?? ovr;
   if (!player) return null;
   if (ovr >= 80 && pot >= 88) return "Blue Chip";
-  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "CDL Ready";
+  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "Pro Ready";
   if (player.isProspect) return "Prospect";
   if (!player.teamId) return "Free Agent";
   return null;

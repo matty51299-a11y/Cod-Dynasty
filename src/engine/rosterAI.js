@@ -791,9 +791,9 @@ export function getChallengerStockLabel(candidate, gameState = null) {
   if ((candidate.ego ?? 50) >= 80 && (candidate.composure ?? 70) <= 60) return "High Risk";
   if ((performance?.majorMaps ?? 0) >= 6 && ((performance?.majorKd ?? 1) >= 1.08 || (performance?.cdlSeriesWins ?? 0) > 0)) return "Pro-Am Standout";
   if (showcase && (showcase.kd ?? 0) >= 1.12) return "Pro-Am Standout";
-  if ((performance?.score ?? 0) >= 32 && (performance?.qualifiedMajors ?? 0) >= 1) return "CDL Ready";
+  if ((performance?.score ?? 0) >= 32 && (performance?.qualifiedMajors ?? 0) >= 1) return "Pro Ready";
   if (ovr >= 80 && pot >= 88) return "Blue Chip";
-  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "CDL Ready";
+  if (ovr >= 78 || (ovr >= 75 && pot >= 86)) return "Pro Ready";
   if (age >= 28 && !candidate.teamId) return "Veteran";
   if (form >= 2 || (candidate.lastQualifierPlacement ?? 99) <= 4 || (performance?.bestQualifierPlacement ?? 99) <= 4) return "Rising";
   if (form <= -2 || (performance?.score ?? 0) <= -10) return "Falling";
@@ -820,7 +820,7 @@ function scoreChallengerPickupCandidate(candidate, teamPlayers, evaluation, need
   score += performance.score;
   if ((performance.qualifierMaps + performance.majorMaps) < 3 && performance.qualifierAppearances === 0) score -= 5;
   if (performance.qualifiedMajors === 0 && performance.qualifierAppearances > 0) score -= 4;
-  score += stock === "Blue Chip" ? 8 : stock === "CDL Ready" ? 7 : stock === "Pro-Am Standout" ? 9 : stock === "Falling" ? -5 : 0;
+  score += stock === "Blue Chip" ? 8 : stock === "Pro Ready" ? 7 : stock === "Pro-Am Standout" ? 9 : stock === "Falling" ? -5 : 0;
   score += evaluation.standingRank >= 9 ? 6 : evaluation.standingRank <= 3 ? -6 : 0;
   return score;
 }

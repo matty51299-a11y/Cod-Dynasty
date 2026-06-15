@@ -134,7 +134,7 @@ export default function PoolHealth({ prospects, challengersLog }) {
               {/* ── 4. Top 20 unsigned challengers ───────────────────── */}
               <div style={{ marginBottom: "16px", borderBottom: "1px solid #222", paddingBottom: "14px" }}>
                 <div style={{ color: "#888", fontSize: "0.72rem", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Top 20 unsigned challengers
+                  Top 20 unsigned amateur players
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem" }}>
                   <thead>
@@ -164,7 +164,7 @@ export default function PoolHealth({ prospects, challengersLog }) {
               </div>
             </>
           ) : (
-            <p style={{ color: "#ef5350", margin: "8px 0" }}>No unsigned challengers in pool.</p>
+            <p style={{ color: "#ef5350", margin: "8px 0" }}>No unsigned players in pool.</p>
           )}
 
           {/* ── 5. Season history ─────────────────────────────────────── */}

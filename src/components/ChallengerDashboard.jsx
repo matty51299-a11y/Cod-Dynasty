@@ -55,7 +55,7 @@ export default function ChallengerDashboard({ setScreen }) {
   // the Challenger user dead-ends at preChamps / offseason / contracts.
   const freeAgencyOpen = !!state.offseason?.freeAgencyOpen;
   const phaseAction =
-    phase === "preChamps" ? { label: "Begin Champs →", hint: "Start the CDL Championship.", type: "BEGIN_CHAMPS" }
+    phase === "preChamps" ? { label: "Begin Champs →", hint: "Start the Championship.", type: "BEGIN_CHAMPS" }
     : phase === "contracts" ? { label: "Open Free Agency →", hint: "Process expiring contracts; AI waits while you shop the market.", type: "ADVANCE_OFFSEASON" }
     : (phase === "offseason" && freeAgencyOpen) ? { label: `Run AI Free Agency → Season ${state.season + 1}`, hint: "Sign players first; AI bids after this click.", type: "ADVANCE_OFFSEASON" }
     : phase === "offseason" ? { label: "Review Contracts →", hint: "Advance the offseason before the market opens.", type: "ENTER_CONTRACT_PHASE" }
@@ -69,8 +69,8 @@ export default function ChallengerDashboard({ setScreen }) {
   // Route context.
   const stageName = schedule.stages?.[schedule.stageIdx ?? 0]?.name ?? "Stage";
   let nextEvent;
-  if (phase === "stage") nextEvent = `${stageName} in progress — Challenger Qualifier next`;
-  else if (phase === "challengerQualifier") nextEvent = qual?.eventType === "challengersFinals" ? "Challengers Finals — LIVE" : "Challenger Qualifier — LIVE";
+  if (phase === "stage") nextEvent = `${stageName} in progress — Open Qualifier next`;
+  else if (phase === "challengerQualifier") nextEvent = qual?.eventType === "challengersFinals" ? "Open Circuit Finals — LIVE" : "Open Qualifier — LIVE";
   else if (phase === "major") {
     const inMajor = schedule.majors?.[schedule.majorIdx ?? 0]?.bracket?.seeds?.includes(state.userTeamId);
     nextEvent = inMajor ? `${schedule.majors?.[schedule.majorIdx ?? 0]?.name ?? "Major"} — you qualified!` : `${schedule.majors?.[schedule.majorIdx ?? 0]?.name ?? "Major"} live (you did not qualify)`;
@@ -96,8 +96,8 @@ export default function ChallengerDashboard({ setScreen }) {
   return (
     <div className="standings-page">
       <PageHeader
-        eyebrow={`Challenger Circuit · ${meta?.region ?? "NA"} · ${TIER_LABEL[tier] ?? tier}`}
-        title={meta?.name ?? "Your Challenger Team"}
+        eyebrow={`Open Circuit · ${meta?.region ?? "NA"} · ${TIER_LABEL[tier] ?? tier}`}
+        title={meta?.name ?? "Your Open Circuit Team"}
         subtitle={nextEvent}
         accent={meta?.color}
         meta={(
@@ -122,17 +122,17 @@ export default function ChallengerDashboard({ setScreen }) {
       )}
 
       {(phase === "offseason" || phase === "contracts") && (
-        <SectionCard title="Offseason — Challenger Review" subtitle="Season recap and priorities for your Road to CDL.">
+        <SectionCard title="Offseason — Open Circuit Review" subtitle="Season recap and priorities for your Road to the Pro Circuit.">
           <div className="ui-stat-grid compact">
             <StatCard label="Circuit Finish" value={`${rank}/${total}`} hint={`${team?.circuitPoints ?? 0} pts`} />
             <StatCard label="Majors Qualified" value={(team?.qualifiedMajorIdxs || []).length} />
-            <StatCard label="Players Sold to CDL" value={(state.challengerOffers || []).filter(o => o.status === "accepted").length} />
+            <StatCard label="Players Sold to Pro" value={(state.challengerOffers || []).filter(o => o.status === "accepted").length} />
             <StatCard label="Transfer Funds" value={k(state.challengerFunds)} tone={state.challengerFunds ? "success" : "neutral"} />
           </div>
           <p className="muted" style={{ marginTop: 10 }}>
             {phase === "contracts"
-              ? "Your Challenger contracts have been reviewed. Focus now shifts to recruitment, development and protecting key players from CDL interest — open free agency to add talent before the new season."
-              : "Season complete. Priorities: replace any players bought out by CDL teams, develop your prospects toward CDL readiness, and build circuit points for better qualifier seeding."}
+              ? "Your contracts have been reviewed. Focus now shifts to recruitment, development and protecting key players from pro team interest — open free agency to add talent before the new season."
+              : "Season complete. Priorities: replace any players bought out by pro teams, develop your prospects toward Pro Circuit readiness, and build circuit points for better qualifier seeding."}
           </p>
         </SectionCard>
       )}
@@ -146,7 +146,7 @@ export default function ChallengerDashboard({ setScreen }) {
 
       {/* CDL buyout offers — the core Challenger pressure. */}
       {offers.length > 0 && (
-        <SectionCard title="CDL Buyout Offers" subtitle="Bigger teams want your players. Sell for transfer income, or hold on to develop them.">
+        <SectionCard title="Pro Buyout Offers" subtitle="Bigger teams want your players. Sell for transfer income, or hold on to develop them.">
           <div className="cd-offers">
             {offers.map(o => {
               const buyer = CDL_TEAMS.find(t => t.id === o.fromCdlTeamId);
@@ -188,7 +188,7 @@ export default function ChallengerDashboard({ setScreen }) {
           )}
         </SectionCard>
 
-        <SectionCard title="Owner Objectives" subtitle="Challenger-appropriate goals." action={<button className="link-button" onClick={() => setScreen?.("board")}>Board ›</button>}>
+        <SectionCard title="Owner Objectives" subtitle="Open Circuit goals." action={<button className="link-button" onClick={() => setScreen?.("board")}>Board ›</button>}>
           <div className="cd-board">
             <div className="cd-confidence">
               <span className="muted">Confidence</span>
@@ -251,7 +251,7 @@ export default function ChallengerDashboard({ setScreen }) {
           )}
         </SectionCard>
 
-        <SectionCard title="CDL League (compact)" subtitle="The CDL season runs in the background." action={<button className="link-button" onClick={() => setScreen?.("standings")}>Full ›</button>}>
+        <SectionCard title="Pro League (compact)" subtitle="The pro season runs in the background." action={<button className="link-button" onClick={() => setScreen?.("standings")}>Full ›</button>}>
           <table className="standings-table">
             <thead><tr><th>#</th><th>Team</th><th>Pts</th></tr></thead>
             <tbody>

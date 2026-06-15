@@ -24,7 +24,7 @@ export default function NextMatchControl({ onOpen }) {
       dispatch({ type: "SIM_STAGE" });
     }
     return (
-      <button className="nmc-btn" onClick={advance} title="Simulate the CDL stage and advance to your next Challenger Qualifier">
+      <button className="nmc-btn" onClick={advance} title="Simulate the pro stage and advance to your next Open Qualifier">
         <span className="nmc-play-label">Sim to Qualifier</span>
         <span className="nmc-arrow">▶</span>
       </button>

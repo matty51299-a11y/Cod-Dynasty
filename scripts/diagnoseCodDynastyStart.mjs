@@ -28,6 +28,14 @@ const ghosts = getEra("ghosts");
 check("Ghosts modes include Domination, Search and Destroy and Blitz", ["Domination", "Search and Destroy", "Blitz"].every(mode => ghosts.modes.includes(mode)), ghosts.modes.join(", "));
 check("Ghosts modes do not include Hardpoint", !ghosts.modes.includes("Hardpoint"), ghosts.modes.join(", "));
 
+// Additional Cod Dynasty checks
+const sidebar = readFileSync(new URL("../src/components/Sidebar.jsx", import.meta.url), "utf8");
+check("No Challengers nav item in sidebar", !sidebar.includes('label: "Challengers"'));
+
+const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+check("No Modern CDL option in app", !app.includes("Modern CDL"));
+check("No Manage Challenger Team in app", !app.includes("Manage Challenger Team"));
+
 if (failures.length) {
   console.error(`Cod Dynasty start diagnostic FAILED with ${failures.length} problem(s):`);
   for (const failure of failures) console.error(`- ${failure}`);

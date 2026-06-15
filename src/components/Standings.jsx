@@ -63,10 +63,10 @@ export default function Standings() {
     <div className="standings-page">
       <div className="standings-header-row">
         <div>
-          <h2>CDL League Standings – Season {state.season}</h2>
-          <p className="muted">Phase: {phaseLabel}{challengerMode ? " · CDL season runs in the background" : ""}</p>
+          <h2>Pro League Standings – Season {state.season}</h2>
+          <p className="muted">Phase: {phaseLabel}{challengerMode ? " · Pro season runs in the background" : ""}</p>
           {challengerMode && (
-            <button className="link-button" onClick={() => setView("circuit")}>‹ Back to Challenger Circuit</button>
+            <button className="link-button" onClick={() => setView("circuit")}>‹ Back to Open Circuit</button>
           )}
         </div>
         {isStagePhase && (
@@ -167,12 +167,12 @@ function ChallengerCircuit({ state, openTeamHub, onSwitch }) {
     <div className="standings-page">
       <div className="standings-header-row">
         <div>
-          <h2>Challenger Circuit Standings – Season {state.season}</h2>
-          <p className="muted">Ranked by circuit points. Top teams seed the qualifiers, Challengers Finals and ESWC.</p>
+          <h2>Open Circuit Standings – Season {state.season}</h2>
+          <p className="muted">Ranked by circuit points. Top teams seed the qualifiers, Open Circuit Finals and ESWC.</p>
         </div>
         <div className="standings-toggle">
           <button className="stg-toggle-btn active">Circuit</button>
-          <button className="stg-toggle-btn" onClick={onSwitch}>CDL League</button>
+          <button className="stg-toggle-btn" onClick={onSwitch}>Pro League</button>
         </div>
       </div>
 

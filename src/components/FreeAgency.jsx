@@ -79,7 +79,7 @@ export default function FreeAgency() {
     { id: "All", label: "All Free Agents" },
     { id: "Former User", label: "Former User Players" },
     { id: "Former AI", label: "Former AI Players" },
-    { id: "CDL Veterans", label: "CDL Veterans" },
+    { id: "CDL Veterans", label: "Pro Veterans" },
     { id: "Unsigned", label: "Unsigned" },
   ];
   const byMarket = freeAgents.filter(p => {
@@ -107,16 +107,16 @@ export default function FreeAgency() {
   return (
     <div className="fa-page">
       <PageHeader
-        eyebrow={challengerMode ? "Recruitment — Road to CDL" : "Recruitment"}
+        eyebrow={challengerMode ? "Recruitment — Road to Pro Circuit" : "Recruitment"}
         title="Free Agency"
         subtitle={challengerMode
-          ? "Recruit free agents to your Challenger roster — released CDL players willing to drop down, veterans, prospects and regional talent."
+          ? "Recruit free agents for your Open Circuit roster — released pros, veterans, prospects and regional talent."
           : "Open-market players, salary demands, role fit and roster-slot controls."}
         meta={challengerMode ? (
           <div className="ui-stat-grid compact">
             <StatCard label="Market" value={filtered.length} hint={`${marketCounts.total} total`} />
-            <StatCard label="Former CDL" value={marketCounts.veterans} />
-            <StatCard label="Challenger Roster" value={`${challengerStatus.count}/4`} tone={challengerStatus.valid ? "success" : "danger"} />
+            <StatCard label="Former Pro" value={marketCounts.veterans} />
+            <StatCard label="Open Circuit Roster" value={`${challengerStatus.count}/4`} tone={challengerStatus.valid ? "success" : "danger"} />
             <StatCard label="Transfer Funds" value={fmtMoney(state.challengerFunds || 0)} tone={state.challengerFunds ? "success" : "neutral"} />
           </div>
         ) : (
@@ -133,10 +133,10 @@ export default function FreeAgency() {
       {challengerMode ? (
         <div className="cm-hero ui-budget-panel">
           <div className="cm-chip-row">
-            <Pill>{marketCounts.veterans} former CDL</Pill>
+            <Pill>{marketCounts.veterans} former pro</Pill>
             <Pill>{marketCounts.formerAi} former AI</Pill>
             <Pill tone={challengerStatus.valid ? "success" : "danger"}>{challengerStatus.count}/4 signed</Pill>
-            <Pill>Sign players who will play Challengers and have a route back to CDL</Pill>
+            <Pill>Sign players for the Open Circuit with a route to the Pro Circuit</Pill>
           </div>
         </div>
       ) : (
@@ -145,7 +145,7 @@ export default function FreeAgency() {
           <Pill>Cap {fmtMoney(teamCap)}</Pill>
           <Pill>Committed {fmtMoney(committed)}</Pill>
           <Pill tone={remaining < 0 ? "danger" : "success"}>Remaining {fmtMoney(remaining)}</Pill>
-          <Pill>{marketCounts.veterans} former CDL</Pill>
+          <Pill>{marketCounts.veterans} former pro</Pill>
           <Pill>{marketCounts.formerAi} former AI</Pill>
           <Pill>{marketCounts.formerUser} former user</Pill>
         </div>

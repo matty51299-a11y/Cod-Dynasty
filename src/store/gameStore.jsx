@@ -656,8 +656,8 @@ export function __diagnoseReducer(state, action) {
           const winner = event.results?.find(r => r.placement === 1);
           const eswcTeams = (event.results || []).filter(r => r.qualified).sort((a, b) => a.placement - b.placement).map(r => r.teamName).join(", ");
           return pushFeed(newState, [
-            ...(winner ? [mkFeed("challengers_finals", `${winner.teamName} win Challengers Finals`, newState.season, "challengerQualifier")] : []),
-            ...(eswcTeams ? [mkFeed("eswc_field", `Challenger ESWC qualifiers: ${eswcTeams}`, newState.season, "challengerQualifier")] : []),
+            ...(winner ? [mkFeed("challengers_finals", `${winner.teamName} win Open Circuit Finals`, newState.season, "challengerQualifier")] : []),
+            ...(eswcTeams ? [mkFeed("eswc_field", `Open Circuit ESWC qualifiers: ${eswcTeams}`, newState.season, "challengerQualifier")] : []),
           ]);
         }
         return pushFeed(newState, generateChallengerQualFeed(newState, majorIdx));
@@ -695,8 +695,11 @@ export function __diagnoseReducer(state, action) {
     }
 
     // ── Offseason — retirements, prospect class, notable AI signings, roster moves ──
-    case "ACK_ERA_TRANSITION":
-      return { ...state, pendingEraTransition: null };
+    case "ACK_ERA_TRANSITION": {
+      const eraInbox = state.pendingEraTransition?.inboxEvents ?? [];
+      const updatedEvents = [...(state.events ?? []), ...eraInbox];
+      return { ...state, pendingEraTransition: null, events: updatedEvents };
+    }
 
     case "ADVANCE_OFFSEASON": {
       const blocked = blockIfUserOffseasonAdvanceInvalid(state);
@@ -846,7 +849,7 @@ export function __diagnoseReducer(state, action) {
           challengerTeams: (state.challengerTeams || []).map(t => t.id === fromChallengerTeamId ? { ...t, playerIds: (t.playerIds || []).filter(id => id !== signed.id) } : t),
           challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
             type: "CDL_SIGNING", playerId: signed.id, playerName: signed.name, fromTeamId: fromChallengerTeamId, toTeamId: userTeam,
-            note: `${tag} signed ${signed.name} from Challengers`,
+            note: `${tag} signed ${signed.name} from Amateur Pool`,
           }),
         }, signed);
         return pushFeed(
@@ -990,7 +993,7 @@ export function __diagnoseReducer(state, action) {
             prospects: releaseToRetire ? state.prospects : [...state.prospects, released],
             challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
               type: releaseToRetire ? "RETIREMENT" : "CDL_RELEASE_TO_CHALLENGERS", playerId: released.id, playerName: released.name, fromTeamId: player.teamId, toTeamId: null,
-              note: releaseToRetire ? `${released.name} retired after release` : `${released.name} moved to Challengers pool`,
+              note: releaseToRetire ? `${released.name} retired after release` : `${released.name} moved to Amateur Pool`,
             }),
           }, !player.isSub && player.teamId === state.userTeamId
             ? `${player.name} released. ${getRosterIncompleteMessage({ ...state, players: state.players.filter(p => p.id !== action.playerId) }) ?? ""}`.trim()
@@ -1011,7 +1014,7 @@ export function __diagnoseReducer(state, action) {
           challengerTransactions: pushChallengerTransaction(state.challengerTransactions, state, {
             type: txType,
             playerId: player.id, playerName: player.name, fromTeamId: player.teamId, toTeamId: null,
-            note: releaseToChallengers ? `${player.name} moved to Challengers pool` : `${player.name} retired after release`,
+            note: releaseToChallengers ? `${player.name} moved to Amateur Pool` : `${player.name} retired after release`,
           }),
         }, !player.isSub && player.teamId === state.userTeamId
           ? `${player.name} released. ${getRosterIncompleteMessage({ ...state, players: state.players.filter(p => p.id !== action.playerId) }) ?? ""}`.trim()
@@ -1108,7 +1111,7 @@ export function __diagnoseReducer(state, action) {
       const first = fresh[0];
       const firstBuyer = CDL_TEAMS.find(t => t.id === first.fromCdlTeamId);
       const inboxBuyouts = fresh.map(o => makeChallengerBuyoutEvent(o, next));
-      return addNotif(pushInboxEvents(pushFeed(next, feedItems), inboxBuyouts), `${firstBuyer?.name ?? "A CDL team"} have offered $${Math.round(first.fee / 1000)}k for ${first.playerName}.`);
+      return addNotif(pushInboxEvents(pushFeed(next, feedItems), inboxBuyouts), `${firstBuyer?.name ?? "A pro team"} have offered $${Math.round(first.fee / 1000)}k for ${first.playerName}.`);
     }
 
     // ── RESPOND TO A CDL BUYOUT OFFER (accept = sell for income / reject) ──────
@@ -1146,9 +1149,9 @@ export function __diagnoseReducer(state, action) {
       next.teamMapProfiles = ensureTeamMapProfiles(next, { force: true });
       const buyer = CDL_TEAMS.find(t => t.id === offer.fromCdlTeamId);
       const phase = state.schedule?.phase ?? "stage";
-      next = pushFeed(next, [mkFeed("transfer_done", `${buyer?.tag ?? offer.fromCdlTeamId} sign ${offer.playerName} from Challengers ($${Math.round(offer.fee / 1000)}k)`, state.season, phase)]);
+      next = pushFeed(next, [mkFeed("transfer_done", `${buyer?.tag ?? offer.fromCdlTeamId} sign ${offer.playerName} from Amateur Pool ($${Math.round(offer.fee / 1000)}k)`, state.season, phase)]);
       const warn = getRosterIncompleteMessage(next) ?? "";
-      return addNotif(next, `${offer.playerName} sold to ${buyer?.name ?? "a CDL team"} for $${Math.round(offer.fee / 1000)}k.${warn ? " " + warn : ""}`.trim());
+      return addNotif(next, `${offer.playerName} sold to ${buyer?.name ?? "a pro team"} for $${Math.round(offer.fee / 1000)}k.${warn ? " " + warn : ""}`.trim());
     }
 
     // ── SCOUT PLAYER (Prospect Scouting 2.0) ──────────────────────────────────

@@ -60,7 +60,7 @@ const TYPE_CATEGORY = {
 const PHASE_LABEL = {
   stage:                "Stage",
   major:                "Major",
-  challengerQualifier:  "Challenger Qualifier",
+  challengerQualifier:  "Open Qualifier",
   preChamps:            "Pre-Champs",
   offseason:            "Offseason",
   contracts:            "Contracts",
