@@ -440,7 +440,7 @@ export default function Dashboard({ setScreen }) {
           ))}
         </section>
 
-        <section className="fm-panel">
+        <section className="fm-panel fm-stats-panel">
           <PanelTitle title="Player Stats" />
           {playerStatsRows.map(row => (
             <div key={row.label} className="fm-player-stat-row">
@@ -450,7 +450,7 @@ export default function Dashboard({ setScreen }) {
           ))}
         </section>
 
-        <section className="fm-panel">
+        <section className="fm-panel fm-teamstats-panel">
           <PanelTitle title="Team Stats" />
           <div className="fm-team-stat-grid">
             <MiniMetric label="OVR" value={teamOvr} tone={ratingColor(teamOvr)} />
@@ -479,7 +479,7 @@ export default function Dashboard({ setScreen }) {
           })}
         </section>
 
-        <section className="fm-panel">
+        <section className="fm-panel fm-finance-panel">
           <PanelTitle title="Finance & Salary" />
           <div className="fm-finance-bars">
             <MiniMetric label="Cap" value={fmtMoney(teamCap)} />
@@ -490,12 +490,16 @@ export default function Dashboard({ setScreen }) {
           <div className="fm-cap-bar"><span style={{ width: `${Math.min(100, Math.max(0, Math.round((committed / teamCap) * 100)))}%` }} /></div>
         </section>
 
-        <section className="fm-panel">
-          <PanelTitle title="Manager Inbox" action={<button className="fm-panel-link" onClick={() => setScreen?.("inbox")}>Inbox ›</button>} />
-          <InboxWidget state={state} setScreen={setScreen} />
+        <section className="fm-panel fm-news-panel">
+          <PanelTitle title="Team News" action={<button className="fm-panel-link" onClick={() => setScreen?.("log")}>Log ›</button>} />
+          {feedTeaser.length ? feedTeaser.map(item => (
+            <div key={item.id} className="fm-news-row"><strong>{item.title || item.message}</strong><span>{item.body || `S${item.season} · ${item.phase}`}</span></div>
+          )) : latestMoves.length ? latestMoves.map((tx, i) => (
+            <div key={`${tx.playerId}_${i}`} className="fm-news-row"><strong>{readableMoveType(tx.type)}</strong><span>{tx.note || tx.playerName}</span></div>
+          )) : <CompactEmpty text="No team news yet." />}
         </section>
 
-        <section className="fm-panel">
+        <section className="fm-panel fm-dev-panel">
           <PanelTitle title="Development" />
           {biggestBreakout && <div className="fm-dev-row up"><span>Breakout</span><strong>{biggestBreakout.name}</strong><em>+{biggestBreakout.delta} OVR</em></div>}
           {biggestCollapse && <div className="fm-dev-row down"><span>Collapse</span><strong>{biggestCollapse.name}</strong><em>{biggestCollapse.delta} OVR</em></div>}
@@ -503,7 +507,7 @@ export default function Dashboard({ setScreen }) {
           {!biggestBreakout && !biggestCollapse && prospectsToWatch.length === 0 && <CompactEmpty text="No development headlines yet." />}
         </section>
 
-        <section className="fm-panel">
+        <section className="fm-panel fm-needs-panel">
           <PanelTitle title="Roster Needs" action={<button className="fm-panel-link" onClick={() => setScreen?.("roster")}>Roster ›</button>} />
           <div className="fm-squad-list">
             {starters.map(p => <div key={p.id}><button className="link-button player-link" onClick={() => openPlayerProfile(p)}>{p.name}</button><span>{p.primary}</span><strong>{p.overall}</strong></div>)}

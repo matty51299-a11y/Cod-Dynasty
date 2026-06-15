@@ -1061,101 +1061,145 @@ with 2–4 options. Options either make a promise or apply a direct morale nudge
 - Dynamics now surfaces conversation history count and stance/main-concern fallbacks; Player Profile morale details now include player stance, main concern, last talk, active promises, and still opens the same Conversation Hub.
 - Expanded `scripts/diagnosePlayerMorale.mjs` to cover the topic list, action-required topic routing, multi-topic meetings, response/outcome generation, no auto-close behavior, repeat-topic anti-farming, promise creation, conflict warnings, history recording, cooldowns, and old-save hydration.
 
-## Update 2026-06-15 (Inbox / Event Centre 2.0)
-- Upgraded the existing League Feed into an interactive Inbox / Event Centre that surfaces actionable events, decisions, warnings, reports and storylines as rich cards with action buttons. The old feed data is preserved and converted on load; no existing systems were changed.
+## Update 2026-06-14 (Vibrant esports UI visual revamp)
+Display-only visual system overhaul — no engine, store, data, gameplay, save,
+ratings, brackets, points, contracts, morale or logic changes. Only `src/index.css`
+and `progress.md` touched.
 
-### Data model (`state.eventCentre`)
-```js
-eventCentre: {
-  events: [{
-    id, type, category, severity, title, summary,
-    season, stage, phase, createdAt,
-    read, dismissed, actionRequired,
-    expiresAtStage, relatedPlayerId, relatedTeamId,
-    targetScreen, targetTab,
-    actions: ["review_offer", "open_player", "dismiss"],
-    dedupKey,
-  }],
-  nextId,
-}
-```
-Stored on the top-level game state. Old saves without `eventCentre` hydrate to an empty structure via `migrateEventCentre()`; existing feed items are converted to events on first load.
+### What changed
+- **Theme variables (`:root`)**: replaced the old light-green palette with a vibrant
+  dark esports system — deep navy-black base (`--bg #0a0e1a`), richer surfaces
+  (`--bg2/--bg3`, `--surface-1/2/elevated`, `--surface-glass`), brighter accents
+  (`--green`, `--red`, `--yellow`, `--info`), gradient wash tokens
+  (`--bg-grad-1/2/3`), colourful stat-tile tints (`--tile-blue/purple/teal/green/amber/red`),
+  and depth/glow shadows (`--shadow`, `--shadow-glow`). Existing var names kept so the
+  whole app cascades to the new theme; per-team `--user-accent*` / `--shell-*` tokens
+  from `teamTheme.js` are now fully leveraged.
+- **New "VIBRANT ESPORTS REVAMP" block appended at end of `index.css`** (wins by source
+  order over the older flat-grey "FM override" and "polish" passes). It contains the
+  central shared-class system:
+  - **Background**: `.app` + `.main-content` now layer blue/purple/teal radial gradients
+    (driven by team accent) + faint grid texture + deep navy base, visible around/behind cards.
+  - **Cards**: `.fm-panel`, `.card`, `.ui-section-card`, `.oh-card`, `.db-club-banner`,
+    `.cm-hero`, `.profile-stat`, `.th-panel`, `.nf-panel`, etc. converted from flat
+    `#202328` grey to glassy gradient surfaces with soft shadows, inner highlights,
+    coloured top-accent bars and accent-glow hover.
+  - **Hero**: `.fm-club-strip` (dashboard hero) rebuilt as a team-accent gradient command
+    bar with glow, vignette and stronger identity.
+  - **Stat tiles**: `.fm-mini-metric` glassy with accent edge; the four hero/dynamics tiles
+    get restrained blue/purple/teal/green colour washes (not just text colour). Finance
+    cap bar uses a green gradient fill.
+  - **Buttons**: `.btn-cta/.btn-primary/.nmo-play-btn/.mto-play-match-btn` are vivid
+    team-accent gradients with glow + lift on hover and clear disabled state; `.btn-accent`
+    green gradient; `.btn-secondary` designed glass.
+  - **Tables**: gradient header bars, zebra rows, accent hover, glowing team dots, and a
+    strong team-accent user-row highlight (`.fm-table-row.is-you`, `.user-row`).
+  - **Shell**: topbar + sidebar keep franchise colour but gain glass sheen, depth shadows
+    and an accent glow; active sidebar item is bolder.
+  - **Reusable tiers**: `.card-hero`, `.card-primary`, `.card-secondary` for future shared use.
 
-### Event categories (12)
-Action Required · Transfers · Morale · Board · Scouting · Contracts · Match Results · Tournament · Awards · Staff · League News · Rival Moves. Each category has an icon and is filterable in the Inbox UI.
-
-### Event severity (5 levels)
-info · low · medium · high · critical. Severity affects card styling, ordering, badge count display, and whether the event appears in the dashboard widget.
-
-### Action-required events
-Events with `actionRequired: true` appear at the top of the Inbox, are counted in the sidebar badge (with warning colour), and show in the Home dashboard widget. Currently generated for: incoming transfer offers, challenger buyout offers, contract review deadlines, morale meetings (wants out), board final warnings, offseason start.
-
-### Event card actions
-Each event can carry action buttons that route to the relevant screen/tab:
-- Transfer offer: Review Offer, View Player, Dismiss
-- Morale meeting: Talk Now, Open Dynamics, View Player, Delay, Dismiss
-- Board warning: View Board, Dismiss
-- Scout report: View Report, Shortlist, Dismiss
-- Contract review: Review Contracts, Dismiss
-- Major draw: View Bracket, Dismiss
-- Match result: View Details, Dismiss
-
-### Event generation triggers (reducer hooks)
-- `RUN_TRANSFER_WAVE`: incoming offer → action-required transfer event
-- `RESPOND_TRANSFER_OFFER` (accept): transfer-done event; (reject/nfs): blocked-move event
-- `GENERATE_CHALLENGER_OFFERS`: challenger buyout → action-required event
-- `RESPOND_CHALLENGER_OFFER` (reject): blocked-move event
-- `SCOUT_PLAYER` (deep, ≥50% confidence): scout report event
-- `ENTER_CONTRACT_PHASE`: contract review event (count of expiring players)
-- `ADVANCE_OFFSEASON`: board objective event + offseason start event
-- `ENTER_MAJOR`: major draw event
-- `SIM_MAJOR` / `SIM_NEXT_MAJOR_MATCH` / `SIM_MAJOR_ROUND` / `COMMIT_USER_MATCH_RESULT`: champion/eliminated events when a Major completes
-- `withMajorBoardNudge`: board warning when confidence drops below 40; confidence-up when recovering above 60
-
-### Deduplication
-Each event carries an optional `dedupKey`. Events with duplicate keys are silently blocked. Keys are scoped per offer/player/season/stage to prevent spam (e.g. one transfer offer event per offer, one board warning per stage, one morale meeting per player per stage).
-
-### Inbox screen (`src/components/Inbox.jsx`)
-Full-page three-column layout:
-- **Left**: view filters (All / Unread / Action Required) + category filters with counts
-- **Centre**: scrollable event card list, sorted by action-required → unread → severity → recency
-- **Right**: selected event detail panel with context, related player/team, Assistant GM recommendation text, and action buttons
-
-### Home dashboard widget
-Both CDL `Dashboard` and `ChallengerDashboard` show a "Manager Inbox" widget with:
-- Action-required count (⚡ badge)
-- Top 3-4 urgent events with severity-coloured borders and category icons
-- "Open Inbox ›" button
-
-### Sidebar
-- "Inbox" added as a full nav item (between Home and Standings)
-- Badge shows action-required count (with warning colour) or unread count
-- Old "Feed" button preserved as a slide-in overlay for backwards compatibility
-
-### Save compatibility
-- Missing `eventCentre` → empty structure on load; no crash
-- Old feed items converted to events on first load (one-time, preserves read status)
-- No changes to match sim, roster AI, contracts, budgets, free agency, awards, brackets, points, ratings, map/veto, profile history, save data, or logos
-
-### New files
-- `src/engine/eventCentreEngine.js` — pure functions: event creation, migration, dedup, sorting, category/severity helpers, feed conversion, 20+ event generators
-- `src/components/Inbox.jsx` — full-page Inbox / Event Centre screen
-- `scripts/diagnoseEventCentre.mjs` — 70 checks: hydration, push/dedup, mark read/dismiss, sorting, filtering, all event generators, feed conversion, old save safety, spam prevention, count helpers, constants, event cap
-
-### Modified files
-- `src/store/gameStore.jsx` — eventCentre state, migration in LOAD_GAME, pushInboxEvents helper, MARK_EVENT_READ/MARK_ALL_EVENTS_READ/DISMISS_EVENT actions, event generation in 10+ reducer actions
-- `src/components/Sidebar.jsx` — Inbox nav item with badge
-- `src/components/Dashboard.jsx` — InboxWidget replacing old Team News panel
-- `src/components/ChallengerDashboard.jsx` — ChallengerInboxWidget
-- `src/App.jsx` — Inbox screen route
-- `src/index.css` — Inbox page styles, dashboard widget styles, responsive breakpoints
-
-### Testing
-- `npm run build` ✓ · `diagnoseEventCentre` 70/70 ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseTransferMarket` 49/49 ✓ · `diagnosePlayerMorale` 55/55 ✓ · `diagnoseChallengerManagerMode` 33/33 ✓
+### Verified
+- `npm run build` ✓
+- Playwright screenshots of Home, Roster, Standings, Dynamics, Transfers, Board, Challengers
+  across three distinct team colours (Boston/OpTic green, Toronto purple, Vancouver cyan) —
+  all render with the new vibrant look, tables stay compact/readable, no broken styling.
 
 ### Known limitations
-- Morale meeting events are created for high-severity blocked moves and wants-out situations; routine morale conversations still use the existing AppMoralePrompt popup system and Dynamics page (not duplicated in inbox to avoid spam).
-- Event detail panel shows Assistant GM recommendation text as static flavour; recommendations do not yet compute dynamic advice based on player/team context.
-- Match results are not individually added to the inbox (they would be spam); the existing feed/Match Log covers match-level detail.
-- Event expiry (`expiresAtStage`) is stored but not yet enforced (expired events remain in the list rather than auto-dismissing).
-- Three-column layout collapses to two columns on narrow screens (filters hidden) and single column on mobile (detail panel hidden).
+- Dashboard's `ensureContrast()` (display JS) darkens team-colour text against a white
+  reference; on the dark Next-Match line this can read slightly muted (pre-existing, JS left
+  untouched to avoid gameplay-file changes).
+- A few deep overlay-scoped palettes (Major/Champs tournament overlays) keep their own
+  navy tokens by design and were intentionally not re-themed.
+
+
+## Update 2026-06-14 (FM-skin glass UI revamp — atmospheric scene + glass panels)
+Second, deeper visual pass on top of the vibrant-theme work. Display-only — no
+engine/store/data/save/gameplay changes. Touched only `src/index.css`,
+`src/components/Dashboard.jsx` (added semantic panel classNames — display only)
+and `progress.md`.
+
+### Goal
+Move from "dark dashboard of boxes" to a themed management-game skin (FM custom
+skin / sports-management UI feel): real background atmosphere, translucent glass
+panels, designed headers, module accents, premium shell.
+
+### Shared system rebuilt (appended "FM-SKIN GLASS REVAMP" block, wins by order)
+- **Atmospheric background**: `.app::before` (fixed) paints a layered scene —
+  team-accent + purple + teal light blooms, deep navy gradients and an "arena
+  floor" wash; `.app::after` (fixed) overlays an SVG fractal-noise texture, a
+  faint pitch grid and a vignette via `mix-blend-mode: soft-light`. `.main-content`
+  is now transparent so the scene shows through the glass.
+- **Glass panel system**: panels are translucent `rgba` surfaces with
+  `backdrop-filter: blur(16px) saturate`, corner module-bloom, inner highlights and
+  deep shadows — real glass over the scene instead of flat opaque boxes.
+- **Designed headers**: header band + accent underline + coloured chip before title.
+- **Module accent identities** (`--mod` per panel): Next/League = team accent,
+  Board = amber, Dynamics = blue-purple, Finance = teal, Stats = blue, Team Stats =
+  sky, News = violet, Dev = green, Roster Needs = pink, Results = orange.
+- **Hero / Level-A panels**: `.fm-club-strip`, `.ui-page-header`, `.cm-hero`,
+  `.db-club-banner`, `.oh-hero` rebuilt as team-accent gradient showpieces with
+  multi-bloom backgrounds, blur, accent border, corner glow orb and glow shadow.
+- **Stat tiles**: glassy with accent edge + per-position colour washes; teal->green
+  cap bar with glow.
+- **Buttons**: layered team-accent gradient primaries with sheen/glow/lift + pressed
+  + disabled states; green `.btn-accent`; glass secondaries.
+- **Tables**: accent header bands, zebra rows, accent hover, glowing team dots,
+  strong team-accent user-row — density kept.
+- **Premium shell**: translucent blurred team chrome (topbar + sidebar), sidebar
+  nav as glass pills with icon chips and a bright high-contrast active pill.
+- **Hierarchy helpers**: `.card-hero` / `.card-primary` / `.card-secondary`.
+
+### Verified
+- `npm run build` ok
+- Playwright screenshots of Home, Roster, Dynamics, Transfers, Board across Boston
+  (green) and Toronto (purple) — atmospheric scene + glass render, tables readable,
+  no broken styling, distinct per-team identity.
+
+### Notes / limitations
+- Uses `backdrop-filter` (already used elsewhere) and `color-mix()`. Atmosphere is
+  pure CSS (no binary assets added).
+- Major/Champs tournament overlays keep their own scoped palette by design.
+
+
+## Update 2026-06-14 (FM-skin glass v3 — dark-glass shell + translucent overlays)
+Third visual pass. Display-only; no engine/store/data/save/gameplay changes.
+Only `src/index.css` touched (replaced the v2 FM-SKIN GLASS block).
+
+### What changed vs v2
+- **Background scene more visible**: `.app::before` now adds stadium spotlights
+  (team-accent + purple + teal), two diagonal light beams and an arena-floor wash;
+  `.app::after` keeps SVG noise + a wider pitch grid + a stronger vignette. The
+  scene reads as a real backdrop behind the glass.
+- **Panels are true translucent overlays**: shared panel surfaces switched to
+  `--glass-bg: rgba(11,17,34,0.55)` + `backdrop-filter: blur(15px)` + hairline
+  `--glass-border`. The per-panel coloured top bar was **removed** (`::before {content:none}`),
+  so the dashboard no longer looks like a grid of bright-topped boxes. Secondary
+  modules (news/dev/fixtures/team-stats/roster-needs/results) use an even quieter
+  `--glass-bg-quiet` so they recede.
+- **Quiet FM-style headers**: header band + uppercase label + a single small module
+  chip (no full coloured bar).
+- **Dark-glass shell (not team-colour wallpaper)**: topbar + sidebar are now dark
+  translucent glass with `backdrop-filter`; team identity is an **accent** — a thin
+  glowing accent line under the topbar, an accent glow strip down the sidebar edge,
+  an accent-tinted team pill, and the active nav item as the one bright solid
+  team-accent element. Inactive nav items are transparent/quiet (no green blocks).
+- **Tables as data overlays**: transparent row backgrounds, hairline `--separator`
+  rows, soft accent hover + user-row, translucent header band.
+- **Hero**: translucent team-gradient overlay with soft glow + corner light orb,
+  not a solid block.
+- **New tokens** on `.app`: `--glass-bg`, `--glass-bg-strong`, `--glass-bg-quiet`,
+  `--glass-border`, `--glass-border-hi`, `--glass-blur`, `--separator`,
+  `--overlay-surface`, `--team-glow`, `--shell-glass`. Hard-coded opaque panel /
+  solid team-colour topbar+sidebar fills from earlier passes are overridden with
+  these glass tokens.
+
+### Verified
+- `npm run build` ok
+- Playwright: Home/Roster/Dynamics (Boston green) + Home/Transfers (Toronto purple)
+  — atmospheric scene visible, glass panels, dark-glass shell with accent, tables
+  readable.
+
+### Limitations
+- Relies on `backdrop-filter`; on browsers without it panels fall back to their
+  semi-opaque rgba (still readable, less blur).
+- Major/Champs overlays keep their own scoped palette by design.
