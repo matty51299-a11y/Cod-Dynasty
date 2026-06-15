@@ -50,6 +50,7 @@ import {
   makeAssistantGmRecommendation, makeRivalSigningEvent,
   generateMatchInboxEvents,
 } from "../engine/eventCentreEngine.js";
+import { createHistoricalStateFields, migrateHistoricalDynastyState, introduceHistoricalRookieClass } from "../engine/historicalDynasty.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
@@ -239,7 +240,7 @@ function cleanupDuplicateActiveAssignments(state) {
 // userTeamType: "cdl" (manage a CDL franchise) | "challenger" (manage a
 // Challenger team — a "Road to CDL" career). For challenger mode userTeamId is
 // a Challenger team id and is validated against the freshly-built rosters.
-function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride = null) {
+function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride = null, careerMode = "modern") {
   const challengerMode = userTeamType === "challenger";
   if (!challengerMode && !isValidTeamId(userTeamId)) return null;
   const players  = buildInitialRoster().map(applyChallengerRatingOverride);
@@ -293,12 +294,14 @@ function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride =
     challengerOffers: [],   // CDL buyout offers for the user's Challenger players
     challengerFunds: 0,     // transfer income earned selling Challenger players
     eventCentre: migrateEventCentre(null),
+    ...createHistoricalStateFields(careerMode),
   };
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
   // For Challenger mode, the chosen team id must resolve against the built teams.
   if (challengerMode && !(state.challengerTeams || []).some(team => team.id === userTeamId)) return null;
-  const finalState = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
+  let finalState = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(state), { windowType: "new_game" });
+  finalState = introduceHistoricalRookieClass(finalState, finalState.currentEraId);
   // Board objectives: CDL franchises use the Owner Expectations engine; Challenger
   // teams keep a neutral CDL boardState (unused) and read Challenger objectives live.
   finalState.boardState = challengerMode
@@ -426,7 +429,7 @@ export function __diagnoseReducer(state, action) {
       return null;
 
     case "NEW_GAME":
-      return createInitialGameState(action.teamId, action.teamType, action.seed);
+      return createInitialGameState(action.teamId, action.teamType, action.seed, action.careerMode);
 
     case "LOAD_GAME": {
       if (!action.state || !isValidGameState(action.state)) return null;
@@ -455,7 +458,8 @@ export function __diagnoseReducer(state, action) {
         currentMajorEventTeams: loaded.schedule?.currentMajorEventTeams ?? null,
       };
       ensureChallengerTeams(loaded);
-      const cleaned = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(loaded), { windowType: "load_migration" });
+      const loadedWithEra = migrateHistoricalDynastyState(loaded);
+      const cleaned = ensureCdlRosterIntegrity(cleanupDuplicateActiveAssignments(loadedWithEra), { windowType: "load_migration" });
       cleaned.challengerTransactions = cleaned.challengerTransactions ?? [];
       // Migrate staff: old saves without staff get the full starting pool
       cleaned.staff = ensureTeamStaff(migrateStaff(cleaned.staff));
@@ -687,6 +691,9 @@ export function __diagnoseReducer(state, action) {
     }
 
     // ── Offseason — retirements, prospect class, notable AI signings, roster moves ──
+    case "ACK_ERA_TRANSITION":
+      return { ...state, pendingEraTransition: null };
+
     case "ADVANCE_OFFSEASON": {
       const blocked = blockIfUserOffseasonAdvanceInvalid(state);
       if (blocked) return blocked;
@@ -699,7 +706,7 @@ export function __diagnoseReducer(state, action) {
       const season       = state.season; // outgoing season
 
       const advanced = advanceOffseason({ ...state });
-      const newState = { ...advanced, enteredMajorIdx: null, pendingBoardReview: null };
+      const newState = { ...migrateHistoricalDynastyState(advanced), enteredMajorIdx: null, pendingBoardReview: null };
       // New season → regenerate every team's map profile from the updated rosters.
       newState.teamMapProfiles = ensureTeamMapProfiles(newState, { force: true });
 
