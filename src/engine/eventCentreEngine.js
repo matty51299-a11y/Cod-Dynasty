@@ -755,7 +755,9 @@ export function makeMatchSummaryEvent(matchResult, userTeamId, state) {
     scoreA: isTeamA ? (m.scoreA ?? m.teamAScore) : (m.scoreB ?? m.teamBScore),
     scoreB: isTeamA ? (m.scoreB ?? m.teamBScore) : (m.scoreA ?? m.teamAScore),
   }));
-  const relatedMatchId = matchResult.id ?? matchResult.matchId ?? `${matchSeason}:${context}:${teamA}:${teamB}:${scoreA}:${scoreB}`;
+  const matchIndex = matchResult.matchIndex ?? matchResult.matchday ?? matchResult.logIndex ?? state.schedule?.matchLog?.findIndex?.(m => m === matchResult);
+  const stableMatchPart = matchResult.id ?? matchResult.matchId ?? `${userTeamId}:${oppId}:${Number.isFinite(matchIndex) && matchIndex >= 0 ? matchIndex : `${teamA}:${teamB}:${scoreA}:${scoreB}`}`;
+  const relatedMatchId = `${matchSeason}:${context}:${stableMatchPart}`;
 
   return makeEvent({
     type: "match_summary",
@@ -961,9 +963,43 @@ export function makeSeasonStartEvent(season, state) {
   });
 }
 
+
+export function makeMajorSummaryEvent({ majorName, majorNumber, championId, userPlacement, userRecord, userPoints, bestUserPlayer, mvpPlayer, nextPhaseMessage }, state) {
+  const champion = championId ? teamName(championId) : "TBD";
+  const userTag = teamTag(state.userTeamId);
+  const placeText = Number.isFinite(userPlacement) ? `${userTag} finish ${ordinal(userPlacement)}` : `${userTag} placement unavailable`;
+  const recordText = userRecord ? ` User record: ${userRecord}.` : "";
+  const pointsText = Number.isFinite(userPoints) ? ` Points gained: ${userPoints}.` : "";
+  const bestText = bestUserPlayer?.name ? ` Best ${userTag} player: ${bestUserPlayer.name}${Number.isFinite(Number(bestUserPlayer.kd)) ? ` (${Number(bestUserPlayer.kd).toFixed(2)} K/D)` : ""}.` : "";
+  const mvpText = mvpPlayer?.name ? ` Event standout: ${mvpPlayer.name}${Number.isFinite(Number(mvpPlayer.kd)) ? ` (${Number(mvpPlayer.kd).toFixed(2)} K/D)` : ""}.` : "";
+  return makeEvent({
+    type: "major_summary",
+    category: "Tournament",
+    severity: championId === state.userTeamId ? "high" : "medium",
+    title: `${majorName} Recap: ${champion} win the event`,
+    summary: `${majorName} is complete. Champion: ${champion}. ${placeText}.${recordText}${pointsText}${bestText}${mvpText}${nextPhaseMessage ? ` ${nextPhaseMessage}` : ""}`,
+    season: state.season,
+    stage: state.schedule?.stageIdx ?? 0,
+    phase: state.schedule?.phase ?? "major",
+    actionRequired: false,
+    relatedTeamId: state.userTeamId,
+    opponentTeamId: championId ?? null,
+    relatedPlayerId: bestUserPlayer?.playerId ?? mvpPlayer?.playerId ?? null,
+    targetScreen: "matchLog",
+    actions: ["view_bracket", "view_standings", "open_match_log"],
+    dedupKey: `major_summary:${state.season}:${majorNumber}`,
+  });
+}
+
+function ordinal(n) {
+  const v = Math.abs(Number(n));
+  const suffix = v % 100 >= 11 && v % 100 <= 13 ? "th" : (v % 10 === 1 ? "st" : v % 10 === 2 ? "nd" : v % 10 === 3 ? "rd" : "th");
+  return `${n}${suffix}`;
+}
+
 // ── Generate match inbox events (compare prev vs new state) ─────────────────
-export function generateMatchInboxEvents(prevState, newState) {
-  const prevLen = prevState?.schedule?.matchLog?.length ?? 0;
+export function generateMatchInboxEvents(prevState, newState, options = {}) {
+  const prevLen = options.prevLogLen ?? prevState?.schedule?.matchLog?.length ?? 0;
   const newLog = newState?.schedule?.matchLog ?? [];
   if (newLog.length <= prevLen) return [];
 

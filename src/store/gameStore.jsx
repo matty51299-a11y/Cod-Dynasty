@@ -44,7 +44,7 @@ import {
   makeBoardWarningEvent, makeBoardConfidenceUpEvent, makeBoardObjectiveEvent,
   makeScoutReportEvent, makeContractReviewEvent, makeFreeAgencyOpenEvent,
   makePlayerWantsOutEvent, makeBlockedMoveEvent, makeMajorDrawEvent,
-  makeTournamentChampionEvent, makeUserEliminatedEvent, makeAwardEvent,
+  makeTournamentChampionEvent, makeUserEliminatedEvent, makeMajorSummaryEvent, makeAwardEvent,
   makeUserAwardEvent, makeStageSimSummaryEvent, makeUserMatchResultEvent,
   makeOffseasonStartEvent, makeStandoutPerformanceEvent,
   makeAssistantGmRecommendation, makeRivalSigningEvent,
@@ -362,9 +362,9 @@ function withMajorMoraleNudge(beforeState, afterState, majorIdx) {
 }
 
 // ── Inbox events helper — generates tournament events when a Major completes ──
-function withMajorInboxEvents(beforeState, afterState, majorIdx) {
+function withMajorInboxEvents(beforeState, afterState, majorIdx, wasCompletedBefore = null) {
   if (majorIdx == null || !afterState) return afterState;
-  const wasCompleted = beforeState.schedule?.majors?.[majorIdx]?.completed ?? true;
+  const wasCompleted = wasCompletedBefore ?? (beforeState.schedule?.majors?.[majorIdx]?.completed ?? true);
   const nowCompleted = afterState.schedule?.majors?.[majorIdx]?.completed ?? false;
   if (wasCompleted || !nowCompleted) return afterState;
   const major = afterState.schedule?.majors?.[majorIdx];
@@ -382,11 +382,44 @@ function withMajorInboxEvents(beforeState, afterState, majorIdx) {
   if (userPlace != null && userPlace > 2 && champion !== afterState.userTeamId) {
     events.push(makeUserEliminatedEvent(eventName, afterState));
   }
-  return pushInboxEvents(afterState, events);
+  events.push(makeMajorSummaryEvent(buildMajorSummaryPayload(afterState, major, majorIdx, placement), afterState));
+  const withEvents = pushInboxEvents(afterState, events);
+  return events.some(e => e.type === "major_summary") ? addNotif(withEvents, "Major recap added to Inbox") : withEvents;
+}
+
+function buildMajorSummaryPayload(state, major, majorIdx, placement) {
+  const eventName = major.name ?? `Major ${majorIdx + 1}`;
+  const userTeamId = state.userTeamId;
+  const userMatches = (state.schedule?.matchLog || []).filter(m =>
+    (m.stage || "").startsWith(`${eventName} `) || (m.stage || "").startsWith(`${eventName} –`)
+  ).filter(m => m.teamAId === userTeamId || m.teamBId === userTeamId || m.teamA === userTeamId || m.teamB === userTeamId);
+  const wins = userMatches.filter(m => m.winnerId === userTeamId).length;
+  const losses = userMatches.filter(m => m.loserId === userTeamId).length;
+  const stats = [];
+  for (const match of userMatches) {
+    for (const [playerId, ps] of Object.entries(match.playerStats || {})) {
+      if (ps.teamId === userTeamId) stats.push({ playerId, name: ps.name, kd: ps.kd });
+    }
+  }
+  const bestUserPlayer = stats.length ? stats.reduce((a, b) => (Number(b.kd || 0) > Number(a.kd || 0) ? b : a), stats[0]) : null;
+  const mvpPlayer = userMatches.map(m => ({ playerId: m.standoutId, name: m.standoutName, kd: m.standoutKD })).filter(p => p.name)
+    .sort((a, b) => Number(b.kd || 0) - Number(a.kd || 0))[0] || null;
+  const majorNumber = majorIdx + 1;
+  return {
+    majorName: eventName,
+    majorNumber,
+    championId: major.bracket?.champion ?? null,
+    userPlacement: placement?.[userTeamId],
+    userRecord: userMatches.length ? `${wins}-${losses}` : null,
+    userPoints: null,
+    bestUserPlayer,
+    mvpPlayer,
+    nextPhaseMessage: majorIdx < 3 ? `Next up: Stage ${majorIdx + 2}.` : "Next up: the road to Champs continues.",
+  };
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
-function reducer(state, action) {
+export function __diagnoseReducer(state, action) {
   switch (action.type) {
 
     case "RESET_TO_TEAM_SELECT":
@@ -470,7 +503,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed, prevLogLen));
       });
     }
 
@@ -484,7 +517,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed, prevLogLen));
       });
     }
 
@@ -498,7 +531,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed, prevLogLen));
       });
     }
 
@@ -512,7 +545,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed, prevLogLen));
       });
     }
 
@@ -521,11 +554,12 @@ function reducer(state, action) {
       return runIfUserRosterValid(state, () => {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
+      const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const newState     = simMajor({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
       const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
-      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx));
+      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx, wasCompleted), prevLogLen);
       });
     }
 
@@ -533,11 +567,12 @@ function reducer(state, action) {
       return runIfUserRosterValid(state, () => {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
+      const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const newState     = simNextMajorMatch({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
       const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
-      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx));
+      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx, wasCompleted), prevLogLen);
       });
     }
 
@@ -545,11 +580,12 @@ function reducer(state, action) {
       return runIfUserRosterValid(state, () => {
       const majorIdx     = state.schedule?.majorIdx;
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
+      const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const newState     = simMajorRound({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
       const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
-      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx));
+      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx, wasCompleted), prevLogLen);
       });
     }
 
@@ -574,8 +610,8 @@ function reducer(state, action) {
       const result = pushFeed(newState, feedItems);
       const withBoard = withMajorBoardNudge(state, result, majorIdx);
       const withMorale = majorIdx != null ? withMajorMoraleNudge(state, withBoard, majorIdx) : withBoard;
-      const withInbox = majorIdx != null ? withMajorInboxEvents(state, withMorale, majorIdx) : withMorale;
-      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withInbox));
+      const withInbox = majorIdx != null ? withMajorInboxEvents(state, withMorale, majorIdx, wasCompleted) : withMorale;
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withInbox, prevLogLen));
       });
     }
 
@@ -1506,9 +1542,10 @@ function withMoraleInboxEvents(prevState, newState) {
   return pushInboxEvents(newState, events);
 }
 
-function withMatchInboxEvents(prevState, newState) {
-  const events = generateMatchInboxEvents(prevState, newState);
-  return pushInboxEvents(newState, events);
+function withMatchInboxEvents(prevState, newState, prevLogLen = null) {
+  const events = generateMatchInboxEvents(prevState, newState, prevLogLen == null ? {} : { prevLogLen });
+  const withEvents = pushInboxEvents(newState, events);
+  return events.some(e => e.type === "match_summary") ? addNotif(withEvents, "Match report added to Inbox") : withEvents;
 }
 
 // ── Reducer wrapper: track lastAction + validate post-state invariants ────────
@@ -1526,7 +1563,7 @@ const MAP_PROFILE_REFRESH_ACTIONS = new Set([
 function instrumentedReducer(prevState, action) {
   const phaseBefore = prevState?.schedule?.phase ?? null;
   const txBefore = prevState?.challengerTransactions?.length ?? 0;
-  let nextState = reducer(prevState, action);
+  let nextState = __diagnoseReducer(prevState, action);
   if (nextState && MAP_PROFILE_REFRESH_ACTIONS.has(action?.type) && nextState !== prevState) {
     nextState = { ...nextState, teamMapProfiles: ensureTeamMapProfiles(nextState, { force: true }) };
   }
