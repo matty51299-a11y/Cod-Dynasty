@@ -117,7 +117,7 @@ export default function App() {
       {/* ── Top bar ── */}
       <header className="topbar">
         <div className="topbar-left">
-          <span className="app-title">{challengerMode ? "COD DYNASTY — CHALLENGERS" : "COD DYNASTY"}</span>
+          <span className="app-title">COD DYNASTY</span>
           <span className="season-badge">S{state.season}</span>
           {team && (
             <span className="user-team-badge" style={{ color: "var(--shell-text)" }}>

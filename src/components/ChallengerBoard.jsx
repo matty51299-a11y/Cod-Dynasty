@@ -24,9 +24,9 @@ export default function ChallengerBoard() {
   return (
     <div className="standings-page">
       <PageHeader
-        eyebrow="Owner Objectives — Challenger Circuit"
+        eyebrow="Owner Objectives — Open Circuit"
         title={`${meta?.name ?? "Your team"} · ${TIER_LABEL[tier] ?? tier}`}
-        subtitle="Your owner judges you against Challenger expectations — qualifiers, Majors and circuit growth — not the CDL table."
+        subtitle="Your owner judges you against Open Circuit expectations — qualifiers, Majors and circuit growth — not the Pro Circuit table."
         accent={meta?.color}
         meta={(
           <div className="ui-stat-grid compact">

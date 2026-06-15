@@ -122,3 +122,96 @@ export function getGhostsTeamOvr(teamId) {
   if (!roster.length) return null;
   return Math.round(roster.reduce((sum, player) => sum + (player.overall || 0), 0) / roster.length);
 }
+
+export const AW_SPREADSHEET_SOURCE = "data/import/cod_manager_rosters_database.xlsx#Advanced Warfare";
+
+export const AW_TEAM_ROWS = [
+  { name: "OpTic Gaming", players: ["Scump", "FormaL", "Crimsix", "NaDeSHoT"] },
+  { name: "Denial Esports", players: ["ZooMaa", "Replays", "JKap", "Attach"] },
+  { name: "FaZe Clan", players: ["Slasher", "Enable", "Huke", "Apathy"] },
+  { name: "Team EnVyUs", players: ["NAMELESS", "Saints", "Loony", "MerK"] },
+  { name: "Team Kaliber", players: ["Sharp", "Theory", "Goonjar", "Neslo"] },
+  { name: "Rise Nation", players: ["Pacman", "Whea7s", "Classic", "FEARS"] },
+  { name: "Epsilon Esports", players: ["Swanny", "Jurd", "Tommey", "MadCat"] },
+  { name: "Strictly Business", players: ["Censor", "Dedo", "StuDyy", "Karma"] },
+  { name: "compLexity", players: ["Ricky", "Parasite", "Mirx", "ACHES"] },
+  { name: "TCM-Gaming", players: ["MarkyB", "Moose", "Flux", "GunShy"] },
+  { name: "Vitality.Rises", players: ["Gotaga", "BroKeN", "Krnage", "bLue"] },
+  { name: "Team Immunity", players: ["BuZZO", "Naked", "Shockz", "Rampage"] },
+];
+
+export const AW_TEAMS = AW_TEAM_ROWS.map((row, index) => ({
+  id: slug(row.name),
+  name: row.name,
+  tag: teamTag(row.name),
+  shortName: teamTag(row.name),
+  color: ["#2f80ed", "#27ae60", "#f2c94c", "#eb5757", "#9b51e0", "#56ccf2", "#f2994a", "#6fcf97"][index % 8],
+  budgetTier: 3,
+  eraId: "advanced_warfare",
+  eraLabel: "Advanced Warfare",
+  source: AW_SPREADSHEET_SOURCE,
+  roster: row.players,
+}));
+
+export function makeAWPlayer(name, teamId, slot = 0) {
+  const h = hashString(`${teamId}|${name}`);
+  const base = 70 + (h % 17);
+  const roles = ["Main AR", "Slayer SMG", "Objective", "Flex"];
+  const primary = roles[slot % roles.length];
+  const overall = clamp(base + (slot === 0 ? 2 : 0), 60, 94);
+  return {
+    id: `${teamId}_${slug(name)}`,
+    name,
+    teamId,
+    age: 19 + (h % 10),
+    primary,
+    secondary: roles[(slot + 1) % roles.length],
+    region: "NA",
+    salary: Math.round((overall / 99) * 180 + 20) * 1000,
+    overall,
+    potential: clamp(overall + 4 + ((h >> 3) % 9), overall, 99),
+    gunny: attr(overall, h),
+    awareness: attr(overall, h >> 3),
+    objective: attr(overall, h >> 6),
+    searchIQ: attr(overall, h >> 9),
+    clutch: attr(overall, h >> 12),
+    teamwork: attr(overall, h >> 15),
+    composure: attr(overall, h >> 18),
+    adaptability: attr(overall, h >> 21),
+    ego: 1 + (h % 5),
+    workEthic: 1 + ((h >> 3) % 5),
+    tiltResistance: 1 + ((h >> 6) % 5),
+    leadership: 1 + ((h >> 9) % 5),
+    metaDependence: 1 + ((h >> 12) % 5),
+    form: 70,
+    experience: 1,
+    isProspect: false,
+    contractYears: 1 + (h % 3),
+    eraId: "advanced_warfare",
+  };
+}
+
+export const AW_PLAYERS = AW_TEAM_ROWS.flatMap((row) => {
+  const teamId = slug(row.name);
+  return row.players.map((name, index) => makeAWPlayer(name, teamId, index));
+});
+
+// Get the historical AW target roster for a given team
+export function getAWTargetRoster(teamId) {
+  const row = AW_TEAM_ROWS.find(r => slug(r.name) === teamId);
+  return row ? row.players : [];
+}
+
+// Get all AW players that are NEW (not in Ghosts rosters)
+export function getNewAWEntrants() {
+  const ghostsNames = new Set(GHOSTS_TEAM_ROWS.flatMap(r => r.players).map(n => n.toLowerCase()));
+  const awNames = AW_TEAM_ROWS.flatMap(r => r.players);
+  return [...new Set(awNames.filter(n => !ghostsNames.has(n.toLowerCase())))];
+}
+
+// Get players who were in Ghosts but not in any AW target roster
+export function getGhostsPlayersNotInAW() {
+  const awNames = new Set(AW_TEAM_ROWS.flatMap(r => r.players).map(n => n.toLowerCase()));
+  const ghostsNames = GHOSTS_TEAM_ROWS.flatMap(r => r.players);
+  return [...new Set(ghostsNames.filter(n => !awNames.has(n.toLowerCase())))];
+}

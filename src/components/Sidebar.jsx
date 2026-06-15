@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { id: "fa",        icon: "$",  label: "Free Agency", offseasonOnly: true },
   { id: "scouting",  icon: "◎",  label: "Scouting" },
   { id: "transfers", icon: "⇄",  label: "Transfers" },
-  { id: "prospects", icon: "◉",  label: "Challengers" },
+  { id: "prospects", icon: "◉",  label: "Amateur Pool" },
   { id: "devreport", icon: "⬡",  label: "Dev Report" },
   { id: "staff",     icon: "✦",  label: "Staff" },
   { id: "log",       icon: "▤",  label: "Match Log" },
@@ -30,7 +30,7 @@ const NAV_ITEMS = [
 const CHALLENGER_LABELS = {
   standings: "Circuit",
   transfers: "Buyouts",
-  prospects: "Market",
+  prospects: "Amateur Market",
 };
 
 export default function Sidebar({ screen, setScreen, onOpenFeed }) {

@@ -277,7 +277,7 @@ export default function StaffPanel() {
       {/* ── Header ── */}
       <div className="staff-header">
         <div>
-          <h2 className="staff-title">{challengerMode ? "Challenger Staff" : "Staff & Coaching"}</h2>
+          <h2 className="staff-title">{challengerMode ? "Open Circuit Staff" : "Staff & Coaching"}</h2>
           <p className="staff-subtitle" style={{ color: team?.color ?? "var(--accent)" }}>
             {team?.name ?? "Your Team"}
           </p>
@@ -290,7 +290,7 @@ export default function StaffPanel() {
 
       {challengerMode && (
         <p className="staff-challenger-note">
-          Staff resources are lighter at Challenger level. Strong coaching and scouting help develop players and attract CDL attention.
+          Staff resources are lighter at the Open Circuit level. Strong coaching and scouting help develop players and attract Pro Circuit attention.
         </p>
       )}
 

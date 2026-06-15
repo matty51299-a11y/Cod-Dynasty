@@ -98,10 +98,10 @@ export default function Scouting() {
   return (
     <div className="scouting-page">
       <PageHeader
-        eyebrow={challengerMode ? "Recruitment — Road to CDL" : "Recruitment"}
+        eyebrow={challengerMode ? "Recruitment — Road to Pro Circuit" : "Recruitment"}
         title="Prospect Scouting"
         subtitle={challengerMode
-          ? "Find affordable talent, hidden gems and players with a route back to CDL. CDL-ready prospects you develop may attract buyout interest if they perform."
+          ? "Find affordable talent, hidden gems and players with a route to the Pro Circuit. Pro-ready prospects you develop may attract buyout interest if they perform."
           : "Estimated ratings tighten as you scout. Spend assignments to uncover hidden gems and avoid busts."}
         meta={(
           <div className="ui-stat-grid compact">

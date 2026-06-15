@@ -21,7 +21,7 @@ export default function OffseasonReport() {
     { id: "all",       label: "All Players" },
     { id: "myteam",    label: challengerMode ? "My Squad" : "My Team" },
     { id: "pros",      label: "Pros Only" },
-    { id: "prospects", label: "Challengers" },
+    { id: "prospects", label: "Amateur Pool" },
     { id: "improved",  label: "Improved" },
     { id: "declined",  label: "Declined" },
     { id: "breakouts", label: "Breakouts" },
@@ -102,11 +102,11 @@ export default function OffseasonReport() {
   return (
     <div className="page-shell">
       <h2 className="page-title">
-        {challengerMode ? "Challenger Development" : "Development Report"} — After Season {state.season - 1}
+        {challengerMode ? "Open Circuit Development" : "Development Report"} — After Season {state.season - 1}
       </h2>
       {challengerMode && (
         <p className="text-dim" style={{ margin: "4px 0 12px", fontSize: 13 }}>
-          Growing OVR/POT builds CDL-ready, higher-value players — develop talent for Pro-Am Majors, and expect buyout interest when they perform.
+          Growing OVR/POT builds Pro Circuit-ready, higher-value players — develop talent for Open Circuit events, and expect buyout interest when they perform.
         </p>
       )}
 

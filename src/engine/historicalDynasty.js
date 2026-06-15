@@ -1,5 +1,6 @@
 import { getEra, getNextEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { HISTORICAL_ROOKIE_CLASSES } from "../data/historicalRookieClasses.js";
+import { executeEraTransition, generateTransitionInboxEvents } from "./eraTransitionEngine.js";
 
 function clamp(v, min = 40, max = 99) { return Math.max(min, Math.min(max, Math.round(v))); }
 function hashString(str) { let h = 2166136261; for (const ch of String(str || "")) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -41,7 +42,7 @@ export function buildHistoricalProspect(row, eraId) {
     clutch: attr(overall, h >> 12), teamwork: attr(overall, h >> 15), composure: attr(overall, h >> 18), adaptability: attr(overall, h >> 21),
     ego: 1 + (h % 5), workEthic: 1 + ((h >> 3) % 5), tiltResistance: 1 + ((h >> 6) % 5), leadership: 1 + ((h >> 9) % 5), metaDependence: 1 + ((h >> 12) % 5),
     scoutedOverall: overall, scoutedPotential: potential, scouted: false, form: 65, experience: 0, isProspect: true, contractYears: 0,
-    status: "challengers", debutEraId: eraId, rookieClassId: `${eraId}_rookies`, eraFitTraits: row.traits || [],
+    status: "amateur", debutEraId: eraId, rookieClassId: `${eraId}_rookies`, eraFitTraits: row.traits || [],
   };
 }
 
@@ -73,13 +74,43 @@ export function advanceHistoricalEraIfNeeded(state) {
   const previousEra = getEra(migrated.currentEraId);
   const nextEra = getNextEra(previousEra.id);
   if (!nextEra) return migrated;
+
+  const newEntrants = [];
+  const rosterMoves = [];
+  const transferInterests = [];
+
   let next = {
     ...migrated,
     currentEraId: nextEra.id,
     currentGameTitle: nextEra.gameTitle,
     historicalSeasonIndex: (migrated.historicalSeasonIndex || 0) + 1,
     eraHistory: [...(migrated.eraHistory || []), { fromEraId: previousEra.id, toEraId: nextEra.id, season: migrated.season ?? migrated.schedule?.season ?? 1, previousTitle: previousEra.gameTitle, newTitle: nextEra.gameTitle }],
-    pendingEraTransition: { previousEraId: previousEra.id, newEraId: nextEra.id, previousTitle: previousEra.gameTitle, newTitle: nextEra.gameTitle, movementStyle: nextEra.movementStyle, modes: nextEra.modes, rookieClassId: nextEra.rookieClassId, rulesNote: nextEra.rulesNote },
+    pendingEraTransition: {
+      previousEraId: previousEra.id,
+      newEraId: nextEra.id,
+      previousTitle: previousEra.gameTitle,
+      newTitle: nextEra.gameTitle,
+      movementStyle: nextEra.movementStyle,
+      modes: nextEra.modes,
+      rookieClassId: nextEra.rookieClassId,
+      rulesNote: nextEra.rulesNote,
+      churnIntensity: "very_high",
+    },
   };
-  return introduceHistoricalRookieClass(next, nextEra.id);
+
+  next = introduceHistoricalRookieClass(next, nextEra.id);
+  next = executeEraTransition(next, previousEra.id, nextEra.id);
+
+  const inboxEvents = generateTransitionInboxEvents(next, previousEra.id, nextEra.id);
+  if (inboxEvents.length) {
+    next = {
+      ...next,
+      pendingEraTransition: {
+        ...next.pendingEraTransition,
+        inboxEvents,
+      },
+    };
+  }
+
+  return next;
 }

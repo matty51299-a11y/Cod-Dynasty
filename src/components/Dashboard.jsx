@@ -34,9 +34,9 @@ function readableMoveType(type) {
   if (t === "CDL_SIGNING") return "Signing";
   if (t === "FREE_AGENT_ENTERED") return "Free agent";
   if (t === "FREE_AGENT_SIGNING") return "FA signing";
-  if (t === "FREE_AGENT_TO_CHALLENGERS") return "To Challengers";
+  if (t === "FREE_AGENT_TO_CHALLENGERS") return "To Amateur Pool";
   if (t === "FREE_AGENT_RETIRED") return "Retirement";
-  if (t === "CDL_RELEASE_TO_CHALLENGERS") return "Release";
+  if (t === "CDL_RELEASE_TO_CHALLENGERS") return "Released";
   if (t === "RETIREMENT") return "Retirement";
   if (t === "EMERGENCY_ROSTER_FILL") return "Emergency fill";
   if (t === "INACTIVE") return "Inactive";
@@ -315,7 +315,7 @@ export default function Dashboard({ setScreen }) {
     : (isOffseason || isContracts) ? "db-phase-chip db-phase-chip-offseason"
     : "db-phase-chip";
 
-  const phaseLabel = isChallengersFinals ? "Challengers Finals"
+  const phaseLabel = isChallengersFinals ? "Open Circuit Finals"
     : isOffseason  ? "Offseason"
     : isContracts  ? "Contract Period"
     : isMajor      ? majorName
@@ -607,7 +607,7 @@ function EraInfoCard({ era, nextEra, state }) {
       <div className="oh-card-header">
         <div>
           <h3>Current Title: {era.gameTitle}</h3>
-          <p>{era.seasonLabel} · {String(era.movementStyle || "modern").replace("_", " ")} era · {state?.careerMode === "historical" ? "Historical Dynasty" : "Modern CDL 2026"}</p>
+          <p>{era.seasonLabel} · {String(era.movementStyle || "modern").replace("_", " ")} era · {state?.careerMode === "historical" ? "Historical Dynasty" : "Modern Dynasty"}</p>
         </div>
         <span className="oh-ok">{nextEra ? `Next Title: ${nextEra.shortTitle}` : "Current Era"}</span>
       </div>
@@ -625,25 +625,46 @@ function EraTransitionModal({ state, dispatch }) {
   if (!transition) return null;
   const previous = getEra(transition.previousEraId);
   const next = getEra(transition.newEraId);
+  const newFreeAgents = (state.players || []).filter(p => !p.teamId && p.status === "freeAgent" && p.eraId === next.id).length;
+  const rosterMoves = (state.rosterMovesLog || []).filter(m => m.season === state.season).length;
+  const interests = (state.transferInterests || []).length;
+  const userRoster = (state.players || []).filter(p => p.teamId === state.userTeamId);
+
   return (
     <div className="modal-backdrop" style={{ zIndex: 1300 }}>
-      <div className="modal" style={{ maxWidth: 620 }}>
-        <h2>New Game Released</h2>
+      <div className="modal" style={{ maxWidth: 660 }}>
+        <h2>New Title Released</h2>
         <h3>{next.gameTitle}</h3>
-        <p className="muted">The dynasty moves from {previous.gameTitle} to {next.gameTitle}.</p>
+        <p className="muted">The {next.movementStyle} era begins. Rosters across the scene are changing.</p>
         <div className="ui-stat-grid compact">
+          <StatCard label="Previous Title" value={previous.shortTitle} />
+          <StatCard label="New Title" value={next.shortTitle} />
           <StatCard label="Movement" value={next.movementStyle} />
+          <StatCard label="Roster Size" value={next.rosterSize} />
+        </div>
+        <div className="ui-stat-grid compact" style={{ marginTop: 8 }}>
           <StatCard label="Modes" value={(next.modes || []).join(" / ")} />
           <StatCard label="Rookie Class" value={next.rookieClassId ? "Added" : "None"} tone={next.rookieClassId ? "success" : "neutral"} />
         </div>
-        <p>{next.rulesNote}</p>
+        <p style={{ marginTop: 12 }}>{next.rulesNote}</p>
+
+        <div style={{ margin: "12px 0", padding: "10px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Market Update</div>
+          <div className="ui-stat-grid compact">
+            <StatCard label="New Free Agents" value={newFreeAgents} tone={newFreeAgents > 0 ? "success" : "neutral"} />
+            <StatCard label="AI Roster Moves" value={rosterMoves} />
+            <StatCard label="Interest in Your Players" value={interests} tone={interests > 0 ? "warning" : "neutral"} />
+            <StatCard label="Your Roster" value={`${userRoster.length} players`} />
+          </div>
+        </div>
+
         <ul>
-          <li>New maps and modes are now available for era display.</li>
-          <li>New movement style: {next.movementStyle}.</li>
-          <li>Rookie/prospect class added once for this era.</li>
-          <li>Offseason market flow remains intact.</li>
+          <li>New players have entered Free Agency and the Amateur Pool.</li>
+          <li>AI teams have begun major roster changes.</li>
+          {interests > 0 && <li><strong>{interests} of your players are attracting interest from other teams.</strong></li>}
+          <li>Your roster is intact — review and adjust during Rostermania.</li>
         </ul>
-        <button className="btn-primary" onClick={() => dispatch({ type: "ACK_ERA_TRANSITION" })}>Continue to Offseason</button>
+        <button className="btn-primary" onClick={() => dispatch({ type: "ACK_ERA_TRANSITION" })}>Continue to Rostermania</button>
       </div>
     </div>
   );
@@ -728,7 +749,7 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
             <div className="oh-team-line">
               <button className="link-button team-link" onClick={() => openTeamHub(userTeamId)}>{team?.name || userTeamId}</button>
               <span>{mySeason.wins}W – {mySeason.losses}L</span>
-              <span>{mySeason.points || 0} CDL pts</span>
+              <span>{mySeason.points || 0} league pts</span>
               <span>{champsPlacement ? `Champs: ${placementText(champsPlacement)}` : "Champs: Not tracked"}</span>
             </div>
           </div>
@@ -938,7 +959,7 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
           </section>
 
           <section className="oh-card">
-            <div className="oh-card-header"><h3>Challenger Graduates</h3></div>
+            <div className="oh-card-header"><h3>Pro Circuit Graduates</h3></div>
             {graduates.length ? <div className="oh-list compact">
               {graduates.map((tx, idx) => (
                 <div className="oh-grad-row" key={`${tx.playerId}_${idx}`}>
@@ -947,7 +968,7 @@ function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, pl
                   <em>{players.find(p => p.id === tx.playerId)?.primary || "Role TBD"} · {stockLabel(players.find(p => p.id === tx.playerId) || {})}</em>
                 </div>
               ))}
-            </div> : <p className="oh-empty">No Challenger graduates yet.</p>}
+            </div> : <p className="oh-empty">No graduates yet.</p>}
           </section>
 
           <section className="oh-card">

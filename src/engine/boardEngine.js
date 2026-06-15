@@ -239,7 +239,7 @@ export function buildBoardObjectives(state) {
         : makeObj("secondary", season, "improveChemistry", 0, "Improve or maintain team chemistry");
       objectives = [
         makeObj("primary", season, "avoidBottomN", 2, "Avoid finishing in the bottom 2", "High"),
-        makeObj("secondary", season, "developRookie", 10, "Develop a young player with real CDL maps"),
+        makeObj("secondary", season, "developRookie", 10, "Develop a young player with real pro maps"),
         sec2,
         // Champs only if the owner is unusually ambitious; otherwise an upset.
         high

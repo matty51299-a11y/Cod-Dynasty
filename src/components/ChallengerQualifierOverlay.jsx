@@ -162,7 +162,7 @@ export default function ChallengerQualifierOverlay() {
   const isFinals = qualifier.eventType === "challengersFinals";
   const majorIdx = qualifier.majorIdx ?? schedule.majorIdx ?? 0;
   const majorName = isFinals ? "ESWC" : (schedule.majors?.[majorIdx]?.name ?? `Major ${majorIdx + 1}`);
-  const eventTitle = qualifier.name || (isFinals ? "Challengers Finals" : "Challenger Qualifier");
+  const eventTitle = qualifier.name || (isFinals ? "Open Circuit Finals" : "Open Qualifier");
   const completed = !!qualifier.completed;
   const fieldRows = qualifier.field || [];
   const fieldMap = buildFieldMap(fieldRows);
@@ -200,9 +200,9 @@ export default function ChallengerQualifierOverlay() {
       <div className="cqo-card cqo-card-wide">
         <div className="cqo-header">
           <div>
-            <div className="cqo-kicker">CHALLENGERS EVENT</div>
+            <div className="cqo-kicker">OPEN CIRCUIT EVENT</div>
             <h1>{eventTitle}</h1>
-            <p>Season {schedule.season} · {isFinals ? "Top Challengers feed ESWC" : `${majorName} Qualifier`} · {fieldRows.length}-team {bracketType === "DE24" ? "double elimination with seeds 1–8 byes" : "double elimination"} · {isFinals ? "Top 4 qualify for ESWC" : "Top 4 qualify (Major seeds 13–16)"}</p>
+            <p>Season {schedule.season} · {isFinals ? "Top Open Circuit teams feed ESWC" : `${majorName} Qualifier`} · {fieldRows.length}-team {bracketType === "DE24" ? "double elimination with seeds 1–8 byes" : "double elimination"} · {isFinals ? "Top 4 qualify for ESWC" : "Top 4 qualify (Major seeds 13–16)"}</p>
           </div>
           <div className={`cqo-status ${completed ? "complete" : "pending"}`}>
             {completed ? "Complete" : nextMatch ? nextMatch.roundName : "Ready"}
@@ -234,7 +234,7 @@ export default function ChallengerQualifierOverlay() {
               </>
             ) : (
               <button className="btn-cta" onClick={() => dispatch({ type: "CONTINUE_FROM_CHALLENGER_QUALIFIER" })}>
-                Continue to {isFinals ? "CDL Champs" : majorName} →
+                Continue to {isFinals ? "Champs" : majorName} →
               </button>
             )}
           </div>
