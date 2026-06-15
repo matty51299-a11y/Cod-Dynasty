@@ -73,10 +73,10 @@ export function makeEvent({
   type, category, severity = "info", title, summary = "",
   season, stage, phase, read = false, actionRequired = false,
   expiresAtStage, relatedPlayerId, relatedTeamId,
-  targetScreen, targetTab, actions = [], dedupKey,
+  targetScreen, targetTab, actions = [], dedupKey, matchData,
 }) {
   const id = `evt_${_nextId++}`;
-  return {
+  const ev = {
     id, type, category, severity, title, summary,
     season: season ?? 1, stage: stage ?? 0, phase: phase ?? "stage",
     createdAt: Date.now(), read, actionRequired,
@@ -89,6 +89,8 @@ export function makeEvent({
     actions: actions || [],
     dedupKey: dedupKey ?? null,
   };
+  if (matchData) ev.matchData = matchData;
+  return ev;
 }
 
 // ── Migration / hydration ────────────────────────────────────────────────────
@@ -690,4 +692,316 @@ export function makeLeagueNewsEvent(title, summary, season, phase) {
     phase,
     actions: ["dismiss"],
   });
+}
+
+// ── Enhanced match summary ──────────────────────────────────────────────────
+export function makeMatchSummaryEvent(matchResult, userTeamId, state) {
+  const { teamA, teamB, scoreA, scoreB, standouts, season: matchSeason } = matchResult;
+  const isTeamA = teamA === userTeamId;
+  const userScore = isTeamA ? scoreA : scoreB;
+  const oppScore = isTeamA ? scoreB : scoreA;
+  const oppId = isTeamA ? teamB : teamA;
+  const won = userScore > oppScore;
+  const diff = Math.abs(userScore - oppScore);
+  const totalMaps = userScore + oppScore;
+
+  // Pick a tone-based title
+  let title;
+  if (won) {
+    if (diff >= 3)                          title = "Statement Win";
+    else if (diff === 2)                    title = "Comfortable Win";
+    else if (diff === 1 && totalMaps <= 4)  title = "Narrow Victory";
+    else if (diff === 1 && totalMaps >= 5)  title = "edge thriller";
+    else                                    title = "Bounce-back";
+  } else {
+    if (diff >= 3)                          title = "Heavy Loss";
+    else if (diff === 2)                    title = "Disappointing Defeat";
+    else if (diff === 1 && totalMaps <= 4)  title = "Close Loss";
+    else if (diff === 1 && totalMaps >= 5)  title = "fall short";
+    else                                    title = "Upset Defeat";
+  }
+
+  // Best performer KD
+  let bestLine = "";
+  if (standouts?.length) {
+    const best = standouts.reduce((a, b) => (b.kd > a.kd ? b : a), standouts[0]);
+    bestLine = ` Best performer: ${best.name} (${best.kd.toFixed(2)} K/D).`;
+  }
+  // Check userMatches playerStats for fallback
+  if (!bestLine && matchResult.playerStats?.length) {
+    const best = matchResult.playerStats.reduce((a, b) => (b.kd > a.kd ? b : a), matchResult.playerStats[0]);
+    bestLine = ` Best performer: ${best.name} (${best.kd.toFixed(2)} K/D).`;
+  }
+
+  const stageIdx = state.schedule?.stageIdx ?? 0;
+  const scoreline = `${userScore}-${oppScore}`;
+  const summary = `${won ? "W" : "L"} ${scoreline} vs ${teamTag(oppId)}.${bestLine}`;
+
+  const bestPerformer = standouts?.length
+    ? standouts.reduce((a, b) => (b.kd > a.kd ? b : a), standouts[0])
+    : matchResult.playerStats?.length
+      ? matchResult.playerStats.reduce((a, b) => (b.kd > a.kd ? b : a), matchResult.playerStats[0])
+      : null;
+
+  const mapSummary = matchResult.maps?.map(m => ({
+    mapName: m.mapName ?? m.mode ?? `Map`,
+    scoreA: isTeamA ? m.scoreA ?? m.teamAScore : m.scoreB ?? m.teamBScore,
+    scoreB: isTeamA ? m.scoreB ?? m.teamBScore : m.scoreA ?? m.teamAScore,
+  })) ?? [];
+
+  return makeEvent({
+    type: "match_summary",
+    category: "Match Results",
+    severity: won ? "medium" : "low",
+    title: `${title}: ${teamTag(oppId)} ${scoreline}`,
+    summary,
+    season: matchSeason ?? state.season,
+    stage: stageIdx,
+    phase: state.schedule?.phase ?? "stage",
+    relatedTeamId: oppId,
+    targetScreen: "log",
+    actions: ["open_match_log", "view_schedule", "dismiss"],
+    dedupKey: `match_summary:${matchSeason ?? state.season}:${stageIdx}:${teamA}:${teamB}:${scoreA}:${scoreB}`,
+    matchData: {
+      won,
+      teamATag: teamTag(isTeamA ? teamA : teamB),
+      teamBTag: teamTag(isTeamA ? teamB : teamA),
+      scoreA: userScore,
+      scoreB: oppScore,
+      maps: mapSummary,
+      bestPerformer: bestPerformer ? { name: bestPerformer.name, kd: typeof bestPerformer.kd === "number" ? bestPerformer.kd.toFixed(2) : bestPerformer.kd } : null,
+    },
+  });
+}
+
+// ── Performance story ───────────────────────────────────────────────────────
+export function makePerformanceStoryEvent(player, kd, context, state) {
+  const kdStr = typeof kd === "number" ? kd.toFixed(2) : kd;
+  const stageIdx = state.schedule?.stageIdx ?? 0;
+
+  const titles = {
+    standout:    `${player.name} dominates (${kdStr} K/D)`,
+    poor:        `${player.name} struggles (${kdStr} K/D)`,
+    leaderboard: `${player.name} enters K/D leaderboard`,
+    mvp:         `${player.name} named MVP`,
+    debut:       `${player.name} impresses on debut`,
+  };
+  const summaries = {
+    standout:    `${player.name} delivered an outstanding performance with a ${kdStr} K/D.`,
+    poor:        `${player.name} had a difficult series, posting a ${kdStr} K/D.`,
+    leaderboard: `${player.name} is now among the top 5 in K/D this season (${kdStr}).`,
+    mvp:         `${player.name} has been named Match MVP after a stellar performance.`,
+    debut:       `${player.name} made an impressive debut with a ${kdStr} K/D.`,
+  };
+
+  const category = (context === "mvp" || context === "leaderboard") ? "Awards" : "Match Results";
+
+  return makeEvent({
+    type: "performance_story",
+    category,
+    severity: "medium",
+    title: titles[context] || `${player.name}: ${kdStr} K/D`,
+    summary: summaries[context] || `${player.name} posted a ${kdStr} K/D.`,
+    season: state.season,
+    stage: stageIdx,
+    phase: state.schedule?.phase ?? "stage",
+    relatedPlayerId: player.id ?? player.playerId ?? null,
+    actions: ["open_player", "dismiss"],
+    dedupKey: `perf_story:${player.name}:${context}:${state.season}:${stageIdx}`,
+  });
+}
+
+// ── Promise kept ────────────────────────────────────────────────────────────
+export function makePromiseKeptEvent(promise, player, state) {
+  return makeEvent({
+    type: "promise_kept",
+    category: "Morale",
+    severity: "info",
+    title: `Promise to ${player.name} fulfilled`,
+    summary: `You kept your promise of "${promise.label}". ${player.name} is grateful.`,
+    season: state.season,
+    stage: state.schedule?.stageIdx ?? 0,
+    phase: state.schedule?.phase ?? "stage",
+    relatedPlayerId: player.id,
+    targetScreen: "dynamics",
+    actions: ["open_player", "dismiss"],
+    dedupKey: `promise_kept:${promise.id}:${state.season}`,
+  });
+}
+
+// ── Squad morale warning ────────────────────────────────────────────────────
+export function makeSquadMoraleWarningEvent(avgMorale, state) {
+  const stageIdx = state.schedule?.stageIdx ?? 0;
+  return makeEvent({
+    type: "squad_morale_warning",
+    category: "Morale",
+    severity: "high",
+    title: "Squad morale is low",
+    summary: `Average squad morale has dropped to ${Math.round(avgMorale)}%. Consider addressing player concerns.`,
+    season: state.season,
+    stage: stageIdx,
+    phase: state.schedule?.phase ?? "stage",
+    actionRequired: avgMorale < 40,
+    targetScreen: "dynamics",
+    actions: ["go_dynamics", "dismiss"],
+    dedupKey: `squad_morale:${state.season}:${stageIdx}`,
+  });
+}
+
+// ── Roster incomplete ───────────────────────────────────────────────────────
+export function makeRosterIncompleteEvent(state) {
+  return makeEvent({
+    type: "roster_incomplete",
+    category: "Contracts",
+    severity: "critical",
+    actionRequired: true,
+    title: "Roster incomplete",
+    summary: "Your active roster does not have enough players. Sign or promote players before the next match.",
+    season: state.season,
+    stage: state.schedule?.stageIdx ?? 0,
+    phase: state.schedule?.phase ?? "stage",
+    targetScreen: "home",
+    actions: ["open_roster", "open_fa", "dismiss"],
+    dedupKey: `roster_incomplete:${state.season}:${state.schedule?.stageIdx ?? 0}`,
+  });
+}
+
+// ── Contract expiring warning ───────────────────────────────────────────────
+export function makeContractExpiringEvent(player, state) {
+  return makeEvent({
+    type: "contract_expiring",
+    category: "Contracts",
+    severity: "medium",
+    title: `${player.name}'s deal expires this offseason`,
+    summary: `${player.name}'s contract is set to expire. Decide whether to extend or let them walk.`,
+    season: state.season,
+    stage: state.schedule?.stageIdx ?? 0,
+    phase: state.schedule?.phase ?? "stage",
+    relatedPlayerId: player.id,
+    targetScreen: "home",
+    actions: ["review_contracts", "open_player", "dismiss"],
+    dedupKey: `contract_expiring:${player.id}:${state.season}`,
+  });
+}
+
+// ── Rival eliminated ────────────────────────────────────────────────────────
+export function makeRivalEliminatedEvent(teamId, eventName, round, state) {
+  return makeEvent({
+    type: "rival_eliminated",
+    category: "League News",
+    severity: "info",
+    title: `${teamTag(teamId)} eliminated from ${eventName}`,
+    summary: `${teamName(teamId)} have been knocked out of ${eventName} in ${round}.`,
+    season: state.season,
+    phase: state.schedule?.phase ?? "stage",
+    relatedTeamId: teamId,
+    actions: ["dismiss"],
+    dedupKey: `rival_elim:${teamId}:${eventName}:${state.season}`,
+  });
+}
+
+// ── Challenger qualifies ────────────────────────────────────────────────────
+export function makeChallengerQualifiesEvent(teamName_, state) {
+  return makeEvent({
+    type: "challenger_qualifies",
+    category: "Tournament",
+    severity: "info",
+    title: `${teamName_} qualify through Challengers`,
+    summary: `${teamName_} have earned their spot through the Challengers bracket.`,
+    season: state.season,
+    phase: state.schedule?.phase ?? "stage",
+    actions: ["dismiss"],
+    dedupKey: `ch_qualify:${teamName_}:${state.season}`,
+  });
+}
+
+// ── Coach concern ───────────────────────────────────────────────────────────
+export function makeCoachConcernEvent(concern, state) {
+  return makeEvent({
+    type: "coach_concern",
+    category: "Staff",
+    severity: "low",
+    title: `Head Coach: ${concern}`,
+    summary: `Your head coach has flagged a concern: "${concern}".`,
+    season: state.season,
+    stage: state.schedule?.stageIdx ?? 0,
+    phase: state.schedule?.phase ?? "stage",
+    targetScreen: "dynamics",
+    actions: ["dismiss"],
+    dedupKey: `coach:${concern}:${state.season}:${state.schedule?.stageIdx ?? 0}`,
+  });
+}
+
+// ── Season start ────────────────────────────────────────────────────────────
+export function makeSeasonStartEvent(season, state) {
+  return makeEvent({
+    type: "season_start",
+    category: "League News",
+    severity: "medium",
+    title: `Season ${season} begins`,
+    summary: `A new season is underway. Review your objectives, check the schedule, and prepare for the opening matches.`,
+    season,
+    phase: "stage",
+    targetScreen: "home",
+    actions: ["view_board", "view_schedule", "dismiss"],
+    dedupKey: `season_start:${season}`,
+  });
+}
+
+// ── Generate match inbox events (compare prev vs new state) ─────────────────
+export function generateMatchInboxEvents(prevState, newState) {
+  const prevLen = prevState?.schedule?.matchLog?.length ?? 0;
+  const newLog = newState?.schedule?.matchLog ?? [];
+  if (newLog.length <= prevLen) return [];
+
+  const userTeamId = newState.userTeamId;
+  const events = [];
+  const dedupKeys = new Set();
+
+  for (let i = prevLen; i < newLog.length; i++) {
+    const entry = newLog[i];
+    if (!entry.played) continue;
+
+    const isUserMatch = entry.teamA === userTeamId || entry.teamB === userTeamId;
+    if (!isUserMatch) continue;
+
+    // Match summary
+    const summaryEvt = makeMatchSummaryEvent(entry, userTeamId, newState);
+    if (!dedupKeys.has(summaryEvt.dedupKey)) {
+      dedupKeys.add(summaryEvt.dedupKey);
+      events.push(summaryEvt);
+    }
+
+    // Performance stories from standouts
+    if (entry.standouts?.length) {
+      for (const s of entry.standouts) {
+        if (s.kd >= 1.25) {
+          const perfEvt = makePerformanceStoryEvent(
+            { name: s.name, id: s.playerId ?? null },
+            s.kd,
+            "standout",
+            newState,
+          );
+          if (!dedupKeys.has(perfEvt.dedupKey)) {
+            dedupKeys.add(perfEvt.dedupKey);
+            events.push(perfEvt);
+          }
+        }
+        if (s.kd <= 0.80) {
+          const perfEvt = makePerformanceStoryEvent(
+            { name: s.name, id: s.playerId ?? null },
+            s.kd,
+            "poor",
+            newState,
+          );
+          if (!dedupKeys.has(perfEvt.dedupKey)) {
+            dedupKeys.add(perfEvt.dedupKey);
+            events.push(perfEvt);
+          }
+        }
+      }
+    }
+  }
+
+  return events;
 }

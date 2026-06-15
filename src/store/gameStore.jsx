@@ -48,6 +48,7 @@ import {
   makeUserAwardEvent, makeStageSimSummaryEvent, makeUserMatchResultEvent,
   makeOffseasonStartEvent, makeStandoutPerformanceEvent,
   makeAssistantGmRecommendation, makeRivalSigningEvent,
+  generateMatchInboxEvents,
 } from "../engine/eventCentreEngine.js";
 
 const SAVE_KEY  = "cdl_manager_save";
@@ -465,10 +466,11 @@ function reducer(state, action) {
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
       const newState   = applyResultMorale(simNextMatch({ ...state }), state);
-      return pushFeed(newState, [
+      const withFeed = pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      return withMatchInboxEvents(state, withFeed);
       });
     }
 
@@ -478,10 +480,11 @@ function reducer(state, action) {
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
       const newState   = applyResultMorale(simMatchday({ ...state }), state);
-      return pushFeed(newState, [
+      const withFeed = pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      return withMatchInboxEvents(state, withFeed);
       });
     }
 
@@ -491,10 +494,11 @@ function reducer(state, action) {
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
       const newState   = applyResultMorale(simUserMatchday({ ...state }), state);
-      return pushFeed(newState, [
+      const withFeed = pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      return withMatchInboxEvents(state, withFeed);
       });
     }
 
@@ -504,10 +508,11 @@ function reducer(state, action) {
       const prevRank   = teamRank(state.schedule?.standings ?? {}, state.userTeamId);
       const season     = state.season;
       const newState   = applyResultMorale(simStage({ ...state }), state);
-      return pushFeed(newState, [
+      const withFeed = pushFeed(newState, [
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
+      return withMatchInboxEvents(state, withFeed);
       });
     }
 
@@ -569,7 +574,8 @@ function reducer(state, action) {
       const result = pushFeed(newState, feedItems);
       const withBoard = withMajorBoardNudge(state, result, majorIdx);
       const withMorale = majorIdx != null ? withMajorMoraleNudge(state, withBoard, majorIdx) : withBoard;
-      return majorIdx != null ? withMajorInboxEvents(state, withMorale, majorIdx) : withMorale;
+      const withInbox = majorIdx != null ? withMajorInboxEvents(state, withMorale, majorIdx) : withMorale;
+      return withMatchInboxEvents(state, withInbox);
       });
     }
 
@@ -1486,6 +1492,11 @@ function addNotif(state, msg) {
 function pushInboxEvents(state, events) {
   if (!events?.length) return state;
   return { ...state, eventCentre: pushEvents(state.eventCentre ?? migrateEventCentre(null), events) };
+}
+
+function withMatchInboxEvents(prevState, newState) {
+  const events = generateMatchInboxEvents(prevState, newState);
+  return pushInboxEvents(newState, events);
 }
 
 // ── Reducer wrapper: track lastAction + validate post-state invariants ────────
