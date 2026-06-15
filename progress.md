@@ -1060,3 +1060,102 @@ with 2–4 options. Options either make a promise or apply a direct morale nudge
 - Added meeting anti-spam safeguards: only the first three meaningful topics in a meeting can affect morale/trust, repeated topics do not stack morale, duplicate promises are blocked by existing promise logic, and conflicting response options show warnings.
 - Dynamics now surfaces conversation history count and stance/main-concern fallbacks; Player Profile morale details now include player stance, main concern, last talk, active promises, and still opens the same Conversation Hub.
 - Expanded `scripts/diagnosePlayerMorale.mjs` to cover the topic list, action-required topic routing, multi-topic meetings, response/outcome generation, no auto-close behavior, repeat-topic anti-farming, promise creation, conflict warnings, history recording, cooldowns, and old-save hydration.
+
+## Update 2026-06-15 (Inbox / Event Centre 2.0)
+- Upgraded the existing League Feed into an interactive Inbox / Event Centre that surfaces actionable events, decisions, warnings, reports and storylines as rich cards with action buttons. The old feed data is preserved and converted on load; no existing systems were changed.
+
+### Data model (`state.eventCentre`)
+```js
+eventCentre: {
+  events: [{
+    id, type, category, severity, title, summary,
+    season, stage, phase, createdAt,
+    read, dismissed, actionRequired,
+    expiresAtStage, relatedPlayerId, relatedTeamId,
+    targetScreen, targetTab,
+    actions: ["review_offer", "open_player", "dismiss"],
+    dedupKey,
+  }],
+  nextId,
+}
+```
+Stored on the top-level game state. Old saves without `eventCentre` hydrate to an empty structure via `migrateEventCentre()`; existing feed items are converted to events on first load.
+
+### Event categories (12)
+Action Required · Transfers · Morale · Board · Scouting · Contracts · Match Results · Tournament · Awards · Staff · League News · Rival Moves. Each category has an icon and is filterable in the Inbox UI.
+
+### Event severity (5 levels)
+info · low · medium · high · critical. Severity affects card styling, ordering, badge count display, and whether the event appears in the dashboard widget.
+
+### Action-required events
+Events with `actionRequired: true` appear at the top of the Inbox, are counted in the sidebar badge (with warning colour), and show in the Home dashboard widget. Currently generated for: incoming transfer offers, challenger buyout offers, contract review deadlines, morale meetings (wants out), board final warnings, offseason start.
+
+### Event card actions
+Each event can carry action buttons that route to the relevant screen/tab:
+- Transfer offer: Review Offer, View Player, Dismiss
+- Morale meeting: Talk Now, Open Dynamics, View Player, Delay, Dismiss
+- Board warning: View Board, Dismiss
+- Scout report: View Report, Shortlist, Dismiss
+- Contract review: Review Contracts, Dismiss
+- Major draw: View Bracket, Dismiss
+- Match result: View Details, Dismiss
+
+### Event generation triggers (reducer hooks)
+- `RUN_TRANSFER_WAVE`: incoming offer → action-required transfer event
+- `RESPOND_TRANSFER_OFFER` (accept): transfer-done event; (reject/nfs): blocked-move event
+- `GENERATE_CHALLENGER_OFFERS`: challenger buyout → action-required event
+- `RESPOND_CHALLENGER_OFFER` (reject): blocked-move event
+- `SCOUT_PLAYER` (deep, ≥50% confidence): scout report event
+- `ENTER_CONTRACT_PHASE`: contract review event (count of expiring players)
+- `ADVANCE_OFFSEASON`: board objective event + offseason start event
+- `ENTER_MAJOR`: major draw event
+- `SIM_MAJOR` / `SIM_NEXT_MAJOR_MATCH` / `SIM_MAJOR_ROUND` / `COMMIT_USER_MATCH_RESULT`: champion/eliminated events when a Major completes
+- `withMajorBoardNudge`: board warning when confidence drops below 40; confidence-up when recovering above 60
+
+### Deduplication
+Each event carries an optional `dedupKey`. Events with duplicate keys are silently blocked. Keys are scoped per offer/player/season/stage to prevent spam (e.g. one transfer offer event per offer, one board warning per stage, one morale meeting per player per stage).
+
+### Inbox screen (`src/components/Inbox.jsx`)
+Full-page three-column layout:
+- **Left**: view filters (All / Unread / Action Required) + category filters with counts
+- **Centre**: scrollable event card list, sorted by action-required → unread → severity → recency
+- **Right**: selected event detail panel with context, related player/team, Assistant GM recommendation text, and action buttons
+
+### Home dashboard widget
+Both CDL `Dashboard` and `ChallengerDashboard` show a "Manager Inbox" widget with:
+- Action-required count (⚡ badge)
+- Top 3-4 urgent events with severity-coloured borders and category icons
+- "Open Inbox ›" button
+
+### Sidebar
+- "Inbox" added as a full nav item (between Home and Standings)
+- Badge shows action-required count (with warning colour) or unread count
+- Old "Feed" button preserved as a slide-in overlay for backwards compatibility
+
+### Save compatibility
+- Missing `eventCentre` → empty structure on load; no crash
+- Old feed items converted to events on first load (one-time, preserves read status)
+- No changes to match sim, roster AI, contracts, budgets, free agency, awards, brackets, points, ratings, map/veto, profile history, save data, or logos
+
+### New files
+- `src/engine/eventCentreEngine.js` — pure functions: event creation, migration, dedup, sorting, category/severity helpers, feed conversion, 20+ event generators
+- `src/components/Inbox.jsx` — full-page Inbox / Event Centre screen
+- `scripts/diagnoseEventCentre.mjs` — 70 checks: hydration, push/dedup, mark read/dismiss, sorting, filtering, all event generators, feed conversion, old save safety, spam prevention, count helpers, constants, event cap
+
+### Modified files
+- `src/store/gameStore.jsx` — eventCentre state, migration in LOAD_GAME, pushInboxEvents helper, MARK_EVENT_READ/MARK_ALL_EVENTS_READ/DISMISS_EVENT actions, event generation in 10+ reducer actions
+- `src/components/Sidebar.jsx` — Inbox nav item with badge
+- `src/components/Dashboard.jsx` — InboxWidget replacing old Team News panel
+- `src/components/ChallengerDashboard.jsx` — ChallengerInboxWidget
+- `src/App.jsx` — Inbox screen route
+- `src/index.css` — Inbox page styles, dashboard widget styles, responsive breakpoints
+
+### Testing
+- `npm run build` ✓ · `diagnoseEventCentre` 70/70 ✓ · `diagnoseFullSeasonFlow` PASS (6 seasons) · `stressRosterIntegrity` 24/24 ✓ · `diagnoseTransferMarket` 49/49 ✓ · `diagnosePlayerMorale` 55/55 ✓ · `diagnoseChallengerManagerMode` 33/33 ✓
+
+### Known limitations
+- Morale meeting events are created for high-severity blocked moves and wants-out situations; routine morale conversations still use the existing AppMoralePrompt popup system and Dynamics page (not duplicated in inbox to avoid spam).
+- Event detail panel shows Assistant GM recommendation text as static flavour; recommendations do not yet compute dynamic advice based on player/team context.
+- Match results are not individually added to the inbox (they would be spam); the existing feed/Match Log covers match-level detail.
+- Event expiry (`expiresAtStage`) is stored but not yet enforced (expired events remain in the list rather than auto-dismissing).
+- Three-column layout collapses to two columns on narrow screens (filters hidden) and single column on mobile (detail panel hidden).

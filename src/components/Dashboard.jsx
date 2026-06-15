@@ -17,6 +17,7 @@ import { getMajorPlacementMap } from "../utils/historyProfiles.js";
 import { isInactivePlayer } from "../utils/playerIdentity.js";
 import { getSecurityBand, bandColor, objStatusColor, objStatusLabel, evalAllObjectives } from "../engine/boardEngine.js";
 import { getActionRequiredMoraleEvents, getPromiseRiskLabel, getSquadMorale } from "../engine/moraleEngine.js";
+import { getActionRequiredCount, getUnreadCount, getSortedEvents, severityColor, CATEGORY_ICON } from "../engine/eventCentreEngine.js";
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
 function placementText(place) {
@@ -490,12 +491,8 @@ export default function Dashboard({ setScreen }) {
         </section>
 
         <section className="fm-panel">
-          <PanelTitle title="Team News" action={<button className="fm-panel-link" onClick={() => setScreen?.("log")}>Log ›</button>} />
-          {feedTeaser.length ? feedTeaser.map(item => (
-            <div key={item.id} className="fm-news-row"><strong>{item.title || item.message}</strong><span>{item.body || `S${item.season} · ${item.phase}`}</span></div>
-          )) : latestMoves.length ? latestMoves.map((tx, i) => (
-            <div key={`${tx.playerId}_${i}`} className="fm-news-row"><strong>{readableMoveType(tx.type)}</strong><span>{tx.note || tx.playerName}</span></div>
-          )) : <CompactEmpty text="No team news yet." />}
+          <PanelTitle title="Manager Inbox" action={<button className="fm-panel-link" onClick={() => setScreen?.("inbox")}>Inbox ›</button>} />
+          <InboxWidget state={state} setScreen={setScreen} />
         </section>
 
         <section className="fm-panel">
@@ -546,6 +543,46 @@ function PanelTitle({ title, action }) {
 
 function CompactEmpty({ text }) {
   return <div className="fm-empty">{text}</div>;
+}
+
+function InboxWidget({ state, setScreen }) {
+  const actionCount = getActionRequiredCount(state?.eventCentre);
+  const unreadCount = getUnreadCount(state?.eventCentre);
+  const topEvents = getSortedEvents(state?.eventCentre).slice(0, 4);
+
+  return (
+    <div className="fm-inbox-widget">
+      {actionCount > 0 && (
+        <div className="fm-inbox-action-bar">
+          <span className="fm-inbox-action-count" style={{ color: "#f59e0b" }}>
+            ⚡ {actionCount} action{actionCount !== 1 ? "s" : ""} required
+          </span>
+        </div>
+      )}
+      {topEvents.length > 0 ? topEvents.map((ev, i) => (
+        <div
+          key={ev.id}
+          className={`fm-inbox-row ${ev.actionRequired && !ev.read ? "fm-inbox-row--action" : ""} ${!ev.read ? "fm-inbox-row--unread" : ""}`}
+          style={{ borderLeftColor: severityColor(ev.severity) }}
+        >
+          <span className="fm-inbox-row-icon" style={{ color: severityColor(ev.severity) }}>
+            {CATEGORY_ICON[ev.category] ?? "·"}
+          </span>
+          <div className="fm-inbox-row-text">
+            <strong>{ev.title}</strong>
+            {ev.summary && <span>{ev.summary}</span>}
+          </div>
+        </div>
+      )) : (
+        <div className="fm-empty">All clear — no inbox events right now.</div>
+      )}
+      {(unreadCount > 4 || topEvents.length > 0) && (
+        <button className="fm-panel-link fm-inbox-open" onClick={() => setScreen?.("inbox")}>
+          Open Inbox{unreadCount > 0 ? ` (${unreadCount})` : ""} ›
+        </button>
+      )}
+    </div>
+  );
 }
 
 

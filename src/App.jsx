@@ -40,6 +40,7 @@ import SeasonAwardsOverlay from "./components/SeasonAwardsOverlay.jsx";
 import BoardReviewOverlay from "./components/BoardReviewOverlay.jsx";
 import TransferAcceptedModal from "./components/TransferAcceptedModal.jsx";
 import NotificationsFeed from "./components/NotificationsFeed.jsx";
+import Inbox from "./components/Inbox.jsx";
 import ConversationModal from "./components/ConversationModal.jsx";
 import { getTeamThemeStyle } from "./utils/teamTheme.js";
 import { resolveUserTeamMeta, isChallengerMode } from "./utils/userTeam.js";
@@ -195,6 +196,7 @@ export default function App() {
         {/* Screen content */}
         <main className="main-content">
           {screen === "home"      && (challengerMode ? <ChallengerDashboard setScreen={setScreen} /> : <Dashboard setScreen={setScreen} />)}
+          {screen === "inbox"    && <Inbox setScreen={setScreen} />}
           {screen === "standings" && <Standings />}
           {screen === "schedule"  && <Schedule />}
           {screen === "kdleaders" && <KDLeaders />}
