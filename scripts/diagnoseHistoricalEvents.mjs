@@ -1,7 +1,8 @@
+import fs from "node:fs";
 import { GHOSTS_TEAMS, GHOSTS_PLAYERS } from "../src/data/historicalRosters.js";
 import { GHOSTS_EVENTS } from "../src/data/ghostsEventCalendar.js";
 import { createInitialStandings, updateStandings } from "../src/engine/standingsEngine.js";
-import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult } from "../src/engine/historicalEventEngine.js";
+import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult, createHistoricalLiveMatch } from "../src/engine/historicalEventEngine.js";
 
 let pass = 0, fail = 0;
 function check(label, condition) { condition ? (pass++, console.log(`  ✓ ${label}`)) : (fail++, console.log(`  ✗ ${label}`)); }
@@ -18,6 +19,8 @@ let state = createHistoricalEventState(event, GHOSTS_TEAMS, GHOSTS_PLAYERS, stan
 check("Opening an event creates event detail/bracket state", !!state && state.eventId === event.id && Array.isArray(state.matches));
 check("Event has a field of teams", state.field.length === event.teamCount);
 check("Event has pending matches", state.matches.some(m => m.status === "pending"));
+const eventDetailSource = fs.readFileSync("src/components/EventDetail.jsx", "utf8");
+check("Pending user match has Play Match action", !getUserPendingMatch(state, userTeamId) || (eventDetailSource.includes("START_PLAY_MATCH") && eventDetailSource.includes("Play Match")));
 check("User team tracking state exists", !!state.teamStates[userTeamId] && typeof state.teamStates[userTeamId].wins === "number");
 const qualifier = GHOSTS_EVENTS.find(e => e.id === "cod_champs_qualifier");
 const qualifierState = createHistoricalEventState(qualifier, GHOSTS_TEAMS, GHOSTS_PLAYERS, standings, userTeamId, 5678);

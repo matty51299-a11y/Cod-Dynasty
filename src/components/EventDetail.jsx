@@ -74,7 +74,7 @@ function MatchCard({ match, userTeamId, isCurrent, onSelect }) {
   );
 }
 
-function UserTracker({ progress, userTeamId, userTeam, userStatus, userMatch, completedUserMatches }) {
+function UserTracker({ progress, userTeamId, userTeam, userStatus, userMatch, completedUserMatches, onPlayMatch }) {
   const latestUserMatch = completedUserMatches[completedUserMatches.length - 1];
   const currentSide = userStatus?.eliminated
     ? "Eliminated"
@@ -104,6 +104,7 @@ function UserTracker({ progress, userTeamId, userTeam, userStatus, userMatch, co
         <span>Best possible finish</span><strong>{bestFinish}</strong>
         <span>Pro Points earned</span><strong>{progress.status === "completed" ? `+${progress.userProPointsAwarded.toLocaleString()}` : "Pending"}</strong>
       </div>
+      {userMatch ? <button className="btn-primary event-play-match-btn" onClick={onPlayMatch}>▶ Play Match</button> : <p className="event-user-waiting">{userStatus?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other event matches to finish."}</p>}
       <h4>Route So Far</h4>
       {completedUserMatches.length ? completedUserMatches.map(m => (
         <div key={m.id} className={`event-route-row ${m.winnerId === userTeamId ? "win" : "loss"}`}>
@@ -113,6 +114,38 @@ function UserTracker({ progress, userTeamId, userTeam, userStatus, userMatch, co
       )) : <p className="dim-text">Your run starts when your first match is reached.</p>}
       {latestUserMatch && <p className="event-latest-user">Latest: {resultText(latestUserMatch)}</p>}
     </aside>
+  );
+}
+
+function LiveMatchModal({ live, dispatch }) {
+  if (!live) return null;
+  const current = live.mapSet[live.currentMapIndex];
+  const last = live.mapResults[live.mapResults.length - 1];
+  const canPlay = live.status !== "completed" && live.mapResults.length === live.currentMapIndex;
+  const stats = last?.playerStats;
+  const row = (p) => <div key={p.playerId} className={last?.bestPerformer?.playerId === p.playerId ? "live-stat-row best" : "live-stat-row"}><span>{p.name}</span><span>{p.kills}</span><span>{p.deaths}</span><strong>{p.kd.toFixed(2)}</strong></div>;
+  return (
+    <div className="live-match-backdrop">
+      <div className="live-match-modal">
+        <div className="live-match-header">
+          <div><div className="panel-kicker">{live.eventName} · {live.roundLabel}</div><h2>{live.teamA.teamName} vs {live.teamB.teamName}</h2><p>{live.gameTitle}</p></div>
+          <strong className="live-series-score">{live.scoreA}-{live.scoreB}</strong>
+        </div>
+        <section className="live-current-map">
+          <span>Map {live.status === "completed" ? live.mapResults.length : current.mapNumber} of 5</span>
+          <h3>{live.status === "completed" ? "Series Complete" : `${current.mapName} ${current.mode}`}</h3>
+          {last && <p>Last map: {last.mapName} {last.mode} · {last.scoreA}-{last.scoreB} · Best performer: {last.bestPerformer.name} ({last.bestPerformer.kills}/{last.bestPerformer.deaths}, {last.bestPerformer.kd.toFixed(2)} K/D)</p>}
+        </section>
+        <div className="live-map-history">{live.mapResults.map(m => <div key={m.mapNumber} className="live-map-chip"><strong>Map {m.mapNumber}</strong><span>{m.mapName}</span><span>{m.mode}</span><b>{m.scoreA}-{m.scoreB}</b></div>)}</div>
+        {stats && <div className="live-stats-grid"><section><h4>{live.teamA.teamName}</h4><div className="live-stat-head"><span>Player</span><span>K</span><span>D</span><span>K/D</span></div>{stats.teamA.map(row)}</section><section><h4>{live.teamB.teamName}</h4><div className="live-stat-head"><span>Player</span><span>K</span><span>D</span><span>K/D</span></div>{stats.teamB.map(row)}</section></div>}
+        <div className="live-match-actions">
+          {canPlay && <button className="btn-primary" onClick={() => dispatch({ type: "PLAY_HISTORICAL_MAP" })}>Play Map</button>}
+          {live.status !== "completed" && !canPlay && <button className="btn-primary" onClick={() => dispatch({ type: "PLAY_HISTORICAL_MAP" })}>Continue / Next Map</button>}
+          {live.status === "completed" && <button className="btn-primary" onClick={() => dispatch({ type: "FINISH_PLAY_MATCH" })}>Finish Match</button>}
+          <button className="btn-secondary" onClick={() => dispatch({ type: "CANCEL_PLAY_MATCH" })}>Cancel / Back</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -145,6 +178,8 @@ export default function EventDetail({ setScreen }) {
     : [["overview", "Overview"], ["bracket", "Bracket"], ["matches", "Matches"], ["results", "Results"], ["placements", "Placements"]];
   const rows = placementRows(progress);
 
+  function playMatch() { dispatch({ type: "START_PLAY_MATCH" }); }
+
   function sim(type) {
     setSelectedMatch(null);
     dispatch({ type });
@@ -152,6 +187,7 @@ export default function EventDetail({ setScreen }) {
 
   return (
     <div className="event-detail event-hub">
+      <LiveMatchModal live={state.liveHistoricalMatch} dispatch={dispatch} />
       <div className="event-hero-card">
         <div className="event-hero-topline">
           <button className="btn-secondary-sm" onClick={() => setScreen("events")}>← Event Calendar</button>
@@ -172,6 +208,7 @@ export default function EventDetail({ setScreen }) {
           </div>
         </div>
         <div className="event-command-deck">
+          {userMatch && <button className="btn-primary event-play-match-btn" disabled={progress.status === "completed"} onClick={playMatch}>▶ Play Match</button>}
           <button className="btn-primary-sm" disabled={progress.status === "completed"} onClick={() => sim("SIM_NEXT_MATCH")}>Sim Next Match</button>
           <button className="btn-primary-sm" disabled={progress.status === "completed" || !userMatch} onClick={() => sim("SIM_USER_MATCH")}>Sim User Match</button>
           <button className="btn-secondary-sm" disabled={progress.status === "completed"} onClick={() => sim("SIM_ROUND")}>Sim Round</button>
@@ -190,6 +227,14 @@ export default function EventDetail({ setScreen }) {
         <main className="event-main-panel event-hub-main">
           {tab === "overview" && (
             <div className="event-overview-grid">
+              <section className="event-section-card event-your-match-panel">
+                <h3>Your Match</h3>
+                {userMatch ? <>
+                  <p><strong>{userMatch.teamA?.teamName}</strong> vs <strong>{userMatch.teamB?.teamName}</strong></p>
+                  <p>{userMatch.roundLabel} · Best of 5 · {progress.gameTitle}</p>
+                  <div className="event-your-match-actions"><button className="btn-primary event-play-match-btn" onClick={playMatch}>▶ Play Match</button><button className="btn-secondary-sm" onClick={() => sim("SIM_USER_MATCH")}>Sim User Match</button></div>
+                </> : <p className="dim-text">{userStatus?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other event matches to finish."}</p>}
+              </section>
               <section className="event-section-card">
                 <h3>Event Field</h3>
                 <div className="event-field-grid">
@@ -272,6 +317,7 @@ export default function EventDetail({ setScreen }) {
           userStatus={userStatus}
           userMatch={userMatch}
           completedUserMatches={completedUserMatches}
+          onPlayMatch={playMatch}
         />
       </div>
     </div>
