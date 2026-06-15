@@ -32,7 +32,7 @@ await page.reload({ waitUntil: "networkidle" });
 // Pick a team — click the first team card if the team selector is up.
 // Wait for the team select screen
 await page.waitForSelector("body");
-const hasTeamSelect = await page.$("text=/CDL MANAGER/i");
+const hasTeamSelect = await page.$("text=/COD DYNASTY/i");
 const teamButtons = await page.$$("button");
 console.log("Loaded. Team select buttons:", teamButtons.length);
 

@@ -1,5 +1,5 @@
 // src/data/staff.js
-// Staff/Coaching data pool for CDL Manager.
+// Staff/Coaching data pool for Cod Dynasty.
 // IDs are prefixed "staff_" to avoid any collision with player IDs.
 
 export const STAFF_ROLES = {

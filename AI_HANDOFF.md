@@ -1,4 +1,4 @@
-# CDL MANAGER — AI HANDOFF
+# COD DYNASTY — AI HANDOFF
 
 This file provides the current state of the project, core systems, constraints, and active development direction.
 
@@ -8,7 +8,7 @@ Any AI working on this repo MUST read this before making changes.
 
 # 🧠 PROJECT OVERVIEW
 
-CDL Manager is a Call of Duty League simulation/management game inspired by Basketball GM and Football Manager.
+Cod Dynasty is a Call of Duty dynasty simulation/management game forked from CDL Manager 2026 and inspired by Basketball GM and Football Manager.
 
 Core pillars:
 - Long-term career simulation

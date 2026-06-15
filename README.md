@@ -1,16 +1,23 @@
-# React + Vite
+# Cod Dynasty
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Cod Dynasty is a standalone Call of Duty dynasty simulation project forked/copied from CDL Manager 2026.
 
-Currently, two official plugins are available:
+This setup pass keeps the copied modern CDL-era management engine intact while separating the new repo for future Historical COD Dynasty development.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Current baseline
 
-## React Compiler
+The current playable baseline still uses the copied modern CDL systems, including teams, rosters, contracts, transfers, scouting, morale, board expectations, staff, inbox, player profiles, awards and season UI.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Direction
 
-## Expanding the ESLint configuration
+Long-term development is planned around Historical Dynasty mode: starting in Call of Duty: Ghosts, advancing through COD titles season by season, and eventually supporting historical teams, rosters, rookies/debuts, 4v4/5v5 era rules and tournament formats.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Historical rosters and eras are not implemented yet.
+
+## Development
+
+```bash
+npm install
+npm run dev
+npm run build
+```

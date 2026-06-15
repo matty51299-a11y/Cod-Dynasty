@@ -27,8 +27,9 @@ export default function TeamSelect() {
 
   return (
     <div className="team-select">
-      <h1 className="title">CDL MANAGER 2026</h1>
+      <h1 className="title">COD DYNASTY</h1>
       <p className="subtitle">Choose your career path</p>
+      <p className="subtitle">Cod Dynasty foundation build · Historical Dynasty mode coming soon</p>
 
       <div className="ts-mode-tabs">
         <button
