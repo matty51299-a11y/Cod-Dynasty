@@ -1,109 +1,52 @@
 // src/components/TeamSelect.jsx
-// Startup screen shown when no save exists. The user chooses a career path:
-//   • Manage CDL Team       → pick one of the 12 CDL franchises
-//   • Manage Challenger Team → pick one of the 24 Challenger teams ("Road to CDL")
-// The Challenger picker shows live roster OVR estimates seeded so the started
-// save matches the preview.
+// Cod Dynasty start flow: historical-only Ghosts dynasty team selection.
 
-import { useMemo, useState } from "react";
-import { CDL_TEAMS } from "../data/teams.js";
-import { useGame, buildChallengerPreview } from "../store/gameStore.jsx";
+import { getGhostsRosterForTeam, getGhostsTeamOvr } from "../data/historicalRosters.js";
+import { HISTORICAL_STARTING_TEAMS } from "../data/teams.js";
+import { useGame } from "../store/gameStore.jsx";
 
 export default function TeamSelect() {
   const { dispatch } = useGame();
-  const [mode, setMode] = useState("cdl"); // "cdl" | "challenger"
-  const [careerMode, setCareerMode] = useState("modern");
-  // One stable seed for this picker session → preview matches the started save.
-  // Lazy state initializer runs once; keeps render pure on subsequent renders.
-  const [seed] = useState(() => ((Date.now() % 999983) * 31 + 7) | 0 || 1);
-  const challengerTeams = useMemo(() => (mode === "challenger" ? buildChallengerPreview(seed) : []), [mode, seed]);
 
-  function selectCdl(teamId) {
-    dispatch({ type: "NEW_GAME", teamId, teamType: "cdl", careerMode });
-  }
-  function selectChallenger(teamId) {
-    dispatch({ type: "NEW_GAME", teamId, teamType: "challenger", seed });
+  function startDynasty(teamId) {
+    dispatch({ type: "NEW_GAME", teamId, teamType: "cdl", careerMode: "historical" });
   }
 
   return (
     <div className="team-select">
       <h1 className="title">COD DYNASTY</h1>
-      <p className="subtitle">Choose your career path</p>
-      <p className="subtitle">Cod Dynasty foundation build · Historical Dynasty mode coming soon</p>
+      <p className="subtitle">Start in Call of Duty: Ghosts and build through COD history.</p>
 
-      <div className="ts-mode-tabs">
-        <button
-          className={`ts-mode-tab ${careerMode === "modern" ? "active" : ""}`}
-          onClick={() => setCareerMode("modern")}
-        >
-          Modern CDL 2026
-          <span className="ts-mode-sub">Default current-era save</span>
-        </button>
-        <button
-          className={`ts-mode-tab ${careerMode === "historical" ? "active" : ""}`}
-          onClick={() => setCareerMode("historical")}
-        >
-          Historical Dynasty: Ghosts Era
-          <span className="ts-mode-sub">Start in Call of Duty: Ghosts and advance by title</span>
-        </button>
+      <div className="ts-mode-tabs" aria-label="Dynasty start">
+        <div className="ts-mode-tab active" role="note">
+          Start Dynasty
+          <span className="ts-mode-sub">Ghosts Era · 4v4 · Domination / Search and Destroy / Blitz</span>
+        </div>
       </div>
 
-      <div className="ts-mode-tabs">
-        <button
-          className={`ts-mode-tab ${mode === "cdl" ? "active" : ""}`}
-          onClick={() => setMode("cdl")}
-        >
-          Manage CDL Team
-          <span className="ts-mode-sub">12 franchises · compete for Champs</span>
-        </button>
-        <button
-          className={`ts-mode-tab ${mode === "challenger" ? "active" : ""}`}
-          onClick={() => setMode("challenger")}
-        >
-          Manage Challenger Team
-          <span className="ts-mode-sub">24 teams · Road to CDL career</span>
-        </button>
-      </div>
-
-      {mode === "cdl" ? (
-        <div className="team-grid">
-          {CDL_TEAMS.map(team => (
+      <div className="team-grid">
+        {HISTORICAL_STARTING_TEAMS.map(team => {
+          const roster = getGhostsRosterForTeam(team.id);
+          const rosterNames = roster.map(player => player.name).join(", ");
+          const ovr = getGhostsTeamOvr(team.id);
+          return (
             <button
               key={team.id}
               className="team-card"
               style={{ borderColor: team.color }}
-              onClick={() => selectCdl(team.id)}
+              onClick={() => startDynasty(team.id)}
             >
-              <span className="team-tag" style={{ color: team.color }}>{team.tag}</span>
+              <span className="team-tag" style={{ color: team.color }}>{team.shortName || team.tag}</span>
               <span className="team-name">{team.name}</span>
+              <span className="ts-challenger-meta">
+                <span className="ts-chip">Ghosts Era</span>
+                {ovr != null && <span className="ts-chip">OVR {ovr}</span>}
+              </span>
+              <span className="ts-mode-sub">{rosterNames}</span>
             </button>
-          ))}
-        </div>
-      ) : (
-        <>
-          <p className="ts-challenger-note">
-            Develop players, win qualifiers, qualify for Pro-Am Majors, the Challengers Finals and ESWC —
-            but bigger CDL teams will try to buy out your best talent.
-          </p>
-          <div className="team-grid ts-challenger-grid">
-            {challengerTeams.map(team => (
-              <button
-                key={team.id}
-                className="team-card ts-challenger-card"
-                style={{ borderColor: team.color }}
-                onClick={() => selectChallenger(team.id)}
-              >
-                <span className="team-tag" style={{ color: team.color }}>{team.tag}</span>
-                <span className="team-name">{team.name}</span>
-                <span className="ts-challenger-meta">
-                  <span className="ts-chip">{team.region}</span>
-                  <span className="ts-chip">Est. OVR {team.ovr}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }

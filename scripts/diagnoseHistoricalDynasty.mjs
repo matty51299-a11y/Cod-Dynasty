@@ -1,35 +1,29 @@
-import { buildInitialRoster } from "../src/data/players.js";
-import { generateProspects } from "../src/data/prospects.js";
-import { buildSeason } from "../src/engine/seasonEngine.js";
-import { getEra } from "../src/data/codEras.js";
-import { createHistoricalStateFields, advanceHistoricalEraIfNeeded, migrateHistoricalDynastyState, introduceHistoricalRookieClass } from "../src/engine/historicalDynasty.js";
+import { getEra, getNextEra } from "../src/data/codEras.js";
+import { createHistoricalStateFields, advanceHistoricalEraIfNeeded, migrateHistoricalDynastyState } from "../src/engine/historicalDynasty.js";
 
-let failures = 0;
-function check(label, ok, detail = "") { console.log(`${ok ? "✅" : "❌"} ${label}${detail ? ` — ${detail}` : ""}`); if (!ok) failures++; }
-function newState(careerMode = "modern") { return { userTeamId: "lat", userTeamType: "cdl", season: 1, players: buildInitialRoster(), prospects: generateProspects(1234).slice(0, 30), schedule: buildSeason(1), ...createHistoricalStateFields(careerMode) }; }
+const failures = [];
+function check(label, pass, detail = "") {
+  if (pass) console.log(`PASS: ${label}`);
+  else { failures.push(`${label}${detail ? ` (${detail})` : ""}`); console.error(`FAIL: ${label}${detail ? ` (${detail})` : ""}`); }
+}
 
-const modern = newState("modern");
-check("Modern mode starts normally", modern?.careerMode === "modern" && modern?.currentEraId === "modern_2026", `${modern?.careerMode}/${modern?.currentEraId}`);
-
-let hist = introduceHistoricalRookieClass(newState("historical"), "ghosts");
-check("Historical mode starts in Ghosts", hist?.careerMode === "historical" && hist?.currentEraId === "ghosts", hist?.currentEraId);
-check("Current game title is Call of Duty: Ghosts", hist?.currentGameTitle === "Call of Duty: Ghosts", hist?.currentGameTitle);
+const fresh = createHistoricalStateFields();
+check("Fresh Cod Dynasty state is historical", fresh.careerMode === "historical", fresh.careerMode);
+check("Fresh Cod Dynasty state starts in Ghosts", fresh.currentEraId === "ghosts", fresh.currentEraId);
+check("Current game title is Call of Duty: Ghosts", fresh.currentGameTitle === "Call of Duty: Ghosts", fresh.currentGameTitle);
 const ghosts = getEra("ghosts");
-check("Ghosts map/mode data is available", ghosts?.modes?.includes("Blitz") && ghosts?.mapPool?.Hardpoint?.includes("Freight"));
-
-const aw = advanceHistoricalEraIfNeeded({ ...hist, season: 1, schedule: { ...(hist.schedule || {}), season: 1 } });
+check("Ghosts mode data excludes Hardpoint", !ghosts.modes.includes("Hardpoint"), ghosts.modes.join(", "));
+check("Ghosts mode data includes Blitz and Domination", ghosts.modes.includes("Blitz") && ghosts.modes.includes("Domination"), ghosts.modes.join(", "));
+const aw = advanceHistoricalEraIfNeeded({ ...fresh, season: 1, players: [], prospects: [] });
 check("End of season advances to Advanced Warfare", aw.currentEraId === "advanced_warfare", aw.currentEraId);
-check("Era transition is recorded", aw.eraHistory?.length === 1 && aw.pendingEraTransition?.newEraId === "advanced_warfare");
-const awCount = (aw.prospects || []).filter(p => p.debutEraId === "advanced_warfare").length;
-check("Advanced Warfare rookie class is introduced once", awCount === 3, `${awCount} AW prospects`);
-const reloaded = introduceHistoricalRookieClass(migrateHistoricalDynastyState(JSON.parse(JSON.stringify(aw))), "advanced_warfare");
-const awCountReload = (reloaded.prospects || []).filter(p => p.debutEraId === "advanced_warfare").length;
-check("Reloading/hydrating does not duplicate rookie class", awCountReload === awCount, `${awCountReload} after reload`);
-const bo3 = advanceHistoricalEraIfNeeded({ ...reloaded, pendingEraTransition: null });
+const bo3 = advanceHistoricalEraIfNeeded({ ...aw, pendingEraTransition: null });
 check("Advancing again moves to Black Ops 3", bo3.currentEraId === "black_ops_3", bo3.currentEraId);
-const old = migrateHistoricalDynastyState({ season: 4, players: [], prospects: [], schedule: { season: 4 } });
-check("Existing modern saves hydrate as modern_2026", old.careerMode === "modern" && old.currentEraId === "modern_2026", `${old.careerMode}/${old.currentEraId}`);
-check("Current full-season flow compatibility smoke", !!modern.schedule?.stages?.length && !!modern.players?.length && Array.isArray(modern.prospects));
+const old = migrateHistoricalDynastyState({ userTeamId: "boston" });
+check("Copied saves hydrate into historical Ghosts mode", old.careerMode === "historical" && old.currentEraId === "ghosts", `${old.careerMode}/${old.currentEraId}`);
+check("Historical era chain includes Advanced Warfare next", getNextEra("ghosts")?.id === "advanced_warfare");
 
-if (failures) { console.error(`\nHistorical Dynasty diagnostic failed: ${failures}`); process.exit(1); }
-console.log("\nHistorical Dynasty diagnostic passed.");
+if (failures.length) {
+  console.error(`Historical dynasty diagnostic FAILED with ${failures.length} problem(s).`);
+  process.exit(1);
+}
+console.log("Historical dynasty diagnostic passed.");

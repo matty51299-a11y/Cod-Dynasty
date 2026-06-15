@@ -1,4 +1,4 @@
-import { getEra, getNextEra, MODERN_ERA_ID, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
+import { getEra, getNextEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { HISTORICAL_ROOKIE_CLASSES } from "../data/historicalRookieClasses.js";
 
 function clamp(v, min = 40, max = 99) { return Math.max(min, Math.min(max, Math.round(v))); }
@@ -6,9 +6,8 @@ function hashString(str) { let h = 2166136261; for (const ch of String(str || ""
 function attr(base, salt) { return clamp(base + ((salt % 13) - 6)); }
 
 export function migrateHistoricalDynastyState(state) {
-  const careerMode = state?.careerMode === "historical" ? "historical" : "modern";
-  const currentEraId = careerMode === "historical" ? (state?.currentEraId || HISTORICAL_START_ERA_ID) : (state?.currentEraId || MODERN_ERA_ID);
-  const era = getEra(currentEraId);
+  const careerMode = "historical";
+  const era = getEra(state?.currentEraId || HISTORICAL_START_ERA_ID);
   return {
     ...state,
     careerMode,
@@ -63,10 +62,9 @@ export function introduceHistoricalRookieClass(state, eraId) {
   };
 }
 
-export function createHistoricalStateFields(careerMode = "modern") {
-  const historical = careerMode === "historical";
-  const era = getEra(historical ? HISTORICAL_START_ERA_ID : MODERN_ERA_ID);
-  return { careerMode: historical ? "historical" : "modern", currentEraId: era.id, currentGameTitle: era.gameTitle, historicalSeasonIndex: 0, eraHistory: [], introducedRookieClassIds: [], pendingEraTransition: null };
+export function createHistoricalStateFields() {
+  const era = getEra(HISTORICAL_START_ERA_ID);
+  return { careerMode: "historical", currentEraId: era.id, currentGameTitle: era.gameTitle, historicalSeasonIndex: 0, eraHistory: [], introducedRookieClassIds: [], pendingEraTransition: null };
 }
 
 export function advanceHistoricalEraIfNeeded(state) {

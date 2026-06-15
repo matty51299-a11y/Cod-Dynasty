@@ -1,0 +1,124 @@
+// src/data/historicalRosters.js
+// Historical starting data for Cod Dynasty.
+// Source of truth: data/import/cod_manager_rosters_database.xlsx, Ghosts sheet.
+
+function slug(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function hashString(str) {
+  let h = 2166136261;
+  for (const ch of String(str || "")) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function clamp(v, min = 58, max = 94) { return Math.max(min, Math.min(max, Math.round(v))); }
+function attr(base, salt) { return clamp(base + ((salt % 13) - 6), 45, 99); }
+function teamTag(name) {
+  const words = String(name).match(/[A-Za-z0-9]+/g) || [];
+  const initials = words.map(w => w[0]).join("").slice(0, 4).toUpperCase();
+  return initials || String(name).slice(0, 4).toUpperCase();
+}
+
+export const GHOSTS_SPREADSHEET_SOURCE = "data/import/cod_manager_rosters_database.xlsx#Ghosts";
+
+export const GHOSTS_TEAM_ROWS = [
+  { name: "compLexity", players: ["ACHES", "TeePee", "Crimsix", "Karma"] },
+  { name: "Envy", players: ["Rambo", "MerK", "NAMELESS", "StuDyy"] },
+  { name: "OpTic Gaming", players: ["NaDeSHoT", "Clayster", "MBoZe", "Scump"] },
+  { name: "Strictly Business", players: ["Censor", "Apathy", "Saints", "Dedo"] },
+  { name: "Trident T1 Dotters", players: ["Iskatuu", "Chilean", "Denz", "Damage"] },
+  { name: "FaZe Clan", players: ["Replays", "Classic", "JKap", "ProoFy"] },
+  { name: "Rise Nation", players: ["Pacman", "Whea7s", "Loony", "FEARS"] },
+  { name: "VexX Revenge", players: ["Slumber", "iLLSkiLL", "Mech", "Demon"] },
+  { name: "Epsilon Esports", players: ["Jurd", "Swanny", "Tommey", "Flux"] },
+  { name: "TCM-Gaming", players: ["MarkyB", "Moose", "GunShy", "MadCat"] },
+  { name: "Xfinity Gaming", players: ["Muddawg", "Crowster", "SinfuL", "Doubt"] },
+  { name: "Vitality.Rises", players: ["Gotaga", "BroKeN", "Krnage", "bLue"] },
+  { name: "Team Kaliber", players: ["Sharp", "Theory", "Goonjar", "FormaL"] },
+  { name: "Team Immunity", players: ["BuZZO", "Naked", "Shockz", "Rampage"] },
+  { name: "WiLD Gaming", players: ["Brock", "Incepts", "Anticity", "NeXxX"] },
+  { name: "Vitality.Returns", players: ["Agonie", "AzoX", "Getsom", "dyLux"] },
+  { name: "Team RiZe ZA", players: ["JB", "ParadoxX", "Pupsky", "Mance"] },
+  { name: "Team Orbit", players: ["EndurAAA", "Lewis", "Jacko", "BounCe"] },
+  { name: "Lightning Pandas", players: ["ShAnE", "NeCRoMe", "RaMba", "Randm"] },
+  { name: "SK Gaming", players: ["QuiCky", "Kivi", "RockZ", "raidN"] },
+  { name: "TEC Intensity", players: ["Realize", "MeLo", "Robz", "Wonder"] },
+  { name: "Wizards e-Sports Club", players: ["FlexZ", "T Mac", "KiNDoK", "JorGeh"] },
+  { name: "New Star Player", players: ["ArtShot", "Doloshi", "BenjiNuri", "Turbo"] },
+  { name: "KILLERFISH eSport", players: ["Blackk", "hAsbroken", "Theros", "AyKoN"] },
+  { name: "Sublime Gaming", players: ["Kolgaa", "Frido", "Pibo", "POW3R"] },
+  { name: "Real AllStars", players: ["Blackk", "Bissell", "Torres", "DaReDeViL"] },
+  { name: "Reign Mix", players: ["Reece", "Joocy", "Vizze", "IceManN"] },
+  { name: "Aztek Gaming", players: ["NeooosZ", "Clumzy", "Dynamic", "Afro"] },
+];
+
+export const GHOSTS_TEAMS = GHOSTS_TEAM_ROWS.map((row, index) => ({
+  id: slug(row.name),
+  name: row.name,
+  tag: teamTag(row.name),
+  shortName: teamTag(row.name),
+  color: ["#2f80ed", "#27ae60", "#f2c94c", "#eb5757", "#9b51e0", "#56ccf2", "#f2994a", "#6fcf97"][index % 8],
+  budgetTier: 3,
+  eraId: "ghosts",
+  eraLabel: "Ghosts",
+  source: GHOSTS_SPREADSHEET_SOURCE,
+  roster: row.players,
+}));
+
+export function makeGhostsPlayer(name, teamId, slot = 0) {
+  const h = hashString(`${teamId}|${name}`);
+  const base = 70 + (h % 17);
+  const roles = ["Main AR", "Slayer SMG", "Objective", "Flex"];
+  const primary = roles[slot % roles.length];
+  const secondary = roles[(slot + 1) % roles.length];
+  const overall = clamp(base + (slot === 0 ? 2 : 0), 60, 94);
+  return {
+    id: `${teamId}_${slug(name)}`,
+    name,
+    teamId,
+    age: 19 + (h % 10),
+    primary,
+    secondary,
+    region: "NA",
+    salary: Math.round((overall / 99) * 180 + 20) * 1000,
+    overall,
+    potential: clamp(overall + 4 + ((h >> 3) % 9), overall, 99),
+    gunny: attr(overall, h),
+    awareness: attr(overall, h >> 3),
+    objective: attr(overall, h >> 6),
+    searchIQ: attr(overall, h >> 9),
+    clutch: attr(overall, h >> 12),
+    teamwork: attr(overall, h >> 15),
+    composure: attr(overall, h >> 18),
+    adaptability: attr(overall, h >> 21),
+    ego: 1 + (h % 5),
+    workEthic: 1 + ((h >> 3) % 5),
+    tiltResistance: 1 + ((h >> 6) % 5),
+    leadership: 1 + ((h >> 9) % 5),
+    metaDependence: 1 + ((h >> 12) % 5),
+    form: 70,
+    experience: 1,
+    isProspect: false,
+    contractYears: 1 + (h % 3),
+    eraId: "ghosts",
+  };
+}
+
+export const GHOSTS_PLAYERS = GHOSTS_TEAM_ROWS.flatMap((row) => {
+  const teamId = slug(row.name);
+  return row.players.map((name, index) => makeGhostsPlayer(name, teamId, index));
+});
+
+export function getGhostsRosterForTeam(teamId) {
+  return GHOSTS_PLAYERS.filter(player => player.teamId === teamId);
+}
+
+export function getGhostsTeamOvr(teamId) {
+  const roster = getGhostsRosterForTeam(teamId);
+  if (!roster.length) return null;
+  return Math.round(roster.reduce((sum, player) => sum + (player.overall || 0), 0) / roster.length);
+}

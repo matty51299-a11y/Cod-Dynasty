@@ -240,7 +240,7 @@ function cleanupDuplicateActiveAssignments(state) {
 // userTeamType: "cdl" (manage a CDL franchise) | "challenger" (manage a
 // Challenger team — a "Road to CDL" career). For challenger mode userTeamId is
 // a Challenger team id and is validated against the freshly-built rosters.
-function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride = null, careerMode = "modern") {
+function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride = null, careerMode = "historical") {
   const challengerMode = userTeamType === "challenger";
   if (!challengerMode && !isValidTeamId(userTeamId)) return null;
   const players  = buildInitialRoster().map(applyChallengerRatingOverride);
@@ -432,21 +432,25 @@ export function __diagnoseReducer(state, action) {
       return createInitialGameState(action.teamId, action.teamType, action.seed, action.careerMode);
 
     case "LOAD_GAME": {
-      if (!action.state || !isValidGameState(action.state)) return null;
+      if (!action.state) return null;
+
+      const fallbackTeamId = CDL_TEAMS[0]?.id;
+      const safeLoadedState = isValidGameState(action.state)
+        ? action.state
+        : { ...action.state, userTeamId: isValidTeamId(action.state?.userTeamId) ? action.state.userTeamId : fallbackTeamId, userTeamType: "cdl", season: Number.isFinite(action.state?.season) ? action.state.season : 1, schedule: action.state?.schedule || buildSeason(1) };
 
       // Backfill `feed` for saves that predate this feature
       const loaded = {
-        ...action.state,
-        // Existing saves are CDL manager saves — default to "cdl", never migrate
-        // a CDL save into Challenger mode.
-        userTeamType: action.state?.userTeamType === "challenger" ? "challenger" : "cdl",
-        feed: action.state?.feed ?? [],
-        seasonHistory: action.state?.seasonHistory ?? [],
-        playerCareerHistory: action.state?.playerCareerHistory ?? [],
-        teamCareerHistory: action.state?.teamCareerHistory ?? [],
-        awards: action.state?.awards ?? [],
-        pendingSeasonAwards: action.state?.pendingSeasonAwards ?? null,
-        seenAwardsSeasons: action.state?.seenAwardsSeasons ?? [],
+        ...safeLoadedState,
+        // Standalone Cod Dynasty hydrates copied saves into Ghosts historical team mode.
+        userTeamType: "cdl",
+        feed: safeLoadedState?.feed ?? [],
+        seasonHistory: safeLoadedState?.seasonHistory ?? [],
+        playerCareerHistory: safeLoadedState?.playerCareerHistory ?? [],
+        teamCareerHistory: safeLoadedState?.teamCareerHistory ?? [],
+        awards: safeLoadedState?.awards ?? [],
+        pendingSeasonAwards: safeLoadedState?.pendingSeasonAwards ?? null,
+        seenAwardsSeasons: safeLoadedState?.seenAwardsSeasons ?? [],
       };
       const migratedMajors = [...(loaded.schedule?.majors ?? [])];
       if (!migratedMajors[5]) migratedMajors[5] = { name: "ESWC", bracket: null, completed: false, eventType: "eswc", pointsAwarded: true };
