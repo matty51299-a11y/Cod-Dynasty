@@ -11482,3 +11482,19 @@ body { background: #111317; }
 .player-card-body {
   display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 12px 16px;
 }
+.event-detail { padding: 24px; }
+.event-detail-header, .event-actions-bar, .event-tabs, .event-detail-layout { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.event-detail-header { justify-content: space-between; align-items: flex-start; }
+.event-header-stats { display: flex; flex-direction: column; gap: 5px; color: var(--text-dim); font-size: 12px; }
+.event-tabs button.active { border-color: var(--accent); color: var(--text-head); }
+.event-detail-layout { align-items: flex-start; }
+.event-main-panel, .event-summary-panel { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 16px; }
+.event-main-panel { flex: 1; }
+.event-summary-panel { width: 300px; }
+.event-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.team-chip, .user-chip { padding: 8px; border: 1px solid rgba(255,255,255,.1); border-radius: 6px; }
+.user-chip, .match-row.user-row { border-color: var(--accent); background: rgba(91,157,255,.12); }
+.bracket-round { margin-bottom: 18px; }
+.match-row { display: grid; grid-template-columns: 1fr 64px 1fr 160px; gap: 10px; align-items: center; padding: 9px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.match-row.completed strong { color: var(--yellow); }
+.match-row.pending em { color: var(--text-dim); }
