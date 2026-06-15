@@ -456,7 +456,11 @@ function applyTraitModifiers(players, ctx) {
 export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
   teamAObj = padTeamToFour(teamAObj);
   teamBObj = padTeamToFour(teamBObj);
-  const mapDef = MAP_ROTATION[mapIdx];
+  const selectedMap = matchCtx?.selectedMap ?? null;
+  const selectedMode = selectedMap?.mode || null;
+  const mapDef = selectedMode
+    ? { mode: selectedMode, short: selectedMode === "Search and Destroy" || selectedMode === "Search & Destroy" ? "S&D" : selectedMode === "Domination" ? "DOM" : selectedMode === "Blitz" ? "BLZ" : (MAP_ROTATION[mapIdx]?.short ?? selectedMode.slice(0, 3).toUpperCase()) }
+    : MAP_ROTATION[mapIdx];
   const chemA  = calcChemistry(teamAObj.players);
   const chemB  = calcChemistry(teamBObj.players);
 
@@ -560,7 +564,6 @@ export function simMap(teamAObj, teamBObj, mapIdx, matchCtx, rng) {
   const totalStr = strAadj + strBadj;
   const momentum = totalStr > 0 ? strAadj / totalStr : 0.5;
 
-  const selectedMap = ctx.selectedMap ?? null;
 
   return {
     mapResult: {

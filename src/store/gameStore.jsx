@@ -7,7 +7,7 @@ import { buildInitialRoster } from "../data/players.js";
 import { generateProspects } from "../data/prospects.js";
 import { applyChallengerRatingOverride } from "../data/challengerRatingOverrides.js";
 import { buildCdlRosterNameSet, findDuplicateActivePlayers, isCdlTeamId, isInactivePlayer, normalizePlayerName } from "../utils/playerIdentity.js";
-import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simMajorRound, advanceOffseason, beginChamps, beginEswc, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, simUserChallengerQualifierMatch, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
+import { buildSeason, simNextMatch, simMatchday, simUserMatchday, simStage, simMajor, simNextMajorMatch, simUserMajorMatch, simMajorRound, advanceOffseason, beginChamps, beginEswc, enterContractPhase, commitUserMatchResult, ensureChallengerTeams, buildChallengerRostersForNewGame, simChallengerQualifier, simNextChallengerQualifierMatch, simChallengerQualifierRound, simUserChallengerQualifierMatch, continueFromChallengerQualifier } from "../engine/seasonEngine.js";
 import { generateMajorFeed, generateChallengerQualFeed, generateRosterMoveFeed, generateOffseasonFeed } from "../engine/feedGenerator.js";
 import { ensureCdlRosterIntegrity, getSigningCost, getTeamCap } from "../engine/rosterAI.js";
 import { isChallengerMode, getChallengerRosterPlayers, getUserChallengerTeam } from "../utils/userTeam.js";
@@ -577,6 +577,19 @@ export function __diagnoseReducer(state, action) {
       const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
       const prevLogLen = state.schedule?.matchLog?.length ?? 0;
       const newState     = simNextMajorMatch({ ...state });
+      const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
+      const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
+      const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
+      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx, wasCompleted), prevLogLen);
+      });
+    }
+
+    case "SIM_USER_MAJOR_MATCH": {
+      return runIfUserRosterValid(state, () => {
+      const majorIdx     = state.schedule?.majorIdx;
+      const wasCompleted = state.schedule?.majors?.[majorIdx]?.completed ?? true;
+      const prevLogLen = state.schedule?.matchLog?.length ?? 0;
+      const newState     = simUserMajorMatch({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
       const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);

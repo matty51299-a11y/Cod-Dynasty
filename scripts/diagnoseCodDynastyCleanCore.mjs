@@ -1,0 +1,10 @@
+import fs from "node:fs";
+import assert from "node:assert/strict";
+const progress = fs.readFileSync("progress.md", "utf8");
+const teams = fs.readFileSync("src/data/teams.js", "utf8");
+const eras = fs.readFileSync("src/data/codEras.js", "utf8");
+assert.ok(progress.includes("standalone historical COD dynasty"), "progress.md must remain historical source of truth");
+assert.ok(eras.includes("Call of Duty: Ghosts"), "Ghosts era must exist");
+assert.ok(eras.includes("Domination") && eras.includes("Blitz"), "Ghosts modes must include Domination and Blitz");
+assert.ok(teams.includes("GHOSTS_TEAMS"), "Team list must come from historical Ghosts teams");
+console.log("✓ Cod Dynasty clean historical core checks passed");
