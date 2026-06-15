@@ -4,6 +4,7 @@ import { GHOSTS_EVENTS } from "../data/ghostsEventCalendar.js";
 import { getEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { simulateEvent } from "../engine/eventSim.js";
 import { createInitialStandings, updateStandings } from "../engine/standingsEngine.js";
+import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult } from "../engine/historicalEventEngine.js";
 
 const SAVE_KEY = "cod_dynasty_save";
 
@@ -46,6 +47,8 @@ function createNewGame(userTeamId) {
     amateurPool: [],
     eventCalendar: [...GHOSTS_EVENTS],
     completedEvents: [],
+    eventProgress: {},
+    activeEventId: null,
     standings,
     currentEventIndex: 0,
     notifications: [],
@@ -67,6 +70,63 @@ export function isValidDynastyState(state) {
   );
 }
 
+
+function completeHistoricalEvent(state, event, eventState) {
+  if (state.completedEvents.some(e => e.eventId === event.id)) return state;
+  const result = toEventResult(eventState, event);
+  const userResult = result.results.find(r => r.teamId === state.userTeamId);
+  const newStandings = updateStandings(state.standings, result);
+  const idx = state.eventCalendar.findIndex(e => e.id === event.id);
+  const inboxEntry = {
+    id: `event_${event.id}`,
+    type: "event_result",
+    title: `${event.name} Complete`,
+    summary: `Champion: ${result.champion?.teamName}${userResult ? ` | Your finish: #${userResult.placement}` : ""}`,
+    champion: result.champion,
+    userPlacement: userResult?.placement,
+    userProPoints: userResult?.proPointsAwarded || 0,
+    timestamp: Date.now(),
+  };
+  return addNotif({
+    ...state,
+    standings: newStandings,
+    completedEvents: [...state.completedEvents, result],
+    currentEventIndex: Math.max(state.currentEventIndex, idx + 1),
+    activeEventId: null,
+    inboxEvents: [...(state.inboxEvents || []), inboxEntry],
+  }, `${result.champion?.teamName} win ${event.name}!${userResult ? ` You placed #${userResult.placement}.` : ""}`);
+}
+
+function simulateHistoricalEventAction(state, mode) {
+  const eventId = state.activeEventId || state.eventCalendar[state.currentEventIndex]?.id;
+  const event = state.eventCalendar.find(e => e.id === eventId);
+  if (!event) return addNotif(state, "No active event to simulate.");
+  let eventState = state.eventProgress?.[eventId] || createHistoricalEventState(event, state.teams, state.players, state.standings, state.userTeamId, Date.now());
+  if (eventState.status === "completed") return completeHistoricalEvent({ ...state, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } }, event, eventState);
+
+  if (mode === "user") {
+    const userMatch = getUserPendingMatch(eventState, state.userTeamId);
+    if (!userMatch) {
+      const userStatus = eventState.teamStates?.[state.userTeamId];
+      return addNotif({ ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } }, userStatus?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other matches to finish.");
+    }
+    eventState = simulateMatch(eventState, userMatch.id, event, state.userTeamId);
+  } else if (mode === "round") {
+    const round = getNextPendingMatch(eventState)?.round;
+    if (!round) return addNotif(state, "No pending matches in this event.");
+    let ids = eventState.matches.filter(m => m.status === "pending" && m.round === round).map(m => m.id);
+    for (const id of ids) eventState = simulateMatch(eventState, id, event, state.userTeamId);
+  } else {
+    const match = getNextPendingMatch(eventState);
+    if (!match) return addNotif(state, "No pending matches in this event.");
+    eventState = simulateMatch(eventState, match.id, event, state.userTeamId);
+  }
+
+  let nextState = { ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } };
+  if (eventState.status === "completed") nextState = completeHistoricalEvent(nextState, event, eventState);
+  return nextState;
+}
+
 function dynastyReducer(state, action) {
   switch (action.type) {
     case "NEW_GAME":
@@ -81,12 +141,51 @@ function dynastyReducer(state, action) {
     case "CLEAR_NOTIF":
       return { ...state, notifications: [] };
 
+
+    case "OPEN_EVENT": {
+      if (!state) return state;
+      const eventId = action.eventId || state.eventCalendar[state.currentEventIndex]?.id;
+      const event = state.eventCalendar.find(e => e.id === eventId);
+      if (!event) return addNotif(state, "Event not found.");
+      if (state.eventProgress?.[eventId]) return { ...state, activeEventId: eventId };
+      const seed = Date.now() ^ ((state.eventCalendar.findIndex(e => e.id === eventId) + 1) * 7919);
+      const eventState = createHistoricalEventState(event, state.teams, state.players, state.standings, state.userTeamId, seed);
+      return { ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } };
+    }
+
+    case "SIM_NEXT_MATCH": {
+      if (!state) return state;
+      return simulateHistoricalEventAction(state, "next");
+    }
+
+    case "SIM_USER_MATCH": {
+      if (!state) return state;
+      return simulateHistoricalEventAction(state, "user");
+    }
+
+    case "SIM_ROUND": {
+      if (!state) return state;
+      return simulateHistoricalEventAction(state, "round");
+    }
+
     case "SIM_EVENT": {
       if (!state) return state;
-      const idx = state.currentEventIndex;
-      if (idx >= state.eventCalendar.length) {
-        return addNotif(state, "All events for this season have been completed.");
+      if (state.activeEventId || state.eventCalendar[state.currentEventIndex]) {
+        let nextState = state;
+        const eventId = state.activeEventId || state.eventCalendar[state.currentEventIndex]?.id;
+        if (eventId && !nextState.eventProgress?.[eventId]) {
+          nextState = dynastyReducer(nextState, { type: "OPEN_EVENT", eventId });
+        }
+        while (nextState.eventProgress?.[eventId]?.status !== "completed") {
+          const before = nextState.eventProgress?.[eventId]?.matches?.filter(m => m.status === "completed").length || 0;
+          nextState = simulateHistoricalEventAction(nextState, "next");
+          const after = nextState.eventProgress?.[eventId]?.matches?.filter(m => m.status === "completed").length || 0;
+          if (after === before) break;
+        }
+        return nextState;
       }
+      const idx = state.currentEventIndex;
+      if (idx >= state.eventCalendar.length) return addNotif(state, "All events for this season have been completed.");
       const event = state.eventCalendar[idx];
       const seed = Date.now() ^ (idx * 7919);
       const result = simulateEvent(event, state.teams, state.players, state.standings, seed);

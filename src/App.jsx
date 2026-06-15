@@ -8,6 +8,7 @@ import DynastyFreeAgency from "./components/DynastyFreeAgency.jsx";
 import AmateurPool from "./components/AmateurPool.jsx";
 import EventCalendar from "./components/EventCalendar.jsx";
 import EventResult from "./components/EventResult.jsx";
+import EventDetail from "./components/EventDetail.jsx";
 import DynastyStandings from "./components/DynastyStandings.jsx";
 
 export default function App() {
@@ -91,6 +92,7 @@ export default function App() {
           {screen === "amateurs" && <AmateurPool />}
           {screen === "events" && <EventCalendar setScreen={setScreen} />}
           {screen === "eventresult" && <EventResult setScreen={setScreen} />}
+          {screen === "eventdetail" && <EventDetail setScreen={setScreen} />}
         </main>
       </div>
     </div>
