@@ -22,6 +22,10 @@ import {
   makeUserEliminatedEvent, makeAwardEvent, makeUserAwardEvent,
   makeStageSimSummaryEvent, makeUserMatchResultEvent, makeOffseasonStartEvent,
   makeStandoutPerformanceEvent, makeAssistantGmRecommendation, makeRivalSigningEvent,
+  makeMatchSummaryEvent, makePerformanceStoryEvent, makePromiseKeptEvent,
+  makeSquadMoraleWarningEvent, makeRosterIncompleteEvent, makeContractExpiringEvent,
+  makeRivalEliminatedEvent, makeChallengerQualifiesEvent, makeCoachConcernEvent,
+  makeSeasonStartEvent, generateMatchInboxEvents,
   makeEvent, makeLeagueNewsEvent,
   EVENT_CATEGORIES, CATEGORY_LIST, SEVERITY, SEVERITY_ORDER,
   severityColor, severityBg, CATEGORY_ICON,
@@ -310,6 +314,137 @@ console.log("\n12. Event cap");
   }
   ec = pushEvents(ec, events);
   check("event cap enforced (≤ 300)", ec.events.length <= 300);
+}
+
+// ── 13. Match summary events ────────────────────────────────────────────
+console.log("\n13. Match summary events");
+{
+  resetNextId(1);
+  const state = baseState();
+  const matchResult = {
+    teamA: "lat", teamB: "atl", scoreA: 3, scoreB: 1, played: true,
+    season: 1, matchday: 1,
+    standouts: [{ name: "Sib", kd: 1.35, playerId: "p1" }, { name: "Kenny", kd: 0.78, playerId: "p2" }],
+    maps: [
+      { mode: "HP", mapName: "Sake", teamAScore: 250, teamBScore: 180 },
+      { mode: "S&D", mapName: "Den", teamAScore: 6, teamBScore: 4 },
+      { mode: "OVR", mapName: "Den", teamAScore: 3, teamBScore: 1 },
+      { mode: "HP", mapName: "Scar", teamAScore: 250, teamBScore: 220 },
+    ],
+  };
+
+  const ev = makeMatchSummaryEvent(matchResult, "lat", state);
+  check("match summary type correct", ev.type === "match_summary");
+  check("match summary category", ev.category === "Match Results");
+  check("match summary has title", ev.title.length > 5);
+  check("match summary has scoreline in title", ev.title.includes("3-1"));
+  check("match summary has matchData", !!ev.matchData);
+  check("match summary matchData.won", ev.matchData.won === true);
+  check("match summary has best performer", !!ev.matchData.bestPerformer);
+  check("match summary best performer is Sib", ev.matchData.bestPerformer.name === "Sib");
+  check("match summary has dedupKey", !!ev.dedupKey);
+  check("match summary targets match log", ev.targetScreen === "log");
+
+  const lossResult = { ...matchResult, scoreA: 1, scoreB: 3, standouts: [] };
+  const evLoss = makeMatchSummaryEvent(lossResult, "lat", state);
+  check("loss match summary severity is low", evLoss.severity === "low");
+  check("loss title has tone word", /loss|defeat|fall|heavy/i.test(evLoss.title));
+
+  let ec = migrateEventCentre(null);
+  ec = pushEvents(ec, [ev]);
+  const ev2 = makeMatchSummaryEvent(matchResult, "lat", state);
+  ec = pushEvents(ec, [ev2]);
+  check("duplicate match summary blocked", ec.events.filter(e => e.type === "match_summary").length === 1);
+}
+
+// ── 14. Performance story events ────────────────────────────────────────
+console.log("\n14. Performance story events");
+{
+  resetNextId(1);
+  const state = baseState();
+  const player = { name: "Sib", id: "test_p1" };
+
+  const standout = makePerformanceStoryEvent(player, 1.40, "standout", state);
+  check("standout performance type", standout.type === "performance_story");
+  check("standout has player name in title", standout.title.includes("Sib"));
+  check("standout severity medium", standout.severity === "medium");
+
+  const poor = makePerformanceStoryEvent(player, 0.65, "poor", state);
+  check("poor performance generated", poor.type === "performance_story");
+  check("poor has KD in title", poor.title.includes("0.65"));
+
+  const mvp = makePerformanceStoryEvent(player, 1.50, "mvp", state);
+  check("mvp event category is Awards", mvp.category === "Awards");
+}
+
+// ── 15. New event generators ────────────────────────────────────────────
+console.log("\n15. New event generators");
+{
+  resetNextId(1);
+  const state = baseState();
+  const player = state.players.find(p => p.teamId === "lat");
+
+  const promiseKept = makePromiseKeptEvent({ id: "pk1", label: "starter_role" }, player, state);
+  check("promise kept event generated", promiseKept.type === "promise_kept");
+  check("promise kept is info severity", promiseKept.severity === "info");
+
+  const squadMorale = makeSquadMoraleWarningEvent(35, state);
+  check("squad morale warning generated", squadMorale.type === "squad_morale_warning");
+  check("squad morale warning is action-required at < 40", squadMorale.actionRequired === true);
+
+  const rosterIncomplete = makeRosterIncompleteEvent(state);
+  check("roster incomplete event generated", rosterIncomplete.type === "roster_incomplete");
+  check("roster incomplete is critical", rosterIncomplete.severity === "critical");
+
+  const contractExpiring = makeContractExpiringEvent(player, state);
+  check("contract expiring event generated", contractExpiring.type === "contract_expiring");
+
+  const rivalElim = makeRivalEliminatedEvent("atl", "Major 1", "WB R2", state);
+  check("rival eliminated event generated", rivalElim.type === "rival_eliminated");
+
+  const challQual = makeChallengerQualifiesEvent("Omit Noir", state);
+  check("challenger qualifies event generated", challQual.type === "challenger_qualifies");
+
+  const coachConcern = makeCoachConcernEvent("Chemistry declining", state);
+  check("coach concern event generated", coachConcern.type === "coach_concern");
+
+  const seasonStart = makeSeasonStartEvent(2, state);
+  check("season start event generated", seasonStart.type === "season_start");
+}
+
+// ── 16. generateMatchInboxEvents ────────────────────────────────────────
+console.log("\n16. generateMatchInboxEvents helper");
+{
+  resetNextId(1);
+  const state = baseState();
+  const prevState = { ...state, schedule: { ...state.schedule, matchLog: [] } };
+  const newState = {
+    ...state,
+    schedule: {
+      ...state.schedule,
+      matchLog: [
+        {
+          teamA: "lat", teamB: "atl", scoreA: 3, scoreB: 1, played: true,
+          winnerId: "lat", loserId: "atl", season: 1, matchday: 1,
+          standouts: [{ name: "Sib", kd: 1.35, playerId: "p1" }],
+        },
+        {
+          teamA: "faze", teamB: "optic", scoreA: 2, scoreB: 3, played: true,
+          winnerId: "optic", loserId: "faze", season: 1, matchday: 1,
+          standouts: [],
+        },
+      ],
+    },
+  };
+
+  const events = generateMatchInboxEvents(prevState, newState);
+  check("generateMatchInboxEvents returns events", events.length >= 1);
+  check("match summary created for user match", events.some(e => e.type === "match_summary"));
+  check("standout performance created for Sib", events.some(e => e.type === "performance_story" && e.title.includes("Sib")));
+  check("non-user match excluded", !events.some(e => e.title?.includes("faze") || e.title?.includes("optic")));
+
+  const noNew = generateMatchInboxEvents(newState, newState);
+  check("no new matches → empty events", noNew.length === 0);
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────
