@@ -72,7 +72,7 @@ export function resetNextId(n) { _nextId = n || 1; }
 export function makeEvent({
   type, category, severity = "info", title, summary = "",
   season, stage, phase, read = false, actionRequired = false,
-  expiresAtStage, relatedPlayerId, relatedTeamId,
+  expiresAtStage, relatedPlayerId, relatedTeamId, opponentTeamId, relatedMatchId,
   targetScreen, targetTab, actions = [], dedupKey, matchData,
 }) {
   const id = `evt_${_nextId++}`;
@@ -84,6 +84,8 @@ export function makeEvent({
     expiresAtStage: expiresAtStage ?? null,
     relatedPlayerId: relatedPlayerId ?? null,
     relatedTeamId: relatedTeamId ?? null,
+    opponentTeamId: opponentTeamId ?? null,
+    relatedMatchId: relatedMatchId ?? null,
     targetScreen: targetScreen ?? null,
     targetTab: targetTab ?? null,
     actions: actions || [],
@@ -104,6 +106,11 @@ export function migrateEventCentre(ec) {
 }
 
 // ── Push events (with dedup + cap) ───────────────────────────────────────────
+export function addInboxEvent(state, event) {
+  if (!state || !event) return state;
+  return { ...state, eventCentre: pushEvents(state.eventCentre ?? migrateEventCentre(null), [event]) };
+}
+
 export function pushEvents(ec, newEvents) {
   if (!newEvents || !newEvents.length) return ec;
   const existing = ec?.events ?? [];
@@ -696,7 +703,13 @@ export function makeLeagueNewsEvent(title, summary, season, phase) {
 
 // ── Enhanced match summary ──────────────────────────────────────────────────
 export function makeMatchSummaryEvent(matchResult, userTeamId, state) {
-  const { teamA, teamB, scoreA, scoreB, standouts, season: matchSeason } = matchResult;
+  const teamA = matchResult.teamA ?? matchResult.teamAId;
+  const teamB = matchResult.teamB ?? matchResult.teamBId;
+  const scoreA = matchResult.scoreA ?? matchResult.winsA ?? (matchResult.winnerId === teamA ? matchResult.scoreWinner : matchResult.scoreLoser);
+  const scoreB = matchResult.scoreB ?? matchResult.winsB ?? (matchResult.winnerId === teamB ? matchResult.scoreWinner : matchResult.scoreLoser);
+  const matchSeason = matchResult.season ?? state.season;
+  if (!teamA || !teamB || scoreA == null || scoreB == null) return null;
+
   const isTeamA = teamA === userTeamId;
   const userScore = isTeamA ? scoreA : scoreB;
   const oppScore = isTeamA ? scoreB : scoreA;
@@ -704,72 +717,72 @@ export function makeMatchSummaryEvent(matchResult, userTeamId, state) {
   const won = userScore > oppScore;
   const diff = Math.abs(userScore - oppScore);
   const totalMaps = userScore + oppScore;
+  const context = matchResult.stage || state.schedule?.majors?.[state.schedule?.majorIdx]?.name || `Stage ${(state.schedule?.stageIdx ?? 0) + 1}`;
 
-  // Pick a tone-based title
-  let title;
+  let titlePrefix;
   if (won) {
-    if (diff >= 3)                          title = "Statement Win";
-    else if (diff === 2)                    title = "Comfortable Win";
-    else if (diff === 1 && totalMaps <= 4)  title = "Narrow Victory";
-    else if (diff === 1 && totalMaps >= 5)  title = "edge thriller";
-    else                                    title = "Bounce-back";
+    if (userScore === 3 && oppScore === 0) titlePrefix = "Statement Win";
+    else titlePrefix = diff === 1 && totalMaps >= 5 ? "Clutch Win" : "Match Report";
   } else {
-    if (diff >= 3)                          title = "Heavy Loss";
-    else if (diff === 2)                    title = "Disappointing Defeat";
-    else if (diff === 1 && totalMaps <= 4)  title = "Close Loss";
-    else if (diff === 1 && totalMaps >= 5)  title = "fall short";
-    else                                    title = "Upset Defeat";
+    titlePrefix = diff === 1 && totalMaps >= 5 ? "Close Loss" : "Match Report";
   }
 
-  // Best performer KD
-  let bestLine = "";
-  if (standouts?.length) {
-    const best = standouts.reduce((a, b) => (b.kd > a.kd ? b : a), standouts[0]);
-    bestLine = ` Best performer: ${best.name} (${best.kd.toFixed(2)} K/D).`;
-  }
-  // Check userMatches playerStats for fallback
-  if (!bestLine && matchResult.playerStats?.length) {
-    const best = matchResult.playerStats.reduce((a, b) => (b.kd > a.kd ? b : a), matchResult.playerStats[0]);
-    bestLine = ` Best performer: ${best.name} (${best.kd.toFixed(2)} K/D).`;
-  }
+  const playerStats = matchResult.standouts?.length
+    ? matchResult.standouts
+    : Array.isArray(matchResult.playerStats)
+      ? matchResult.playerStats
+      : Object.values(matchResult.playerStats || {});
+  const statWithIdentity = playerStats.map(ps => ({
+    ...ps,
+    playerId: ps.playerId ?? ps.id,
+    name: ps.name ?? ps.playerName,
+    kd: Number.isFinite(ps.kd) ? ps.kd : ((ps.deaths ?? 0) > 0 ? (ps.kills ?? 0) / ps.deaths : (ps.kills ?? 0)),
+  }));
+  const bestOverall = statWithIdentity.length
+    ? statWithIdentity.reduce((a, b) => (Number(b.kd ?? 0) > Number(a.kd ?? 0) ? b : a), statWithIdentity[0])
+    : (matchResult.standoutName ? { playerId: matchResult.standoutId, name: matchResult.standoutName, kd: matchResult.standoutKD } : null);
+  const userPlayerIds = new Set((state.players || []).filter(p => p.teamId === userTeamId).map(p => p.id));
+  const userStats = statWithIdentity.filter(ps => userPlayerIds.has(ps.playerId));
+  const bestUser = userStats.length ? userStats.reduce((a, b) => (Number(b.kd ?? 0) > Number(a.kd ?? 0) ? b : a), userStats[0]) : null;
+  const related = bestUser || bestOverall;
+  const kdLine = related?.name ? ` Best ${bestUser ? "user" : "overall"} performer: ${related.name}${Number.isFinite(Number(related.kd)) ? ` (${Number(related.kd).toFixed(2)} K/D)` : ""}.` : "";
 
-  const stageIdx = state.schedule?.stageIdx ?? 0;
   const scoreline = `${userScore}-${oppScore}`;
-  const summary = `${won ? "W" : "L"} ${scoreline} vs ${teamTag(oppId)}.${bestLine}`;
-
-  const bestPerformer = standouts?.length
-    ? standouts.reduce((a, b) => (b.kd > a.kd ? b : a), standouts[0])
-    : matchResult.playerStats?.length
-      ? matchResult.playerStats.reduce((a, b) => (b.kd > a.kd ? b : a), matchResult.playerStats[0])
-      : null;
-
-  const mapSummary = matchResult.maps?.map(m => ({
-    mapName: m.mapName ?? m.mode ?? `Map`,
-    scoreA: isTeamA ? m.scoreA ?? m.teamAScore : m.scoreB ?? m.teamBScore,
-    scoreB: isTeamA ? m.scoreB ?? m.teamBScore : m.scoreA ?? m.teamAScore,
-  })) ?? [];
+  const verb = won ? "beat" : "fall to";
+  const summary = `${context}: ${teamTag(userTeamId)} ${won ? "won" : "lost"} ${scoreline} against ${teamName(oppId)}.${kdLine}`;
+  const maps = (matchResult.mapResults || matchResult.maps || []).map((m, i) => ({
+    mapName: m.mapName ?? m.map ?? m.mode ?? `Map ${i + 1}`,
+    scoreA: isTeamA ? (m.scoreA ?? m.teamAScore) : (m.scoreB ?? m.teamBScore),
+    scoreB: isTeamA ? (m.scoreB ?? m.teamBScore) : (m.scoreA ?? m.teamAScore),
+  }));
+  const relatedMatchId = matchResult.id ?? matchResult.matchId ?? `${matchSeason}:${context}:${teamA}:${teamB}:${scoreA}:${scoreB}`;
 
   return makeEvent({
     type: "match_summary",
     category: "Match Results",
-    severity: won ? "medium" : "low",
-    title: `${title}: ${teamTag(oppId)} ${scoreline}`,
+    severity: won ? "info" : "medium",
+    title: `${titlePrefix}: ${teamTag(userTeamId)} ${verb} ${teamTag(oppId)} ${scoreline}`,
     summary,
-    season: matchSeason ?? state.season,
-    stage: stageIdx,
+    season: matchSeason,
+    stage: state.schedule?.stageIdx ?? 0,
     phase: state.schedule?.phase ?? "stage",
-    relatedTeamId: oppId,
-    targetScreen: "log",
-    actions: ["open_match_log", "view_schedule", "dismiss"],
-    dedupKey: `match_summary:${matchSeason ?? state.season}:${stageIdx}:${teamA}:${teamB}:${scoreA}:${scoreB}`,
+    relatedMatchId,
+    relatedTeamId: userTeamId,
+    opponentTeamId: oppId,
+    relatedPlayerId: related?.playerId ?? null,
+    targetScreen: "matchLog",
+    actions: related?.playerId ? ["open_match_log", "open_player", "view_schedule"] : ["open_match_log", "view_schedule"],
+    dedupKey: `match_summary:${relatedMatchId}`,
     matchData: {
       won,
-      teamATag: teamTag(isTeamA ? teamA : teamB),
-      teamBTag: teamTag(isTeamA ? teamB : teamA),
+      context,
+      teamATag: teamTag(userTeamId),
+      teamBTag: teamTag(oppId),
       scoreA: userScore,
       scoreB: oppScore,
-      maps: mapSummary,
-      bestPerformer: bestPerformer ? { name: bestPerformer.name, kd: typeof bestPerformer.kd === "number" ? bestPerformer.kd.toFixed(2) : bestPerformer.kd } : null,
+      maps,
+      bestUser: bestUser ? { name: bestUser.name, kd: Number(bestUser.kd).toFixed(2) } : null,
+      bestPerformer: bestOverall ? { name: bestOverall.name, kd: Number(bestOverall.kd).toFixed(2) } : null,
     },
   });
 }
@@ -960,14 +973,16 @@ export function generateMatchInboxEvents(prevState, newState) {
 
   for (let i = prevLen; i < newLog.length; i++) {
     const entry = newLog[i];
-    if (!entry.played) continue;
+    if (entry.played === false) continue;
 
-    const isUserMatch = entry.teamA === userTeamId || entry.teamB === userTeamId;
+    const entryTeamA = entry.teamA ?? entry.teamAId;
+    const entryTeamB = entry.teamB ?? entry.teamBId;
+    const isUserMatch = entryTeamA === userTeamId || entryTeamB === userTeamId;
     if (!isUserMatch) continue;
 
     // Match summary
     const summaryEvt = makeMatchSummaryEvent(entry, userTeamId, newState);
-    if (!dedupKeys.has(summaryEvt.dedupKey)) {
+    if (summaryEvt && !dedupKeys.has(summaryEvt.dedupKey)) {
       dedupKeys.add(summaryEvt.dedupKey);
       events.push(summaryEvt);
     }

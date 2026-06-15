@@ -37,7 +37,7 @@ import {
   teamTag as trTeamTag, teamName as trTeamName0, fmtFee,
 } from "../engine/transferEngine.js";
 import {
-  migrateEventCentre, pushEvents, markEventRead, markAllRead, dismissEvent,
+  migrateEventCentre, pushEvents, addInboxEvent, markEventRead, markAllRead, dismissEvent,
   convertFeedToEvents,
   makeTransferOfferEvent, makeChallengerBuyoutEvent, makeTransferDoneEvent,
   makeMoraleMeetingEvent, makePromiseAtRiskEvent, makePromiseBrokenEvent,
@@ -470,7 +470,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMatchInboxEvents(state, withFeed);
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
       });
     }
 
@@ -484,7 +484,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMatchInboxEvents(state, withFeed);
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
       });
     }
 
@@ -498,7 +498,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMatchInboxEvents(state, withFeed);
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
       });
     }
 
@@ -512,7 +512,7 @@ function reducer(state, action) {
         ...detectStreakFeed(newState.schedule?.matchLog ?? [], prevLogLen, season),
         ...detectStandingsFeed(prevRank, newState.schedule?.standings ?? {}, state.userTeamId, season, newState.schedule?.phase),
       ]);
-      return withMatchInboxEvents(state, withFeed);
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withFeed));
       });
     }
 
@@ -525,7 +525,7 @@ function reducer(state, action) {
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
       const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
-      return withMajorInboxEvents(state, withMorale, majorIdx);
+      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx));
       });
     }
 
@@ -537,7 +537,7 @@ function reducer(state, action) {
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
       const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
-      return withMajorInboxEvents(state, withMorale, majorIdx);
+      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx));
       });
     }
 
@@ -549,7 +549,7 @@ function reducer(state, action) {
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
       const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
-      return withMajorInboxEvents(state, withMorale, majorIdx);
+      return withMatchInboxEvents(state, withMajorInboxEvents(state, withMorale, majorIdx));
       });
     }
 
@@ -575,7 +575,7 @@ function reducer(state, action) {
       const withBoard = withMajorBoardNudge(state, result, majorIdx);
       const withMorale = majorIdx != null ? withMajorMoraleNudge(state, withBoard, majorIdx) : withBoard;
       const withInbox = majorIdx != null ? withMajorInboxEvents(state, withMorale, majorIdx) : withMorale;
-      return withMatchInboxEvents(state, withInbox);
+      return withMoraleInboxEvents(state, withMatchInboxEvents(state, withInbox));
       });
     }
 
@@ -1491,7 +1491,19 @@ function addNotif(state, msg) {
 
 function pushInboxEvents(state, events) {
   if (!events?.length) return state;
-  return { ...state, eventCentre: pushEvents(state.eventCentre ?? migrateEventCentre(null), events) };
+  return events.reduce((acc, event) => addInboxEvent(acc, event), state);
+}
+
+function withMoraleInboxEvents(prevState, newState) {
+  const prevIds = new Set((prevState.moraleConversationEvents || []).map(e => e.id));
+  const events = (newState.moraleConversationEvents || [])
+    .filter(e => e.status === "open" && !prevIds.has(e.id))
+    .map(e => {
+      const player = (newState.players || []).concat(newState.prospects || []).find(p => p.id === e.playerId);
+      return player ? makeMoraleMeetingEvent(player, e.topic || e.trigger, e.severity, newState) : null;
+    })
+    .filter(Boolean);
+  return pushInboxEvents(newState, events);
 }
 
 function withMatchInboxEvents(prevState, newState) {

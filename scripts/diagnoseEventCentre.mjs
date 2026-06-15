@@ -7,7 +7,7 @@
 import { buildInitialRoster } from "../src/data/players.js";
 import { generateProspects } from "../src/data/prospects.js";
 import { applyChallengerRatingOverride } from "../src/data/challengerRatingOverrides.js";
-import { buildSeason, ensureChallengerTeams } from "../src/engine/seasonEngine.js";
+import { buildSeason, ensureChallengerTeams, simUserMatchday, simStage } from "../src/engine/seasonEngine.js";
 import { ensureCdlRosterIntegrity } from "../src/engine/rosterAI.js";
 import { migratePlayerMorale } from "../src/engine/moraleEngine.js";
 import {
@@ -343,11 +343,11 @@ console.log("\n13. Match summary events");
   check("match summary has best performer", !!ev.matchData.bestPerformer);
   check("match summary best performer is Sib", ev.matchData.bestPerformer.name === "Sib");
   check("match summary has dedupKey", !!ev.dedupKey);
-  check("match summary targets match log", ev.targetScreen === "log");
+  check("match summary targets match log", ev.targetScreen === "matchLog");
 
   const lossResult = { ...matchResult, scoreA: 1, scoreB: 3, standouts: [] };
   const evLoss = makeMatchSummaryEvent(lossResult, "lat", state);
-  check("loss match summary severity is low", evLoss.severity === "low");
+  check("loss match summary severity is medium", evLoss.severity === "medium");
   check("loss title has tone word", /loss|defeat|fall|heavy/i.test(evLoss.title));
 
   let ec = migrateEventCentre(null);
@@ -445,6 +445,37 @@ console.log("\n16. generateMatchInboxEvents helper");
 
   const noNew = generateMatchInboxEvents(newState, newState);
   check("no new matches → empty events", noNew.length === 0);
+}
+
+
+
+// ── 17. Real gameplay engine flows ─────────────────────────────────────
+console.log("\n17. Real gameplay engine flows");
+{
+  resetNextId(1);
+  let state = baseState("lat");
+  check("game state hydrates Event Centre", !!state?.eventCentre && Array.isArray(state.eventCentre.events));
+  const prev = structuredClone(state);
+  state = simUserMatchday(structuredClone(state));
+  let events = generateMatchInboxEvents(prev, state);
+  state.eventCentre = pushEvents(state.eventCentre, events);
+  const matchSummaries = (state.eventCentre.events || []).filter(e => e.type === "match_summary");
+  check("real simUserMatchday creates match_summary", matchSummaries.length >= 1);
+  const firstSummary = matchSummaries[0];
+  check("real match_summary includes scoreline", /\d-\d/.test(firstSummary?.title || "") || /\d-\d/.test(firstSummary?.summary || ""));
+  check("real match_summary includes opponent", !!firstSummary?.opponentTeamId);
+  check("real match_summary targets matchLog", firstSummary?.targetScreen === "matchLog");
+
+  const prevStage = structuredClone(state);
+  state = simStage(structuredClone(state));
+  events = generateMatchInboxEvents(prevStage, state);
+  state.eventCentre = pushEvents(state.eventCentre, events);
+  const afterStageSummaries = (state.eventCentre.events || []).filter(e => e.type === "match_summary");
+  const keys = afterStageSummaries.map(e => e.dedupKey).filter(Boolean);
+  check("real simStage creates multiple match summaries", afterStageSummaries.length > matchSummaries.length);
+  check("real match summaries have no duplicate dedupKey", keys.length === new Set(keys).size);
+  check("real flow is not tournament-only", (state.eventCentre.events || []).some(e => e.category !== "Tournament"));
+  check("unread selector counts real events", getUnreadCount(state.eventCentre) >= afterStageSummaries.length);
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────
