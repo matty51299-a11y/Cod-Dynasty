@@ -1,7 +1,9 @@
 // src/data/players.js
-// March 2026 CDL starting rosters.
+// Call of Duty: Ghosts historical starting rosters.
 // Each player has a full stat block used by the match sim and chemistry engine.
 // Ratings are 1–99. Hidden traits use a 1–5 scale (stored here as seeds; scouting reveals them).
+
+import { GHOSTS_PLAYERS } from "./historicalRosters.js";
 
 // Deterministic hash for assigning initial contract lengths without RNG
 function nameHash(str) {
@@ -44,6 +46,10 @@ function mkPlayer(name, teamId, age, primary, secondary, ratings, hidden, region
 // "Entry SMG" | "Slayer SMG" | "Flex" | "Main AR" | "Objective" | "Search Specialist"
 
 export function buildInitialRoster() {
+  return GHOSTS_PLAYERS.map(player => ({ ...player }));
+}
+
+export function buildModernCopiedRoster() {
   return [
     // ── BOSTON BREACH ──────────────────────────────────────────────────────────
     mkPlayer("Cammy",   "boston", 23, "Main AR",      "Entry SMG",
