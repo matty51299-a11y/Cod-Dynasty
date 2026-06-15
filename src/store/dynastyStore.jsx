@@ -4,7 +4,7 @@ import { GHOSTS_EVENTS } from "../data/ghostsEventCalendar.js";
 import { getEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { simulateEvent } from "../engine/eventSim.js";
 import { createInitialStandings, updateStandings } from "../engine/standingsEngine.js";
-import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult } from "../engine/historicalEventEngine.js";
+import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult, createHistoricalLiveMatch, playHistoricalLiveMap, applyPlayedMatchResult } from "../engine/historicalEventEngine.js";
 
 const SAVE_KEY = "cod_dynasty_save";
 
@@ -53,6 +53,7 @@ function createNewGame(userTeamId) {
     currentEventIndex: 0,
     notifications: [],
     inboxEvents: [],
+    liveHistoricalMatch: null,
     saveExists: true,
   };
 }
@@ -127,6 +128,27 @@ function simulateHistoricalEventAction(state, mode) {
   return nextState;
 }
 
+function commitPlayedHistoricalMatch(state) {
+  const live = state.liveHistoricalMatch;
+  if (!live || live.status !== "completed") return addNotif(state, "Finish the live series before applying the match result.");
+  const event = state.eventCalendar.find(e => e.id === live.eventId);
+  const eventState = state.eventProgress?.[live.eventId];
+  if (!event || !eventState) return addNotif(state, "Live match event was not found.");
+  const nextEventState = applyPlayedMatchResult(eventState, live, event, state.userTeamId);
+  const winner = live.winnerId === live.teamA.teamId ? live.teamA : live.teamB;
+  const loser = live.winnerId === live.teamA.teamId ? live.teamB : live.teamA;
+  const report = {
+    id: `match_${live.matchId}_${Date.now()}`,
+    type: "match_report",
+    title: `Match Report: ${winner.teamName} beat ${loser.teamName} ${Math.max(live.scoreA, live.scoreB)}-${Math.min(live.scoreA, live.scoreB)} at ${event.name}`,
+    summary: `${live.roundLabel}: ${winner.teamName} def. ${loser.teamName} ${Math.max(live.scoreA, live.scoreB)}-${Math.min(live.scoreA, live.scoreB)}`,
+    timestamp: Date.now(),
+  };
+  let nextState = { ...state, liveHistoricalMatch: null, activeEventId: live.eventId, eventProgress: { ...(state.eventProgress || {}), [live.eventId]: nextEventState }, inboxEvents: [...(state.inboxEvents || []), report] };
+  if (nextEventState.status === "completed") nextState = completeHistoricalEvent(nextState, event, nextEventState);
+  return addNotif(nextState, report.title);
+}
+
 function dynastyReducer(state, action) {
   switch (action.type) {
     case "NEW_GAME":
@@ -152,6 +174,31 @@ function dynastyReducer(state, action) {
       const eventState = createHistoricalEventState(event, state.teams, state.players, state.standings, state.userTeamId, seed);
       return { ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } };
     }
+
+
+    case "START_PLAY_MATCH": {
+      if (!state) return state;
+      const eventId = state.activeEventId || state.eventCalendar[state.currentEventIndex]?.id;
+      const event = state.eventCalendar.find(e => e.id === eventId);
+      const eventState = state.eventProgress?.[eventId];
+      if (!event || !eventState) return addNotif(state, "Open an event before playing a match.");
+      const userMatch = getUserPendingMatch(eventState, state.userTeamId);
+      if (!userMatch) return addNotif(state, eventState.teamStates?.[state.userTeamId]?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other event matches to finish.");
+      const live = createHistoricalLiveMatch(eventState, userMatch.id, state.players, getEra(state.currentEraId), Date.now());
+      return { ...state, liveHistoricalMatch: live };
+    }
+
+    case "PLAY_HISTORICAL_MAP": {
+      if (!state?.liveHistoricalMatch) return state;
+      return { ...state, liveHistoricalMatch: playHistoricalLiveMap(state.liveHistoricalMatch, state.players, getEra(state.currentEraId)) };
+    }
+
+    case "CANCEL_PLAY_MATCH":
+      return state?.liveHistoricalMatch?.mapResults?.length ? addNotif(state, "Cannot back out after maps have been played.") : { ...state, liveHistoricalMatch: null };
+
+    case "FINISH_PLAY_MATCH":
+      if (!state) return state;
+      return commitPlayedHistoricalMatch(state);
 
     case "SIM_NEXT_MATCH": {
       if (!state) return state;
