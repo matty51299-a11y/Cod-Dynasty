@@ -8,9 +8,9 @@ export default function EventCalendar({ setScreen }) {
   const completedIds = new Set(state.completedEvents.map(e => e.eventId));
   const nextIdx = state.currentEventIndex;
 
-  function handleSim() {
-    dispatch({ type: "SIM_EVENT" });
-    setScreen("eventresult");
+  function openEvent(eventId) {
+    dispatch({ type: "OPEN_EVENT", eventId });
+    setScreen("eventdetail");
   }
 
   return (
@@ -41,14 +41,13 @@ export default function EventCalendar({ setScreen }) {
               </div>
               <div className="event-row-right">
                 {completed && result && (
-                  <span className="event-champion">🏆 {result.champion.teamName}</span>
+                  <span className="event-champion">🏆 {result.champion.teamName} · Your #{result.results.find(r => r.teamId === state.userTeamId)?.placement || "—"}</span>
                 )}
-                {isNext && !completed && (
-                  <button className="btn-primary-sm" onClick={handleSim}>Simulate</button>
-                )}
+                {isNext && !completed && state.eventProgress?.[ev.id]?.status === "in_progress" && <span className="dim-text">In Progress</span>}
                 {!completed && !isNext && (
                   <span className="dim-text">Upcoming</span>
                 )}
+                <button className="btn-primary-sm" onClick={() => openEvent(ev.id)}>Open Event</button>
               </div>
             </div>
           );

@@ -9,8 +9,10 @@ export default function Home({ setScreen }) {
   const roster = state.players.filter(p => p.teamId === state.userTeamId);
   const sorted = getSortedStandings(state.standings);
   const userStanding = sorted.find(s => s.teamId === state.userTeamId);
+  const activeProgress = state.activeEventId ? state.eventProgress?.[state.activeEventId] : null;
   const nextEvent = state.eventCalendar[state.currentEventIndex];
   const lastEvent = state.completedEvents[state.completedEvents.length - 1];
+  const nextMatch = activeProgress?.matches?.find(m => m.status === "pending");
 
   return (
     <div className="dynasty-home">
@@ -56,8 +58,14 @@ export default function Home({ setScreen }) {
         </div>
 
         <div className="home-card">
-          <h3>Next Event</h3>
-          {nextEvent ? (
+          <h3>{activeProgress ? "Current Event" : "Next Event"}</h3>
+          {activeProgress ? (
+            <>
+              <div className="home-event-name">{activeProgress.eventName}</div>
+              <div className="home-event-meta"><span>{activeProgress.displayFormat}</span><span>Next Match: {nextMatch ? `${nextMatch.teamA?.teamName} vs ${nextMatch.teamB?.teamName}` : "TBD"}</span></div>
+              <button className="btn-link" onClick={() => setScreen("eventdetail")}>Continue Event →</button>
+            </>
+          ) : nextEvent ? (
             <>
               <div className="home-event-name">{nextEvent.name}</div>
               <div className="home-event-meta">
