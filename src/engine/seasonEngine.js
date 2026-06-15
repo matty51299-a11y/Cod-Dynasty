@@ -2225,6 +2225,28 @@ export function simNextMajorMatch(gameState) {
   return { ...nextState, schedule: { ...schedule } };
 }
 
+
+// ── PUBLIC: Quick-sim the user's current major/event match only ───────────────
+export function simUserMajorMatch(gameState) {
+  gameState = withCdlRosterIntegrity(gameState, "before_sim_user_major_match");
+  const schedule = gameState.schedule;
+  if (schedule?.phase !== "major") return gameState;
+  const major = schedule.majors?.[schedule.majorIdx];
+  const bracket = major?.bracket;
+  if (!major || major.completed || !bracket) return gameState;
+
+  let userPending = false;
+  for (const round of bracket.rounds || []) {
+    if ((round.matches || []).some(m => !m.played && (m.a === gameState.userTeamId || m.b === gameState.userTeamId))) {
+      userPending = true;
+      break;
+    }
+  }
+  if (!userPending) return gameState;
+
+  return simNextMajorMatch(gameState);
+}
+
 // ── PUBLIC: Simulate all remaining matches in the current round ───────────────
 export function simMajorRound(gameState) {
   gameState = withCdlRosterIntegrity(gameState, "before_sim_major_round");

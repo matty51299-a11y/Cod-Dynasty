@@ -21,6 +21,7 @@ import TeamLogo from "./TeamLogo.jsx";
 import { resolveTeamDisplay } from "../utils/teamDisplay.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
 import { formatMapLabel, softenedMapEdge } from "../utils/mapDisplay.js";
+import { getEra } from "../data/codEras.js";
 
 function getTeamMeta(id, schedule) { return CDL_TEAMS.find(t => t.id === id) ?? schedule?.currentMajorEventTeams?.[id] ?? null; }
 function teamColor(id, schedule) { return getTeamMeta(id, schedule)?.color ?? "#888"; }
@@ -28,6 +29,7 @@ function teamName(id, schedule)  { return getTeamMeta(id, schedule)?.name  ?? id
 function teamTag(id, schedule)   { return getTeamMeta(id, schedule)?.tag   ?? id; }
 
 const MAP_MODES = ["Hardpoint", "Search & Destroy", "Overload", "Hardpoint", "Search & Destroy"];
+const GHOSTS_BO5_MODES = ["Domination", "Search and Destroy", "Blitz", "Domination", "Search and Destroy"];
 const TACTICS = [
   {
     id: "standard",
@@ -134,6 +136,20 @@ function mergeMapSlot(mapSet, idx) {
   const slot = mapSet?.[idx];
   if (slot?.selectedMap) return { ...slot.selectedMap, edgeA: slot.edgeA, slot: idx + 1 };
   return { name: null, mode: MAP_MODES[idx], edgeA: null, slot: idx + 1 };
+}
+
+export function buildHistoricalMatchMapSet(state, teamAId = "teamA", teamBId = "teamB") {
+  const era = getEra(state?.currentEraId || "ghosts");
+  const order = era.id === "ghosts" ? GHOSTS_BO5_MODES : (era.modes?.length ? [era.modes[0], era.modes[1], era.modes[2] || era.modes[0], era.modes[0], era.modes[1]] : null);
+  if (!order) return null;
+  const seed = String(`${state?.season ?? 1}:${state?.schedule?.majorIdx ?? 0}:${teamAId}:${teamBId}`);
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return order.map((mode, i) => {
+    const pool = era.mapPool?.[mode] || era.mapPool?.[mode.replace(" and ", " & ")] || [null];
+    const name = pool[(hash + i * 7) % pool.length] || mode;
+    return { selectedMap: { id: `${era.id}_${mode}_${name}`.replace(/\W+/g, "_").toLowerCase(), name, mode }, edgeA: null, strModA: 0 };
+  });
 }
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
@@ -620,7 +636,9 @@ export default function MatchCenterOverlay() {
 
   // CDL 2026 veto: deterministic projected map set for this series (matches the
   // preview + the burst sim). Recomputed only when the two teams change.
-  const mapSet = (teamA?.mapProfile && teamB?.mapProfile)
+  const mapSet = state?.careerMode === "historical"
+    ? buildHistoricalMatchMapSet(state, teamA?.id, teamB?.id)
+    : (teamA?.mapProfile && teamB?.mapProfile)
     ? autoVeto(teamA.mapProfile, teamB.mapProfile).map(slot => ({
         selectedMap: { id: slot.id, name: slot.name, mode: slot.mode },
         edgeA: slot.edgeA,
@@ -689,12 +707,13 @@ export default function MatchCenterOverlay() {
     const oppOvr  = userTeamIsA ? teamOvr(teamB) : teamOvr(teamA);
     const ctxLabel = ctx.type === "major"
       ? (() => {
-          const bracket = state.schedule.majors?.[state.schedule.majorIdx]?.bracket;
+          const major = state.schedule.majors?.[state.schedule.majorIdx];
+          const bracket = major?.bracket;
           for (const r of bracket?.rounds ?? []) {
             if (r.matches.some(m => !m.played && (m.a === userTeamId || m.b === userTeamId)))
-              return r.name;
+              return `${major?.name ?? "Tournament"} · ${r.name} · ${state.currentGameTitle ?? getEra(state.currentEraId).gameTitle}`;
           }
-          return "Tournament";
+          return major?.name ?? "Tournament";
         })()
       : `Stage ${(state.schedule.stageIdx ?? 0) + 1}`;
 

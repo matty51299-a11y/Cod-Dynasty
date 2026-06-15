@@ -186,12 +186,15 @@ function CommandHeader({
       {curRound >= 0 && (
         <div className="mto-ch-cmds">
           {userInNext ? (
-            <button className="btn-primary mto-cmd-btn mto-cmd-primary" onClick={onPlayMatch}>▶ Play Your Match</button>
+            <>
+              <button className="btn-primary mto-cmd-btn mto-cmd-primary" onClick={onPlayMatch}>▶ Play Match</button>
+              <button className="btn-secondary mto-cmd-btn" onClick={() => dispatch({ type: "SIM_USER_MAJOR_MATCH" })}>Sim User Match</button>
+            </>
           ) : (
-            <button className="btn-secondary mto-cmd-btn" onClick={() => dispatch({ type: "SIM_NEXT_MAJOR_MATCH" })}>Sim Next</button>
+            <button className="btn-secondary mto-cmd-btn" onClick={() => dispatch({ type: "SIM_NEXT_MAJOR_MATCH" })}>Sim Next Match</button>
           )}
           <button className="btn-secondary mto-cmd-btn" onClick={() => dispatch({ type: "SIM_MAJOR_ROUND" })}>Sim Round</button>
-          <button className="btn-secondary mto-cmd-btn mto-cmd-ghost" onClick={() => dispatch({ type: "SIM_MAJOR" })}>Finish Event</button>
+          <button className="btn-secondary mto-cmd-btn mto-cmd-ghost" onClick={() => dispatch({ type: "SIM_MAJOR" })}>{userStatus === "Eliminated" ? "Sim Rest of Event" : "Sim Event"}</button>
         </div>
       )}
     </div>
@@ -238,7 +241,7 @@ function CurrentMatchPanel({ bracket, curRound, userTeamId, schedule, onPlayMatc
   return (
     <div className={`mto-aside-card mto-curmatch ${userIn ? "mto-curmatch-user" : ""}`}>
       <div className="mto-aside-title">
-        {userIn ? "Your Next Match" : "Current Match"}
+        {userIn ? "Your match is ready" : "Current Match"}
         <span className="mto-curmatch-round">{round.name}</span>
       </div>
       <div className="mto-curmatch-teams">
@@ -257,7 +260,7 @@ function CurrentMatchPanel({ bracket, curRound, userTeamId, schedule, onPlayMatc
         </div>
       </div>
       {userIn ? (
-        <button className="btn-primary mto-cm-btn" onClick={onPlayMatch}>▶ Play Your Match</button>
+        <><button className="btn-primary mto-cm-btn" onClick={onPlayMatch}>▶ Play Match</button><button className="btn-secondary mto-cm-btn" onClick={() => dispatch({ type: "SIM_USER_MAJOR_MATCH" })}>Sim User Match</button></>
       ) : (
         <button className="btn-secondary mto-cm-btn" onClick={() => dispatch({ type: "SIM_NEXT_MAJOR_MATCH" })}>▶ Sim This Match</button>
       )}
