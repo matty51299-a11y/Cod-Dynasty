@@ -13,6 +13,7 @@ import {
 import { getChallengerRosterStatus } from "../utils/rosterValidation.js";
 import { evaluateChallengerObjectives, getChallengerConfidence, getChallengerTier } from "../engine/challengerBoard.js";
 import { usePlayerProfile } from "../store/playerProfileContext.jsx";
+import { getActionRequiredCount, getUnreadCount, getSortedEvents, severityColor, CATEGORY_ICON } from "../engine/eventCentreEngine.js";
 import { PageHeader, SectionCard, StatCard, Pill, EmptyState } from "./ui.jsx";
 
 const TIER_LABEL = { weak: "Developing", mid: "Mid-table", strong: "Contender", elite: "Powerhouse" };
@@ -238,6 +239,10 @@ export default function ChallengerDashboard({ setScreen }) {
           )}
         </SectionCard>
 
+        <SectionCard title="Manager Inbox" action={<button className="link-button" onClick={() => setScreen?.("inbox")}>Inbox ›</button>}>
+          <ChallengerInboxWidget state={state} setScreen={setScreen} />
+        </SectionCard>
+
         <SectionCard title="Latest Moves">
           {moves.length === 0 ? <p className="muted">No recent moves.</p> : (
             <ul className="cd-moves">
@@ -257,6 +262,33 @@ export default function ChallengerDashboard({ setScreen }) {
           </table>
         </SectionCard>
       </div>
+    </div>
+  );
+}
+
+function ChallengerInboxWidget({ state, setScreen }) {
+  const actionCount = getActionRequiredCount(state?.eventCentre);
+  const topEvents = getSortedEvents(state?.eventCentre).slice(0, 3);
+  if (!topEvents.length && !actionCount) return <p className="muted">No inbox events yet.</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      {actionCount > 0 && (
+        <div style={{ color: "#f59e0b", fontWeight: 700, fontSize: ".78rem", marginBottom: "4px" }}>
+          ⚡ {actionCount} action{actionCount !== 1 ? "s" : ""} required
+        </div>
+      )}
+      {topEvents.map(ev => (
+        <div key={ev.id} style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "4px 0", borderLeft: `3px solid ${severityColor(ev.severity)}`, paddingLeft: "8px" }}>
+          <span style={{ color: severityColor(ev.severity), fontSize: ".85rem" }}>{CATEGORY_ICON[ev.category] ?? "·"}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: ".8rem", fontWeight: 600, color: "var(--text-head)" }}>{ev.title}</div>
+            {ev.summary && <div style={{ fontSize: ".72rem", color: "var(--text-dim)" }}>{ev.summary}</div>}
+          </div>
+        </div>
+      ))}
+      <button className="link-button" onClick={() => setScreen?.("inbox")} style={{ marginTop: "6px", fontSize: ".78rem" }}>
+        Open Inbox ›
+      </button>
     </div>
   );
 }

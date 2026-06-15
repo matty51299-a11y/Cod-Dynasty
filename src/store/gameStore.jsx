@@ -36,6 +36,19 @@ import {
   isOutgoingTermsRequired, evaluatePlayerTerms,
   teamTag as trTeamTag, teamName as trTeamName0, fmtFee,
 } from "../engine/transferEngine.js";
+import {
+  migrateEventCentre, pushEvents, markEventRead, markAllRead, dismissEvent,
+  convertFeedToEvents,
+  makeTransferOfferEvent, makeChallengerBuyoutEvent, makeTransferDoneEvent,
+  makeMoraleMeetingEvent, makePromiseAtRiskEvent, makePromiseBrokenEvent,
+  makeBoardWarningEvent, makeBoardConfidenceUpEvent, makeBoardObjectiveEvent,
+  makeScoutReportEvent, makeContractReviewEvent, makeFreeAgencyOpenEvent,
+  makePlayerWantsOutEvent, makeBlockedMoveEvent, makeMajorDrawEvent,
+  makeTournamentChampionEvent, makeUserEliminatedEvent, makeAwardEvent,
+  makeUserAwardEvent, makeStageSimSummaryEvent, makeUserMatchResultEvent,
+  makeOffseasonStartEvent, makeStandoutPerformanceEvent,
+  makeAssistantGmRecommendation, makeRivalSigningEvent,
+} from "../engine/eventCentreEngine.js";
 
 const SAVE_KEY  = "cdl_manager_save";
 const FEED_CAP  = 200;
@@ -278,6 +291,7 @@ function createInitialGameState(userTeamId, userTeamType = "cdl", seedOverride =
     transferMarket: migrateTransferMarket(null),
     challengerOffers: [],   // CDL buyout offers for the user's Challenger players
     challengerFunds: 0,     // transfer income earned selling Challenger players
+    eventCentre: migrateEventCentre(null),
   };
   // Build randomized starting Challenger rosters for this new save.
   buildChallengerRostersForNewGame(state, challengerDraftSeed);
@@ -306,14 +320,23 @@ function regenBoardObjectives(state, boardState) {
 
 // ── Board nudge helper — applies after a Major completes ──────────────────────
 function withMajorBoardNudge(beforeState, afterState, majorIdx) {
-  if (afterState?.userTeamType === "challenger") return afterState; // CDL board only
+  if (afterState?.userTeamType === "challenger") return afterState;
   if (majorIdx == null || majorIdx > 3 || majorIdx < 0) return afterState;
   if (!afterState.boardState) return afterState;
   const wasCompleted = beforeState.schedule?.majors?.[majorIdx]?.completed ?? true;
   const nowCompleted = afterState.schedule?.majors?.[majorIdx]?.completed ?? false;
   if (!wasCompleted && nowCompleted) {
+    const confBefore = afterState.boardState.confidence ?? 60;
     const nudged = nudgeConfidenceAfterMajor(afterState.boardState, afterState, majorIdx);
-    return { ...afterState, boardState: nudged };
+    let result = { ...afterState, boardState: nudged };
+    const confAfter = nudged.confidence ?? 60;
+    const band = confAfter >= 80 ? "Secure" : confAfter >= 60 ? "Stable" : confAfter >= 40 ? "Shaky" : confAfter >= 20 ? "At Risk" : "Critical";
+    if (confAfter < confBefore && confAfter < 40) {
+      result = pushInboxEvents(result, [makeBoardWarningEvent(confAfter, band, result)]);
+    } else if (confAfter > confBefore && confAfter >= 60 && confBefore < 60) {
+      result = pushInboxEvents(result, [makeBoardConfidenceUpEvent(confAfter, band, result)]);
+    }
+    return result;
   }
   return afterState;
 }
@@ -335,6 +358,30 @@ function withMajorMoraleNudge(beforeState, afterState, majorIdx) {
     if (placement != null) next = applyMajorMorale(next, placement);
   }
   return evaluateAllPromises(next);
+}
+
+// ── Inbox events helper — generates tournament events when a Major completes ──
+function withMajorInboxEvents(beforeState, afterState, majorIdx) {
+  if (majorIdx == null || !afterState) return afterState;
+  const wasCompleted = beforeState.schedule?.majors?.[majorIdx]?.completed ?? true;
+  const nowCompleted = afterState.schedule?.majors?.[majorIdx]?.completed ?? false;
+  if (wasCompleted || !nowCompleted) return afterState;
+  const major = afterState.schedule?.majors?.[majorIdx];
+  if (!major?.bracket) return afterState;
+  const eventName = major.name ?? `Major ${majorIdx + 1}`;
+  const events = [];
+  const champion = major.bracket?.champion;
+  if (champion) {
+    const isUser = champion === afterState.userTeamId;
+    const champName = CDL_TEAMS.find(t => t.id === champion)?.name ?? champion;
+    events.push(makeTournamentChampionEvent(eventName, champName, isUser, afterState));
+  }
+  const placement = getMajorPlacementMap(major);
+  const userPlace = placement[afterState.userTeamId];
+  if (userPlace != null && userPlace > 2 && champion !== afterState.userTeamId) {
+    events.push(makeUserEliminatedEvent(eventName, afterState));
+  }
+  return pushInboxEvents(afterState, events);
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -401,6 +448,12 @@ function reducer(state, action) {
       // Player Morale / Squad Dynamics: hydrate safely on old saves. Missing →
       // neutral-positive morale for every rostered player; never mass unrest.
       cleaned.playerMorale = migratePlayerMorale(cleaned);
+      // Event Centre: hydrate safely on old saves. Missing → empty structure;
+      // old feed items are converted to events on first load.
+      cleaned.eventCentre = migrateEventCentre(cleaned.eventCentre);
+      if (!cleaned.eventCentre.events.length && (cleaned.feed ?? []).length) {
+        cleaned.eventCentre = pushEvents(cleaned.eventCentre, convertFeedToEvents(cleaned.feed));
+      }
       const moraleCleaned = ensureMoraleConversationState(cleaned);
       return isValidGameState(moraleCleaned) ? moraleCleaned : null;
     }
@@ -466,7 +519,8 @@ function reducer(state, action) {
       const newState     = simMajor({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
-      return withMajorMoraleNudge(state, withBoard, majorIdx);
+      const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
+      return withMajorInboxEvents(state, withMorale, majorIdx);
       });
     }
 
@@ -477,7 +531,8 @@ function reducer(state, action) {
       const newState     = simNextMajorMatch({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
-      return withMajorMoraleNudge(state, withBoard, majorIdx);
+      const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
+      return withMajorInboxEvents(state, withMorale, majorIdx);
       });
     }
 
@@ -488,7 +543,8 @@ function reducer(state, action) {
       const newState     = simMajorRound({ ...state });
       const withFeed = pushFeed(newState, generateMajorFeed(wasCompleted, newState, majorIdx));
       const withBoard = withMajorBoardNudge(state, withFeed, majorIdx);
-      return withMajorMoraleNudge(state, withBoard, majorIdx);
+      const withMorale = withMajorMoraleNudge(state, withBoard, majorIdx);
+      return withMajorInboxEvents(state, withMorale, majorIdx);
       });
     }
 
@@ -512,12 +568,19 @@ function reducer(state, action) {
       ];
       const result = pushFeed(newState, feedItems);
       const withBoard = withMajorBoardNudge(state, result, majorIdx);
-      return majorIdx != null ? withMajorMoraleNudge(state, withBoard, majorIdx) : withBoard;
+      const withMorale = majorIdx != null ? withMajorMoraleNudge(state, withBoard, majorIdx) : withBoard;
+      return majorIdx != null ? withMajorInboxEvents(state, withMorale, majorIdx) : withMorale;
       });
     }
 
     case "ENTER_MAJOR":
-      return runIfUserRosterValid(state, () => ({ ...state, enteredMajorIdx: action.majorIdx }));
+      return runIfUserRosterValid(state, () => {
+        const majorIdx = action.majorIdx;
+        const majorName = state.schedule?.majors?.[majorIdx]?.name ?? `Major ${(majorIdx ?? 0) + 1}`;
+        let next = { ...state, enteredMajorIdx: majorIdx };
+        next = pushInboxEvents(next, [makeMajorDrawEvent(majorName, majorIdx, next)]);
+        return next;
+      });
 
     case "DISMISS_MAJOR":
       return { ...state, enteredMajorIdx: null };
@@ -554,9 +617,15 @@ function reducer(state, action) {
     case "BEGIN_CHAMPS":
       return runIfUserRosterValid(state, () => beginChamps({ ...state }));
 
-    case "ENTER_CONTRACT_PHASE":
+    case "ENTER_CONTRACT_PHASE": {
       if (state.pendingSeasonAwards) return state;
-      return enterContractPhase({ ...state });
+      let contractState = enterContractPhase({ ...state });
+      const expiring = (contractState.players ?? []).filter(p => p.teamId === contractState.userTeamId && p.contractYears === 1 && !p.isSub).length;
+      if (expiring > 0) {
+        contractState = pushInboxEvents(contractState, [makeContractReviewEvent(expiring, contractState)]);
+      }
+      return contractState;
+    }
 
     case "CONTINUE_FROM_SEASON_AWARDS": {
       const season = Number(action.season ?? state.pendingSeasonAwards?.season);
@@ -619,11 +688,17 @@ function reducer(state, action) {
         ...stateWithBoard,
         playerMorale: migratePlayerMorale(stateWithBoard),
       });
-      return pushFeed(moraledOffseason, [
+      let finalOffseasonState = pushFeed(moraledOffseason, [
         ...boardFeedItems,
         ...generateOffseasonFeed(prevRetiredLen, prevFreeIds, moraledOffseason, season),
         ...generateRosterMoveFeed(moraledOffseason, prevMovesLen),
       ]);
+      // Inbox events: board objectives set + offseason start
+      const offseasonEvents = [];
+      if (!challengerMode) offseasonEvents.push(makeBoardObjectiveEvent(finalOffseasonState));
+      offseasonEvents.push(makeOffseasonStartEvent(season, finalOffseasonState));
+      finalOffseasonState = pushInboxEvents(finalOffseasonState, offseasonEvents);
+      return finalOffseasonState;
       };
       return state.schedule?.phase === "contracts" ? runAdvance() : runIfUserRosterValid(state, runAdvance);
     }
@@ -979,7 +1054,8 @@ function reducer(state, action) {
       });
       const first = fresh[0];
       const firstBuyer = CDL_TEAMS.find(t => t.id === first.fromCdlTeamId);
-      return addNotif(pushFeed(next, feedItems), `${firstBuyer?.name ?? "A CDL team"} have offered $${Math.round(first.fee / 1000)}k for ${first.playerName}.`);
+      const inboxBuyouts = fresh.map(o => makeChallengerBuyoutEvent(o, next));
+      return addNotif(pushInboxEvents(pushFeed(next, feedItems), inboxBuyouts), `${firstBuyer?.name ?? "A CDL team"} have offered $${Math.round(first.fee / 1000)}k for ${first.playerName}.`);
     }
 
     // ── RESPOND TO A CDL BUYOUT OFFER (accept = sell for income / reject) ──────
@@ -993,10 +1069,12 @@ function reducer(state, action) {
       });
 
       if (action.decision === "reject") {
-        // Squad dynamics: blocking a CDL buyout can unsettle a player who wanted the move.
         const blockedPlayer = (state.players || []).concat(state.prospects || []).find(p => p.id === offer.playerId);
         let rejected = markOffer(state, "rejected");
-        if (blockedPlayer) rejected = evaluateAllPromises(applyBlockedMoveEvent(rejected, blockedPlayer));
+        if (blockedPlayer) {
+          rejected = evaluateAllPromises(applyBlockedMoveEvent(rejected, blockedPlayer));
+          rejected = pushInboxEvents(rejected, [makeBlockedMoveEvent(blockedPlayer, rejected)]);
+        }
         return addNotif(rejected, `Rejected ${CDL_TEAMS.find(t => t.id === offer.fromCdlTeamId)?.name ?? "the"} offer for ${offer.playerName}.`);
       }
       // accept
@@ -1025,10 +1103,11 @@ function reducer(state, action) {
       const result = applyScout(state, action.playerId, { deep: !!action.deep });
       if (!result.ok) return addNotif(state, result.reason);
       const verb = action.deep ? "Deep scouted" : "Scouted";
-      return addNotif(
-        { ...state, userScouting: result.scouting },
-        `${verb} ${result.player.name} (+${result.gain}) — confidence ${result.confidence}%`
-      );
+      let scoutState = { ...state, userScouting: result.scouting };
+      if (action.deep && result.confidence >= 50) {
+        scoutState = pushInboxEvents(scoutState, [makeScoutReportEvent(result.player, scoutState)]);
+      }
+      return addNotif(scoutState, `${verb} ${result.player.name} (+${result.gain}) — confidence ${result.confidence}%`);
     }
 
     // ── SHORTLIST TOGGLE ──────────────────────────────────────────────────────
@@ -1078,6 +1157,12 @@ function reducer(state, action) {
         const first = offers[0];
         const fp = state.players.find(pl => pl.id === first.playerId);
         next = addNotif(next, `${trTeamName0(first.fromTeamId)} have offered ${fmtFee(first.fee)} for ${fp?.name ?? "your player"}.`);
+        // Inbox events for each incoming offer
+        const inboxOffers = offers.map(o => {
+          const op2 = state.players.find(pl => pl.id === o.playerId);
+          return makeTransferOfferEvent(o, op2, next);
+        });
+        next = pushInboxEvents(next, inboxOffers);
       }
       return next;
     }
@@ -1173,7 +1258,10 @@ function reducer(state, action) {
         const tm2 = migrateTransferMarket(withStatus.transferMarket);
         let out = { ...withStatus, transferMarket: { ...tm2, status: { ...tm2.status, [player.id]: { ...(tm2.status[player.id] || {}), transferStatus: "Not For Sale" } } } };
         // Squad dynamics: blocking an offer for your own player can unsettle him.
-        if (userIsSeller) out = evaluateAllPromises(applyBlockedMoveEvent(out, player));
+        if (userIsSeller) {
+          out = evaluateAllPromises(applyBlockedMoveEvent(out, player));
+          out = pushInboxEvents(out, [makeBlockedMoveEvent(player, out)]);
+        }
         return addNotif(out, `${player.name} marked Not For Sale; offer rejected.`);
       }
       // ---- REJECT ----
@@ -1182,8 +1270,10 @@ function reducer(state, action) {
         const rejected = setNeg({ status: "Rejected", __h: { by: state.userTeamId, action: "reject" } });
         const tm2 = migrateTransferMarket(rejected.transferMarket);
         let out = { ...rejected, transferMarket: { ...tm2, cooldowns: { ...tm2.cooldowns, [cdKey]: getWindowKey(state) } } };
-        // Squad dynamics: turning down an offer for your own player can unsettle him.
-        if (userIsSeller) out = evaluateAllPromises(applyBlockedMoveEvent(out, player));
+        if (userIsSeller) {
+          out = evaluateAllPromises(applyBlockedMoveEvent(out, player));
+          out = pushInboxEvents(out, [makeBlockedMoveEvent(player, out)]);
+        }
         return addNotif(out, `Offer for ${player.name} rejected.`);
       }
       // ---- COUNTER ----
@@ -1260,6 +1350,7 @@ function reducer(state, action) {
         next.teamMapProfiles = ensureTeamMapProfiles(next, { force: true });
         const buyTag = trTeamTag(result.buyerTeamId);
         next = pushFeed(next, [mkFeed("transfer_done", `${buyTag} complete ${fmtFee(agreedFee)} buyout for ${player.name}`, state.season, phase)]);
+        next = pushInboxEvents(next, [makeTransferDoneEvent(player, result.buyerTeamId, agreedFee, next)]);
         const msg = userIsSeller
           ? `${player.name} sold to ${trTeamName0(result.buyerTeamId)} for ${fmtFee(agreedFee)}.`
           : `Transfer completed: ${player.name} has joined ${trTeamName0(result.buyerTeamId)}. ${result.asSub ? "Player added to bench." : "Player added to starting roster."}`;
@@ -1373,6 +1464,16 @@ function reducer(state, action) {
     case "MARK_FEED_READ":
       return { ...state, feed: (state.feed ?? []).map(f => ({ ...f, read: true })) };
 
+    // ── EVENT CENTRE ACTIONS ──────────────────────────────────────────────────
+    case "MARK_EVENT_READ":
+      return { ...state, eventCentre: markEventRead(state.eventCentre, action.eventId) };
+
+    case "MARK_ALL_EVENTS_READ":
+      return { ...state, eventCentre: markAllRead(state.eventCentre) };
+
+    case "DISMISS_EVENT":
+      return { ...state, eventCentre: dismissEvent(state.eventCentre, action.eventId) };
+
     default:
       return state;
   }
@@ -1380,6 +1481,11 @@ function reducer(state, action) {
 
 function addNotif(state, msg) {
   return { ...state, notifications: [...state.notifications, msg] };
+}
+
+function pushInboxEvents(state, events) {
+  if (!events?.length) return state;
+  return { ...state, eventCentre: pushEvents(state.eventCentre ?? migrateEventCentre(null), events) };
 }
 
 // ── Reducer wrapper: track lastAction + validate post-state invariants ────────

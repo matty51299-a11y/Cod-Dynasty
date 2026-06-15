@@ -6,9 +6,11 @@ import { getTeamUiTheme } from "../utils/teamTheme.js";
 import { getAcceptedOutgoingTermsOffers } from "../engine/transferEngine.js";
 import { resolveUserTeamMeta, isChallengerMode } from "../utils/userTeam.js";
 import { getActionRequiredMoraleEvents } from "../engine/moraleEngine.js";
+import { getActionRequiredCount, getUnreadCount } from "../engine/eventCentreEngine.js";
 
 const NAV_ITEMS = [
   { id: "home",      icon: "⌂",  label: "Home" },
+  { id: "inbox",     icon: "◈",  label: "Inbox" },
   { id: "standings", icon: "≡",  label: "Standings" },
   { id: "schedule",  icon: "◫",  label: "Schedule" },
   { id: "kdleaders", icon: "↑",  label: "K/D Leaders" },
@@ -66,6 +68,9 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
 
   const hasDevData  = state.progressionLog?.length > 0;
   const unreadFeed  = (state.feed ?? []).filter(f => !f.read).length;
+  const inboxActionCount = getActionRequiredCount(state.eventCentre);
+  const inboxUnreadCount = getUnreadCount(state.eventCentre);
+  const inboxBadge = inboxActionCount > 0 ? inboxActionCount : (inboxUnreadCount > 0 ? inboxUnreadCount : 0);
   const transferActions = getAcceptedOutgoingTermsOffers(state).length;
   const moraleActions = getActionRequiredMoraleEvents(state);
   const moraleActionCount = moraleActions.length;
@@ -98,6 +103,7 @@ export default function Sidebar({ screen, setScreen, onOpenFeed }) {
               return item.id === "transfers" && transferActions > 0 ? `${label} (${transferActions})` : label;
             })()}</span>
             {item.id === "devreport" && hasDevData && <span className="sb-dot" />}
+            {item.id === "inbox" && inboxBadge > 0 && <span className={`sb-badge ${inboxActionCount > 0 ? "sb-badge-warning" : ""}`}>{inboxBadge > 99 ? "99+" : inboxBadge}</span>}
             {item.id === "dynamics" && moraleActionCount > 0 && <span className={`sb-badge ${moraleHasHighPriority ? "sb-badge-warning" : ""}`}>{moraleActionCount > 9 ? "9+" : moraleActionCount}</span>}
             {item.id === "transfers" && transferActions > 0 && <span className="sb-badge">{transferActions > 9 ? "9+" : transferActions}</span>}
           </button>
