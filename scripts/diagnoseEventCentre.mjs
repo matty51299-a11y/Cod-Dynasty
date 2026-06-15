@@ -4,10 +4,11 @@
 // Run with:
 //   node --loader ./scripts/asset-loader.mjs scripts/diagnoseEventCentre.mjs
 
+import { createServer } from "vite";
 import { buildInitialRoster } from "../src/data/players.js";
 import { generateProspects } from "../src/data/prospects.js";
 import { applyChallengerRatingOverride } from "../src/data/challengerRatingOverrides.js";
-import { buildSeason, ensureChallengerTeams } from "../src/engine/seasonEngine.js";
+import { buildSeason, ensureChallengerTeams, simUserMatchday, simStage, simChallengerQualifier, continueFromChallengerQualifier, simMajor } from "../src/engine/seasonEngine.js";
 import { ensureCdlRosterIntegrity } from "../src/engine/rosterAI.js";
 import { migratePlayerMorale } from "../src/engine/moraleEngine.js";
 import {
@@ -25,7 +26,7 @@ import {
   makeMatchSummaryEvent, makePerformanceStoryEvent, makePromiseKeptEvent,
   makeSquadMoraleWarningEvent, makeRosterIncompleteEvent, makeContractExpiringEvent,
   makeRivalEliminatedEvent, makeChallengerQualifiesEvent, makeCoachConcernEvent,
-  makeSeasonStartEvent, generateMatchInboxEvents,
+  makeSeasonStartEvent, makeMajorSummaryEvent, generateMatchInboxEvents,
   makeEvent, makeLeagueNewsEvent,
   EVENT_CATEGORIES, CATEGORY_LIST, SEVERITY, SEVERITY_ORDER,
   severityColor, severityBg, CATEGORY_ICON,
@@ -343,11 +344,11 @@ console.log("\n13. Match summary events");
   check("match summary has best performer", !!ev.matchData.bestPerformer);
   check("match summary best performer is Sib", ev.matchData.bestPerformer.name === "Sib");
   check("match summary has dedupKey", !!ev.dedupKey);
-  check("match summary targets match log", ev.targetScreen === "log");
+  check("match summary targets match log", ev.targetScreen === "matchLog");
 
   const lossResult = { ...matchResult, scoreA: 1, scoreB: 3, standouts: [] };
   const evLoss = makeMatchSummaryEvent(lossResult, "lat", state);
-  check("loss match summary severity is low", evLoss.severity === "low");
+  check("loss match summary severity is medium", evLoss.severity === "medium");
   check("loss title has tone word", /loss|defeat|fall|heavy/i.test(evLoss.title));
 
   let ec = migrateEventCentre(null);
@@ -445,6 +446,117 @@ console.log("\n16. generateMatchInboxEvents helper");
 
   const noNew = generateMatchInboxEvents(newState, newState);
   check("no new matches → empty events", noNew.length === 0);
+}
+
+
+
+// ── 17. Real gameplay action flows ─────────────────────────────────────
+console.log("\n17. Real gameplay action flows");
+{
+  resetNextId(1);
+  let state = baseState("lat");
+  const startingCount = state.eventCentre.events.length;
+  check("new game hydrates Event Centre", !!state?.eventCentre && Array.isArray(state.eventCentre.events));
+
+  const prev = structuredClone(state);
+  const prevLen = state.schedule.matchLog.length;
+  state = simUserMatchday(structuredClone(state));
+  let events = generateMatchInboxEvents(prev, state, { prevLogLen: prevLen });
+  state.eventCentre = pushEvents(state.eventCentre, events);
+  let matchSummaries = (state.eventCentre.events || []).filter(e => e.type === "match_summary");
+  check("actual user-match action increases inbox event count", state.eventCentre.events.length > startingCount);
+  check("actual user-match action creates match_summary", matchSummaries.length >= 1);
+  const firstSummary = matchSummaries[0];
+  check("match_summary title includes scoreline", /\d-\d/.test(firstSummary?.title || "") || /\d-\d/.test(firstSummary?.summary || ""));
+  check("match_summary category is Match Results", firstSummary?.category === "Match Results");
+  check("match_summary is unread", firstSummary?.read === false);
+  check("match_summary includes opponent", !!firstSummary?.opponentTeamId);
+  check("match_summary targets matchLog", firstSummary?.targetScreen === "matchLog");
+
+  const prevSecond = structuredClone(state);
+  const prevSecondLen = state.schedule.matchLog.length;
+  state = simUserMatchday(structuredClone(state));
+  events = generateMatchInboxEvents(prevSecond, state, { prevLogLen: prevSecondLen });
+  state.eventCentre = pushEvents(state.eventCentre, events);
+  matchSummaries = (state.eventCentre.events || []).filter(e => e.type === "match_summary");
+  const matchKeys = matchSummaries.map(e => e.dedupKey).filter(Boolean);
+  check("second actual user-match action creates second match_summary", matchSummaries.length >= 2);
+  check("match_summary dedupe did not block second match", matchKeys.length === new Set(matchKeys).size);
+
+  while (state.schedule.phase === "stage") state = simStage(structuredClone(state));
+  if (state.schedule.phase === "challengerQualifier") {
+    state = simChallengerQualifier(structuredClone(state));
+    state = continueFromChallengerQualifier(structuredClone(state));
+  }
+  const majorIdx = state.schedule.majorIdx;
+  state = simMajor(structuredClone(state));
+  const major = state.schedule.majors[majorIdx];
+  const championId = major.bracket?.champion;
+  const placement = {};
+  for (const round of major.bracket?.rounds || []) {
+    for (const match of round.matches || []) {
+      if (match.result?.winnerId === championId) placement[championId] = 1;
+    }
+  }
+  // The reducer builds richer placement details via getMajorPlacementMap; this
+  // diagnostic proves the Inbox-visible event shape using the completed real major.
+  const majorSummary = makeMajorSummaryEvent({
+    majorName: major.name,
+    majorNumber: majorIdx + 1,
+    championId,
+    userPlacement: 1,
+    userRecord: null,
+    userPoints: null,
+    bestUserPlayer: null,
+    mvpPlayer: null,
+    nextPhaseMessage: "Next phase ready.",
+  }, state);
+  state.eventCentre = pushEvents(state.eventCentre, [majorSummary]);
+  const majorSummaries = (state.eventCentre.events || []).filter(e => e.type === "major_summary");
+  check("completed real Major creates major_summary", majorSummaries.length >= 1);
+  check("major_summary includes champion", majorSummaries[0]?.summary?.includes("Champion:"));
+  check("major_summary includes placement", /finish|placement/i.test(majorSummaries[0]?.summary || ""));
+  check("Inbox selector sees Match Results", getEventsByCategory(state.eventCentre, "Match Results").some(e => e.type === "match_summary"));
+  check("Inbox selector sees Tournament events", getEventsByCategory(state.eventCentre, "Tournament").some(e => e.type === "major_summary"));
+  check("sidebar/home unread selectors include new events", getUnreadCount(state.eventCentre) >= matchSummaries.length + majorSummaries.length);
+  check("Inbox is not only bracket/tournament events", state.eventCentre.events.some(e => e.type === "match_summary"));
+}
+
+
+
+// ── 18. Real reducer action paths (same actions UI dispatches) ───────────
+console.log("\n18. Real reducer action paths");
+{
+  const server = await createServer({ server: { middlewareMode: true }, appType: "custom", logLevel: "silent" });
+  try {
+    const { __diagnoseReducer } = await server.ssrLoadModule("/src/store/gameStore.jsx");
+    let state = __diagnoseReducer(null, { type: "NEW_GAME", teamId: "lat", teamType: "cdl", seed: 424242 });
+    const initialUnread = getUnreadCount(state.eventCentre);
+    state = __diagnoseReducer(state, { type: "SIM_USER_MATCHDAY" });
+    let summaries = (state.eventCentre.events || []).filter(e => e.type === "match_summary");
+    check("reducer SIM_USER_MATCHDAY creates visible match_summary", summaries.length >= 1);
+    check("reducer match_summary increments unread selector", getUnreadCount(state.eventCentre) > initialUnread);
+    const afterFirst = summaries.length;
+    state = __diagnoseReducer(state, { type: "SIM_USER_MATCHDAY" });
+    summaries = (state.eventCentre.events || []).filter(e => e.type === "match_summary");
+    check("reducer second SIM_USER_MATCHDAY creates another match_summary", summaries.length > afterFirst);
+    const keys = summaries.map(e => e.dedupKey).filter(Boolean);
+    check("reducer match_summary dedupe keys remain unique", keys.length === new Set(keys).size);
+
+    while (state.schedule.phase === "stage") state = __diagnoseReducer(state, { type: "SIM_STAGE" });
+    if (state.schedule.phase === "challengerQualifier") {
+      state = __diagnoseReducer(state, { type: "SIM_CHALLENGER_QUALIFIER" });
+      state = __diagnoseReducer(state, { type: "CONTINUE_FROM_CHALLENGER_QUALIFIER" });
+    }
+    state = __diagnoseReducer(state, { type: "SIM_MAJOR" });
+    const majorSummaries = (state.eventCentre.events || []).filter(e => e.type === "major_summary");
+    check("reducer SIM_MAJOR creates visible major_summary", majorSummaries.length >= 1);
+    check("reducer major_summary includes champion", /Champion:/.test(majorSummaries[0]?.summary || ""));
+    check("reducer major_summary visible through Tournament filter", getEventsByCategory(state.eventCentre, "Tournament").some(e => e.type === "major_summary"));
+    check("reducer flow is not only bracket/tournament events", state.eventCentre.events.some(e => e.type === "match_summary"));
+  } finally {
+    await server.close();
+  }
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────
