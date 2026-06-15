@@ -2,6 +2,7 @@ import { GHOSTS_TEAMS, GHOSTS_PLAYERS, AW_PLAYERS } from "../src/data/historical
 import { GHOSTS_EVENTS } from "../src/data/ghostsEventCalendar.js";
 import { getEra, HISTORICAL_START_ERA_ID, COD_ERAS } from "../src/data/codEras.js";
 import { simulateEvent } from "../src/engine/eventSim.js";
+import { createHistoricalEventState, getNextPendingMatch, simulateMatch } from "../src/engine/historicalEventEngine.js";
 import { createInitialStandings, updateStandings, getSortedStandings } from "../src/engine/standingsEngine.js";
 
 const MODERN_CDL_TEAMS = [
@@ -134,8 +135,17 @@ const sorted = getSortedStandings(updated);
 check("Standings entries have proPoints field", sorted.every(s => "proPoints" in s));
 check("Standings entries do NOT have cdlPoints field", sorted.every(s => !("cdlPoints" in s)));
 
-// 17. Build check (deferred — run npm run build separately)
-console.log("\n17. Build check");
+// 17. Event-level gameplay is available
+console.log("\n17. Event-level gameplay");
+const openedEvent = createHistoricalEventState(testEvent, GHOSTS_TEAMS, GHOSTS_PLAYERS, standings, "optic_gaming", 54321);
+check("Events can be opened into bracket state", openedEvent.matches.length > 0 && openedEvent.status === "in_progress");
+const oneBefore = openedEvent.matches.filter(m => m.status === "completed").length;
+const oneAfterState = simulateMatch(openedEvent, getNextPendingMatch(openedEvent).id, testEvent, "optic_gaming");
+const oneAfter = oneAfterState.matches.filter(m => m.status === "completed").length;
+check("Game is not only full-event simulation", oneAfter - oneBefore === 1 && oneAfterState.status === "in_progress");
+
+// 18. Build check (deferred — run npm run build separately)
+console.log("\n18. Build check");
 console.log("  ⓘ Run 'npm run build' separately to verify build passes.");
 
 console.log(`\n═══ Results: ${pass} passed, ${fail} failed ═══`);

@@ -15,7 +15,8 @@ The game has been rebuilt from the ground up as a clean historical COD dynasty. 
 - **Free Agency**: Shows Ghosts-era free agents only. Currently empty (all players assigned to teams).
 - **Amateur Pool**: Empty at Ghosts start. Shows "New players will emerge as later titles begin."
 - **Event Calendar**: 12 Ghosts-era historical events (UMG Philly, CoD Champs, MLG League, Anaheim, ESWC, etc.)
-- **Event Simulation**: Simple OVR + randomness simulation. Awards Pro Points based on placement.
+- **Historical Event Hub**: Events can be opened from the calendar into a full control-room screen with Overview / Bracket or Fixtures / Matches / Results / Placements tabs, user-team tracking, match details, and controls to sim the next match, user match, current round, or full event.
+- **Historical Event Simulation**: Generic Ghosts-era event engine creates bracket/match state, uses simple OVR + randomness best-of-5 match results, advances rounds, records results, and awards Pro Points based on placement.
 - **Event Results**: Shows champion, user placement, full placement table with Pro Points awarded.
 - **Pro Circuit Standings**: Rank, team, Pro Points, event wins, recent placement. Uses Pro Points, not CDL Points.
 - **Save/load**: Clean localStorage save state with Cod Dynasty schema.
@@ -41,7 +42,8 @@ src/
     ghostsEventCalendar.js          — 12 Ghosts-era tournament events
 
   engine/
-    eventSim.js                     — tournament simulation
+    eventSim.js                     — legacy/simple full-event simulation
+    historicalEventEngine.js          — interactive historical event hub/bracket simulation
     standingsEngine.js              — Pro Points standings
     historicalImport.js             — spreadsheet import metadata
     eraTransitionEngine.js          — era transition logic (existing)
@@ -54,7 +56,8 @@ src/
     DynastyRoster.jsx               — roster management
     DynastyFreeAgency.jsx           — free agent signing
     AmateurPool.jsx                 — amateur prospect pool (empty at Ghosts start)
-    EventCalendar.jsx               — event schedule + simulate button
+    EventCalendar.jsx               — historical event schedule + open-event entry point
+    EventDetail.jsx                 — event hub / bracket / matches / results / placements
     EventResult.jsx                 — event result display
     DynastyStandings.jsx            — Pro Circuit standings
     DynastySidebar.jsx              — navigation sidebar
@@ -83,7 +86,8 @@ The following CDL Manager systems are **not imported** by the active game. Old f
 
 ### Diagnostics
 
-- `scripts/diagnoseCodDynastyCleanCore.mjs` — 56 tests, all pass
+- `scripts/diagnoseCodDynastyCleanCore.mjs` — 58 tests, all pass
+- `scripts/diagnoseHistoricalEvents.mjs` — verifies event opening, user-match sim, next-match sim, round sim, full-event completion, placements, Pro Points, standings, save/load, and historical terminology
 - `scripts/diagnoseHistoricalRosterImport.mjs` — 33 tests, all pass
 
 ### Preserved
@@ -98,7 +102,7 @@ The following CDL Manager systems are **not imported** by the active game. Old f
 ## Next Historical Work
 
 1. **Ghosts → Advanced Warfare transition**: Introduce AW-new players into Amateur Pool / Free Agency when era advances.
-2. **Full bracket simulation**: Improve event sim with proper bracket/pool play format.
+2. **Full bracket simulation**: Improve event sim with exact historical pool play / double-elimination bracket shapes and qualification feeds.
 3. **Offseason flow**: Contract expiry, roster moves between events.
 4. **Additional eras**: Parse BO3, IW, WWII, BO4, MW2019 spreadsheet sheets.
 5. **Roster AI**: AI teams make roster moves between events/eras.
