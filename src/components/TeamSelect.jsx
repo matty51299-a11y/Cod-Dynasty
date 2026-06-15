@@ -12,13 +12,14 @@ import { useGame, buildChallengerPreview } from "../store/gameStore.jsx";
 export default function TeamSelect() {
   const { dispatch } = useGame();
   const [mode, setMode] = useState("cdl"); // "cdl" | "challenger"
+  const [careerMode, setCareerMode] = useState("modern");
   // One stable seed for this picker session → preview matches the started save.
   // Lazy state initializer runs once; keeps render pure on subsequent renders.
   const [seed] = useState(() => ((Date.now() % 999983) * 31 + 7) | 0 || 1);
   const challengerTeams = useMemo(() => (mode === "challenger" ? buildChallengerPreview(seed) : []), [mode, seed]);
 
   function selectCdl(teamId) {
-    dispatch({ type: "NEW_GAME", teamId, teamType: "cdl" });
+    dispatch({ type: "NEW_GAME", teamId, teamType: "cdl", careerMode });
   }
   function selectChallenger(teamId) {
     dispatch({ type: "NEW_GAME", teamId, teamType: "challenger", seed });
@@ -28,6 +29,23 @@ export default function TeamSelect() {
     <div className="team-select">
       <h1 className="title">CDL MANAGER 2026</h1>
       <p className="subtitle">Choose your career path</p>
+
+      <div className="ts-mode-tabs">
+        <button
+          className={`ts-mode-tab ${careerMode === "modern" ? "active" : ""}`}
+          onClick={() => setCareerMode("modern")}
+        >
+          Modern CDL 2026
+          <span className="ts-mode-sub">Default current-era save</span>
+        </button>
+        <button
+          className={`ts-mode-tab ${careerMode === "historical" ? "active" : ""}`}
+          onClick={() => setCareerMode("historical")}
+        >
+          Historical Dynasty: Ghosts Era
+          <span className="ts-mode-sub">Start in Call of Duty: Ghosts and advance by title</span>
+        </button>
+      </div>
 
       <div className="ts-mode-tabs">
         <button

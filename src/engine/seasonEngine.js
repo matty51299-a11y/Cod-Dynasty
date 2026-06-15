@@ -28,6 +28,7 @@ import forFunEsportsLogo from "../assets/logos/challengers/ForFunEsports.png";
 import { placementText, qualifierPlacementLabel } from "../utils/placementDisplay.js";
 import { archiveCompletedSeason } from "../utils/seasonArchive.js";
 import { calculateSeasonAwards, mergeSeasonAwards } from "../utils/seasonAwards.js";
+import { advanceHistoricalEraIfNeeded } from "./historicalDynasty.js";
 
 const CHALLENGER_QUALIFIER_TEAMS = 4;
 const CHALLENGERS_FINALS_TEAMS = 16;
@@ -2582,12 +2583,12 @@ export function advanceOffseason(gameState) {
     // integrity pass refills, so the new season never starts with a name active
     // on two CDL teams.
     const withAiMoves = resolveDuplicateActiveCdlNames(runAIOffseasonRosterWindow(marketState));
-    const newSeasonState = withCdlRosterIntegrity({
+    const newSeasonState = withCdlRosterIntegrity(advanceHistoricalEraIfNeeded({
       ...withAiMoves,
       schedule: buildSeason(newSeason),
       season: newSeason,
       offseason: { ...(withAiMoves.offseason || {}), freeAgencyOpen: false, completedFreeAgencySeason: outgoingSeason },
-    }, "post_offseason");
+    }), "post_offseason");
     // Repair Challenger rosters at the start of the new season (spec: run after
     // offseason roster movement / at season start). This drops stale duplicate
     // references (e.g. a Challenger-pool player whose name now matches an active
@@ -2757,17 +2758,17 @@ export function advanceOffseason(gameState) {
   };
 
   if (gameState.schedule?.phase === "contracts") {
-    return withCdlRosterIntegrity(withProgression, "open_free_agency");
+    return withCdlRosterIntegrity(advanceHistoricalEraIfNeeded(withProgression), "open_free_agency");
   }
 
   const marketState = runAIFreeAgencyMarket(withProgression);
   const withAiMoves = runAIOffseasonRosterWindow(marketState);
-  return withCdlRosterIntegrity({
+  return withCdlRosterIntegrity(advanceHistoricalEraIfNeeded({
     ...withAiMoves,
     schedule: buildSeason(newSeason),
     season: newSeason,
     offseason: { ...(withAiMoves.offseason || {}), freeAgencyOpen: false, completedFreeAgencySeason: outgoingSeason },
-  }, "post_offseason");
+  }), "post_offseason");
 }
 
 // ── Prospect Pool Refresh ─────────────────────────────────────────────────────

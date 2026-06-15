@@ -18,6 +18,7 @@ import { isInactivePlayer } from "../utils/playerIdentity.js";
 import { getSecurityBand, bandColor, objStatusColor, objStatusLabel, evalAllObjectives } from "../engine/boardEngine.js";
 import { getActionRequiredMoraleEvents, getPromiseRiskLabel, getSquadMorale } from "../engine/moraleEngine.js";
 import { getActionRequiredCount, getUnreadCount, getSortedEvents, severityColor, CATEGORY_ICON } from "../engine/eventCentreEngine.js";
+import { getEra, getNextEra } from "../data/codEras.js";
 
 function fmtMoney(n) { return `$${Math.round((n || 0) / 1000)}k`; }
 function placementText(place) {
@@ -217,6 +218,8 @@ export default function Dashboard({ setScreen }) {
   if (!state) return null;
 
   const { schedule, userTeamId, season, players, progressionLog, playerSeasonStats } = state;
+  const currentEra = getEra(state.currentEraId);
+  const nextEra = getNextEra(currentEra.id);
   const team      = CDL_TEAMS.find(t => t.id === userTeamId);
   const myPlayers = players.filter(p => p.teamId === userTeamId);
   const chem      = calcChemistry(myPlayers);
@@ -331,6 +334,8 @@ export default function Dashboard({ setScreen }) {
 
   if (isOffseason || isContracts) {
     return (
+      <>
+      <EraTransitionModal state={state} dispatch={dispatch} />
       <OffseasonHub
         state={state}
         dispatch={dispatch}
@@ -347,10 +352,13 @@ export default function Dashboard({ setScreen }) {
         openTeamHub={openTeamHub}
         openPlayerProfile={openPlayerProfile}
       />
+    </>
     );
   }
 
   return (
+    <>
+    <EraTransitionModal state={state} dispatch={dispatch} />
     <div className="dashboard fm-dashboard">
       <div className="fm-home-top">
         <section className="fm-club-strip" style={{ borderLeftColor: teamHex }}>
@@ -534,6 +542,7 @@ export default function Dashboard({ setScreen }) {
         return <div key={i} className="champion-banner" style={{ borderColor: champ?.color }}>🏆 {major.name} Champion: <strong className="team-link" style={{ color: champ?.color }} onClick={() => openTeamHub(major.bracket.champion)}>{champ?.name ?? major.bracket.champion}</strong></div>;
       })}
     </div>
+    </>
   );
 }
 
@@ -589,6 +598,56 @@ function InboxWidget({ state, setScreen }) {
   );
 }
 
+
+function EraInfoCard({ era, nextEra, state }) {
+  if (!era) return null;
+  const modes = (era.modes || []).join(" · ");
+  return (
+    <section className="oh-card" style={{ borderTopColor: state?.careerMode === "historical" ? "#fbbf24" : "#60a5fa", marginBottom: 14 }}>
+      <div className="oh-card-header">
+        <div>
+          <h3>Current Title: {era.gameTitle}</h3>
+          <p>{era.seasonLabel} · {String(era.movementStyle || "modern").replace("_", " ")} era · {state?.careerMode === "historical" ? "Historical Dynasty" : "Modern CDL 2026"}</p>
+        </div>
+        <span className="oh-ok">{nextEra ? `Next Title: ${nextEra.shortTitle}` : "Current Era"}</span>
+      </div>
+      <div className="cm-chip-row">
+        <span className="ts-chip">Modes: {modes}</span>
+        <span className="ts-chip">Maps loaded: {Object.values(era.mapPool || {}).reduce((n, arr) => n + (arr?.length || 0), 0)}</span>
+        <span className="ts-chip">{era.rulesNote}</span>
+      </div>
+    </section>
+  );
+}
+
+function EraTransitionModal({ state, dispatch }) {
+  const transition = state?.pendingEraTransition;
+  if (!transition) return null;
+  const previous = getEra(transition.previousEraId);
+  const next = getEra(transition.newEraId);
+  return (
+    <div className="modal-backdrop" style={{ zIndex: 1300 }}>
+      <div className="modal" style={{ maxWidth: 620 }}>
+        <h2>New Game Released</h2>
+        <h3>{next.gameTitle}</h3>
+        <p className="muted">The dynasty moves from {previous.gameTitle} to {next.gameTitle}.</p>
+        <div className="ui-stat-grid compact">
+          <StatCard label="Movement" value={next.movementStyle} />
+          <StatCard label="Modes" value={(next.modes || []).join(" / ")} />
+          <StatCard label="Rookie Class" value={next.rookieClassId ? "Added" : "None"} tone={next.rookieClassId ? "success" : "neutral"} />
+        </div>
+        <p>{next.rulesNote}</p>
+        <ul>
+          <li>New maps and modes are now available for era display.</li>
+          <li>New movement style: {next.movementStyle}.</li>
+          <li>Rookie/prospect class added once for this era.</li>
+          <li>Offseason market flow remains intact.</li>
+        </ul>
+        <button className="btn-primary" onClick={() => dispatch({ type: "ACK_ERA_TRANSITION" })}>Continue to Offseason</button>
+      </div>
+    </div>
+  );
+}
 
 function OffseasonHub({ state, dispatch, setScreen, userTeamId, team, season, players, myPlayers, mySeason, chem, teamOvr, isContracts, openTeamHub, openPlayerProfile }) {
   const schedule = state.schedule || {};
