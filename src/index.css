@@ -11302,3 +11302,183 @@ body { background: #111317; }
   .inbox-filter-bar { padding: 6px 10px; gap: 4px; }
   .inbox-chip { padding: 4px 8px; font-size: 10px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* COD DYNASTY – Clean Historical Core Styles                                */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Start Screen ── */
+.start-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; background: var(--bg);
+}
+.start-card {
+  text-align: center; padding: 60px 48px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; max-width: 520px; width: 100%;
+  box-shadow: var(--shadow);
+}
+.start-title {
+  font-size: 42px; font-weight: 800; letter-spacing: 6px;
+  color: var(--text-head); margin-bottom: 12px;
+}
+.start-subtitle {
+  font-size: 15px; color: var(--text-dim); margin-bottom: 32px; line-height: 1.5;
+}
+.start-actions { display: flex; flex-direction: column; gap: 12px; align-items: center; margin-bottom: 24px; }
+.start-btn { min-width: 220px; padding: 14px 32px; font-size: 16px; font-weight: 700; border-radius: 8px; cursor: pointer; border: none; }
+.btn-primary.start-btn { background: var(--accent); color: #fff; }
+.btn-primary.start-btn:hover { filter: brightness(1.1); }
+.btn-secondary.start-btn { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary.start-btn:hover { background: var(--surface-elevated); }
+.start-meta { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.start-chip {
+  background: var(--tile-blue); color: var(--accent); font-size: 12px;
+  padding: 4px 12px; border-radius: 6px; font-weight: 600;
+}
+
+/* ── Dynasty Home ── */
+.dynasty-home { padding: 24px; }
+.home-header { margin-bottom: 24px; }
+.home-header h2 { font-size: 22px; color: var(--text-head); margin-bottom: 8px; }
+.home-meta { display: flex; gap: 8px; }
+.home-chip {
+  background: var(--tile-blue); color: var(--accent); font-size: 12px;
+  padding: 3px 10px; border-radius: 5px; font-weight: 600;
+}
+.home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.home-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px;
+}
+.home-card h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 12px; letter-spacing: 1px; text-transform: uppercase; }
+.home-stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.home-stat-row span { color: var(--text-dim); font-size: 13px; }
+.home-stat-row strong { color: var(--text-head); font-size: 14px; }
+.home-roster-row { display: flex; gap: 12px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.home-event-name { font-size: 16px; font-weight: 700; color: var(--text-head); margin-bottom: 6px; }
+.home-event-meta { display: flex; gap: 10px; color: var(--text-dim); font-size: 12px; flex-wrap: wrap; }
+.btn-link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 13px; padding: 4px 0; margin-top: 8px; }
+.btn-link:hover { text-decoration: underline; }
+.dim-text { color: var(--text-dim); font-size: 13px; }
+
+/* ── Roster ── */
+.dynasty-roster { padding: 24px; }
+.dynasty-roster h2 { font-size: 22px; color: var(--text-head); margin-bottom: 6px; }
+.roster-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 16px; }
+.roster-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.roster-card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; background: var(--bg3);
+}
+.player-name-lg { font-size: 16px; font-weight: 700; color: var(--text-head); }
+.player-ovr-badge {
+  background: var(--tile-green); color: var(--green); font-size: 13px;
+  padding: 3px 10px; border-radius: 5px; font-weight: 700;
+}
+.roster-card-body {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 12px 16px;
+}
+.roster-stat { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
+.roster-stat span { color: var(--text-dim); }
+.roster-stat strong { color: var(--text); }
+.roster-card-actions { padding: 10px 16px; border-top: 1px solid var(--border); }
+
+/* ── Free Agency & Amateur Pool ── */
+.dynasty-fa, .amateur-pool { padding: 24px; }
+.dynasty-fa h2, .amateur-pool h2 { font-size: 22px; color: var(--text-head); margin-bottom: 6px; }
+.empty-state {
+  text-align: center; padding: 48px 24px;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; margin-top: 16px;
+}
+.empty-state p { color: var(--text-dim); font-size: 15px; margin-bottom: 6px; }
+.fa-list { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
+.fa-row {
+  display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+}
+.player-name { font-weight: 600; color: var(--text-head); min-width: 100px; }
+.player-role { color: var(--text-dim); font-size: 12px; min-width: 80px; }
+.player-ovr { color: var(--green); font-weight: 700; font-size: 13px; min-width: 60px; }
+.player-age { color: var(--text-dim); font-size: 12px; }
+
+/* ── Event Calendar ── */
+.event-calendar { padding: 24px; }
+.event-calendar h2 { font-size: 22px; color: var(--text-head); margin-bottom: 6px; }
+.event-list { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
+.event-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 8px; gap: 16px;
+}
+.event-row.completed { opacity: 0.7; }
+.event-row.next-event { border-color: var(--accent); box-shadow: 0 0 12px rgba(91,157,255,0.15); }
+.event-row-left { display: flex; align-items: center; gap: 12px; }
+.event-status { font-size: 16px; min-width: 20px; text-align: center; color: var(--accent); }
+.event-name { font-weight: 600; color: var(--text-head); font-size: 14px; }
+.event-meta-row { display: flex; gap: 10px; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+.event-row-right { display: flex; align-items: center; gap: 8px; }
+.event-champion { color: var(--yellow); font-weight: 600; font-size: 13px; }
+
+/* ── Event Result ── */
+.event-result { padding: 24px; }
+.result-header { margin-bottom: 20px; }
+.result-header h2 { font-size: 22px; color: var(--text-head); margin-bottom: 4px; }
+.result-champion {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 24px; margin-bottom: 20px; background: var(--bg2);
+  border: 1px solid var(--yellow); border-radius: 10px; text-align: center;
+}
+.champion-label { font-size: 12px; color: var(--yellow); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+.champion-name { font-size: 24px; font-weight: 800; color: var(--text-head); }
+.result-user {
+  display: flex; gap: 24px; justify-content: center; padding: 16px;
+  background: var(--tile-blue); border-radius: 8px; margin-bottom: 20px;
+  font-size: 15px; color: var(--text);
+}
+.result-table { margin-bottom: 20px; }
+.result-table-header, .result-table-row {
+  display: grid; grid-template-columns: 50px 1fr 120px; gap: 8px;
+  padding: 8px 16px; align-items: center;
+}
+.result-table-header { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
+.result-table-row { border-bottom: 1px solid var(--border); font-size: 13px; }
+.result-table-row.user-row { background: var(--tile-blue); }
+.result-table-row.champion-row .team-name { color: var(--yellow); font-weight: 700; }
+.result-table-row .placement { color: var(--text-dim); font-weight: 700; }
+.result-table-row .team-name { color: var(--text-head); }
+.result-table-row .pp-awarded { color: var(--green); font-weight: 600; text-align: right; }
+.result-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ── Standings ── */
+.dynasty-standings { padding: 24px; }
+.dynasty-standings h2 { font-size: 22px; color: var(--text-head); margin-bottom: 6px; }
+.standings-table { margin-top: 16px; }
+.standings-header, .standings-row {
+  display: grid; grid-template-columns: 40px 1fr 100px 80px 70px; gap: 8px;
+  padding: 8px 16px; align-items: center;
+}
+.standings-header { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
+.standings-row { border-bottom: 1px solid var(--border); font-size: 13px; }
+.standings-row.user-row { background: var(--tile-blue); border-radius: 4px; }
+.col-rank { color: var(--text-dim); font-weight: 700; }
+.col-team { color: var(--text-head); font-weight: 600; }
+.col-pp { color: var(--green); font-weight: 700; text-align: right; }
+.col-wins { text-align: center; color: var(--yellow); font-weight: 600; }
+.col-recent { text-align: center; color: var(--text-dim); }
+
+/* ── Player Card ── */
+.player-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; max-width: 320px;
+}
+.player-card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; background: var(--bg3);
+}
+.player-card-body {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 12px 16px;
+}
