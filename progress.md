@@ -17,6 +17,7 @@ The game has been rebuilt from the ground up as a clean historical COD dynasty. 
 - **Event Calendar**: 12 Ghosts-era historical events (UMG Philly, CoD Champs, MLG League, Anaheim, ESWC, etc.)
 - **Historical Event Hub**: Events can be opened from the calendar into a full control-room screen with Overview / Bracket or Fixtures / Matches / Results / Placements tabs, user-team tracking, match details, and controls to sim the next match, user match, current round, or full event.
 - **Historical Event Simulation**: Generic Ghosts-era event engine creates bracket/match state, uses simple OVR + randomness best-of-5 match results, advances rounds, records results, and awards Pro Points based on placement.
+- **Play Match flow**: Interactive map-by-map matchday experience. Play Match button appears in event hero, Your Match panel, and user tracker when a user match is pending. Opens a live match modal with two-step flow: Play Map → review results/K/Ds → Next Map → repeat until series ends → Finish Match updates the bracket. Separate from Sim User Match (instant quick-sim). Uses Ghosts modes (Domination, Search and Destroy, Blitz — no Hardpoint) with era map pools. Player K/Ds generated using OVR, role, team strength, and randomness. Best performer highlighted. Match report added to inbox.
 - **Event Results**: Shows champion, user placement, full placement table with Pro Points awarded.
 - **Pro Circuit Standings**: Rank, team, Pro Points, event wins, recent placement. Uses Pro Points, not CDL Points.
 - **Save/load**: Clean localStorage save state with Cod Dynasty schema.
@@ -87,6 +88,7 @@ The following CDL Manager systems are **not imported** by the active game. Old f
 ### Diagnostics
 
 - `scripts/diagnoseCodDynastyCleanCore.mjs` — 58 tests, all pass
+- `scripts/diagnoseHistoricalPlayMatch.mjs` — 19 tests, all pass (live match flow, map-by-map advance, K/Ds, Ghosts modes, bracket integration)
 - `scripts/diagnoseHistoricalEvents.mjs` — verifies event opening, user-match sim, next-match sim, round sim, full-event completion, placements, Pro Points, standings, save/load, and historical terminology
 - `scripts/diagnoseHistoricalRosterImport.mjs` — 33 tests, all pass
 

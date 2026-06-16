@@ -4,7 +4,7 @@ import { GHOSTS_TEAMS, GHOSTS_PLAYERS } from "../src/data/historicalRosters.js";
 import { GHOSTS_EVENTS } from "../src/data/ghostsEventCalendar.js";
 import { getEra } from "../src/data/codEras.js";
 import { createInitialStandings } from "../src/engine/standingsEngine.js";
-import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, createHistoricalLiveMatch, playHistoricalLiveMap, applyPlayedMatchResult } from "../src/engine/historicalEventEngine.js";
+import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, createHistoricalLiveMatch, playHistoricalLiveMap, advanceHistoricalLiveMap, applyPlayedMatchResult } from "../src/engine/historicalEventEngine.js";
 
 let pass = 0;
 function check(name, condition, detail = "") { assert.ok(condition, `${name}${detail ? ` — ${detail}` : ""}`); pass++; console.log(`✓ ${name}${detail ? ` (${detail})` : ""}`); }
@@ -34,7 +34,10 @@ check("Live match uses Ghosts modes", live.mapSet.every(m => ["Domination", "Sea
 check("Live match does not use Hardpoint", live.mapSet.every(m => m.mode !== "Hardpoint"));
 live = playHistoricalLiveMap(live, GHOSTS_PLAYERS, era);
 check("One Play Map action completes only one map", live.mapResults.length === 1 && live.scoreA + live.scoreB === 1);
+check("Map index stays for review after Play Map", live.currentMapIndex === 0 && live.mapResults.length === 1);
 check("Player K/Ds are generated for both teams", live.mapResults[0].playerStats.teamA.length === 4 && live.mapResults[0].playerStats.teamB.length === 4 && live.mapResults[0].playerStats.teamA.every(p => p.kills > 0 && p.deaths > 0 && p.kd > 0));
+live = advanceHistoricalLiveMap(live);
+check("Advance moves to next map", live.currentMapIndex === 1);
 while (live.status !== "completed") live = playHistoricalLiveMap(live, GHOSTS_PLAYERS, era);
 check("Series ends when a team reaches 3 maps", live.status === "completed" && (live.scoreA === 3 || live.scoreB === 3));
 const applied = applyPlayedMatchResult(state, live, event, userTeamId);
