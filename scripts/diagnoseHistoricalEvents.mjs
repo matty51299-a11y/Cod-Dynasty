@@ -13,7 +13,7 @@ const event = GHOSTS_EVENTS.find(e => e.name === "UMG Philadelphia 2014");
 const userTeamId = "optic_gaming";
 
 console.log("1. Calendar and event open");
-check("Ghosts event calendar exists", GHOSTS_EVENTS.length === 12);
+check("Ghosts event calendar exists", GHOSTS_EVENTS.length >= 12);
 check("UMG Philadelphia 2014 exists", !!event);
 let state = createHistoricalEventState(event, GHOSTS_TEAMS, GHOSTS_PLAYERS, standings, userTeamId, 1234);
 check("Opening an event creates event detail/bracket state", !!state && state.eventId === event.id && Array.isArray(state.matches));

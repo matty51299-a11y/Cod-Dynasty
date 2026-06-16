@@ -27,6 +27,53 @@ function addNotif(state, message) {
   return { ...state, notifications: [...(state.notifications || []), message] };
 }
 
+function getEventStatus(state, eventId) {
+  if (state.completedEventIds?.includes(eventId)) return "completed";
+  if (state.activeEventId === eventId) return "in_progress";
+  const idx = state.eventCalendar.findIndex(e => e.id === eventId);
+  if (idx === state.currentEventIndex) return "current";
+  if (idx < state.currentEventIndex) return "completed";
+  return "locked";
+}
+
+export function getCurrentEventInfo(state) {
+  if (!state) return null;
+  const activeProgress = state.activeEventId ? state.eventProgress?.[state.activeEventId] : null;
+  const currentEvent = state.eventCalendar[state.currentEventIndex];
+  const isEventInProgress = activeProgress && activeProgress.status !== "completed";
+  const isEventComplete = activeProgress && activeProgress.status === "completed";
+  const userMatch = isEventInProgress ? activeProgress.matches?.find(m => m.status === "pending" && m.userInvolved) : null;
+  const allComplete = state.currentEventIndex >= state.eventCalendar.length;
+
+  let buttonLabel = null;
+  let buttonAction = null;
+
+  if (allComplete) {
+    buttonLabel = "Season Complete";
+    buttonAction = null;
+  } else if (userMatch) {
+    buttonLabel = "Play Match";
+    buttonAction = "play_match";
+  } else if (isEventInProgress) {
+    buttonLabel = "Continue Event";
+    buttonAction = "continue_event";
+  } else if (currentEvent) {
+    buttonLabel = "Start Next Event";
+    buttonAction = "start_event";
+  }
+
+  return {
+    currentEvent,
+    activeProgress,
+    isEventInProgress,
+    isEventComplete,
+    userMatch,
+    allComplete,
+    buttonLabel,
+    buttonAction,
+  };
+}
+
 function createNewGame(userTeamId) {
   const era = getEra(HISTORICAL_START_ERA_ID);
   const teams = [...GHOSTS_TEAMS];
@@ -47,6 +94,7 @@ function createNewGame(userTeamId) {
     amateurPool: [],
     eventCalendar: [...GHOSTS_EVENTS],
     completedEvents: [],
+    completedEventIds: [],
     eventProgress: {},
     activeEventId: null,
     standings,
@@ -71,6 +119,13 @@ export function isValidDynastyState(state) {
   );
 }
 
+function migrateState(state) {
+  if (!state.completedEventIds) {
+    state.completedEventIds = (state.completedEvents || []).map(e => e.eventId);
+  }
+  return state;
+}
+
 
 function completeHistoricalEvent(state, event, eventState) {
   if (state.completedEvents.some(e => e.eventId === event.id)) return state;
@@ -88,10 +143,13 @@ function completeHistoricalEvent(state, event, eventState) {
     userProPoints: userResult?.proPointsAwarded || 0,
     timestamp: Date.now(),
   };
+  const newCompletedIds = [...(state.completedEventIds || [])];
+  if (!newCompletedIds.includes(event.id)) newCompletedIds.push(event.id);
   return addNotif({
     ...state,
     standings: newStandings,
     completedEvents: [...state.completedEvents, result],
+    completedEventIds: newCompletedIds,
     currentEventIndex: Math.max(state.currentEventIndex, idx + 1),
     activeEventId: null,
     inboxEvents: [...(state.inboxEvents || []), inboxEntry],
@@ -155,7 +213,7 @@ function dynastyReducer(state, action) {
       return createNewGame(action.teamId);
 
     case "LOAD_GAME":
-      return isValidDynastyState(action.state) ? action.state : null;
+      return isValidDynastyState(action.state) ? migrateState(action.state) : null;
 
     case "RESET":
       return null;
@@ -169,8 +227,11 @@ function dynastyReducer(state, action) {
       const eventId = action.eventId || state.eventCalendar[state.currentEventIndex]?.id;
       const event = state.eventCalendar.find(e => e.id === eventId);
       if (!event) return addNotif(state, "Event not found.");
+      const idx = state.eventCalendar.findIndex(e => e.id === eventId);
+      const status = getEventStatus(state, eventId);
+      if (status === "locked") return addNotif(state, `${event.name} is not yet available. Complete earlier events first.`);
       if (state.eventProgress?.[eventId]) return { ...state, activeEventId: eventId };
-      const seed = Date.now() ^ ((state.eventCalendar.findIndex(e => e.id === eventId) + 1) * 7919);
+      const seed = Date.now() ^ ((idx + 1) * 7919);
       const eventState = createHistoricalEventState(event, state.teams, state.players, state.standings, state.userTeamId, seed);
       return { ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } };
     }
@@ -253,10 +314,13 @@ function dynastyReducer(state, action) {
         userProPoints: userResult?.proPointsAwarded || 0,
         timestamp: Date.now(),
       };
+      const newCompletedIds = [...(state.completedEventIds || [])];
+      if (!newCompletedIds.includes(event.id)) newCompletedIds.push(event.id);
       return addNotif({
         ...state,
         standings: newStandings,
         completedEvents: [...state.completedEvents, result],
+        completedEventIds: newCompletedIds,
         currentEventIndex: idx + 1,
         inboxEvents: [...(state.inboxEvents || []), inboxEntry],
       }, `${result.champion.teamName} win ${event.name}!${userResult ? ` You placed #${userResult.placement}.` : ""}`);
