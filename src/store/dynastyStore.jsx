@@ -1,9 +1,10 @@
 import { createContext, useContext, useReducer } from "react";
-import { GHOSTS_TEAMS, GHOSTS_PLAYERS } from "../data/historicalRosters.js";
+import { GHOSTS_TEAMS, GHOSTS_PLAYERS, AW_TEAMS, AW_PLAYERS, getNewAWEntrants } from "../data/historicalRosters.js";
 import { GHOSTS_EVENTS } from "../data/ghostsEventCalendar.js";
+import { ADVANCED_WARFARE_EVENTS } from "../data/advancedWarfareEventCalendar.js";
 import { getEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { simulateEvent } from "../engine/eventSim.js";
-import { createInitialStandings, updateStandings } from "../engine/standingsEngine.js";
+import { createInitialStandings, updateStandings, getSortedStandings } from "../engine/standingsEngine.js";
 import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult, createHistoricalLiveMatch, playHistoricalLiveMap, advanceHistoricalLiveMap, applyPlayedMatchResult } from "../engine/historicalEventEngine.js";
 
 const SAVE_KEY = "cod_dynasty_save";
@@ -74,7 +75,7 @@ export function getCurrentEventInfo(state) {
   };
 }
 
-function createNewGame(userTeamId) {
+export function createNewGame(userTeamId) {
   const era = getEra(HISTORICAL_START_ERA_ID);
   const teams = [...GHOSTS_TEAMS];
   if (!teams.some(t => t.id === userTeamId)) return null;
@@ -87,9 +88,17 @@ function createNewGame(userTeamId) {
     currentEraId: era.id,
     currentGameTitle: era.gameTitle,
     seasonLabel: era.seasonLabel,
+    currentSeasonLabel: era.seasonLabel,
+    currentSeasonIndex: 0,
+    completedEraIds: [],
+    currentEventId: GHOSTS_EVENTS[0]?.id || null,
     userTeamId,
     teams,
+    activeTeams: teams.map(t => t.id),
+    inactiveTeams: [],
+    historicalTeamRegistry: Object.fromEntries(teams.map(t => [t.id, { ...t, activeEraIds: [era.id] }])),
     players,
+    playerRegistry: Object.fromEntries(players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || era.id, currentStatus: p.teamId ? "active" : "freeAgent", currentTeamId: p.teamId || null }])),
     freeAgents,
     amateurPool: [],
     eventCalendar: [...GHOSTS_EVENTS],
@@ -102,6 +111,11 @@ function createNewGame(userTeamId) {
     notifications: [],
     inboxEvents: [],
     liveHistoricalMatch: null,
+    seasonHistory: [],
+    archivedStandings: {},
+    archivedEventResults: {},
+    pendingSeasonComplete: false,
+    transitionSummary: null,
     saveExists: true,
   };
 }
@@ -123,6 +137,21 @@ function migrateState(state) {
   if (!state.completedEventIds) {
     state.completedEventIds = (state.completedEvents || []).map(e => e.eventId);
   }
+  const era = getEra(state.currentEraId || HISTORICAL_START_ERA_ID);
+  state.currentGameTitle ||= era.gameTitle;
+  state.seasonLabel ||= era.seasonLabel;
+  state.currentSeasonLabel ||= state.seasonLabel;
+  state.currentSeasonIndex ??= state.currentEraId === "advanced_warfare" ? 1 : 0;
+  state.completedEraIds ||= [];
+  state.currentEventId ||= state.eventCalendar?.[state.currentEventIndex || 0]?.id || null;
+  state.activeTeams ||= (state.teams || []).map(t => t.id);
+  state.inactiveTeams ||= [];
+  state.historicalTeamRegistry ||= Object.fromEntries((state.teams || []).map(t => [t.id, { ...t, activeEraIds: [state.currentEraId || "ghosts"] }]));
+  state.playerRegistry ||= Object.fromEntries((state.players || []).map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || "ghosts", currentStatus: p.teamId ? "active" : "freeAgent", currentTeamId: p.teamId || null }]));
+  state.seasonHistory ||= [];
+  state.archivedStandings ||= {};
+  state.archivedEventResults ||= {};
+  state.pendingSeasonComplete ||= false;
   return state;
 }
 
@@ -145,12 +174,15 @@ function completeHistoricalEvent(state, event, eventState) {
   };
   const newCompletedIds = [...(state.completedEventIds || [])];
   if (!newCompletedIds.includes(event.id)) newCompletedIds.push(event.id);
+  const seasonComplete = idx + 1 >= state.eventCalendar.length;
   return addNotif({
     ...state,
     standings: newStandings,
     completedEvents: [...state.completedEvents, result],
     completedEventIds: newCompletedIds,
     currentEventIndex: Math.max(state.currentEventIndex, idx + 1),
+    currentEventId: state.eventCalendar[Math.max(state.currentEventIndex, idx + 1)]?.id || null,
+    pendingSeasonComplete: seasonComplete,
     activeEventId: event.id,
     inboxEvents: [...(state.inboxEvents || []), inboxEntry],
   }, `${result.champion?.teamName} win ${event.name}!${userResult ? ` You placed #${userResult.placement}.` : ""}`);
@@ -207,7 +239,121 @@ function commitPlayedHistoricalMatch(state) {
   return addNotif(nextState, report.title);
 }
 
-function dynastyReducer(state, action) {
+
+function archiveCurrentSeason(state) {
+  const sorted = getSortedStandings(state.standings || {});
+  const userStanding = sorted.find(s => s.teamId === state.userTeamId);
+  const userResults = (state.completedEvents || []).map(ev => ev.results?.find(r => r.teamId === state.userTeamId)).filter(Boolean);
+  const bestFinish = userResults.length ? Math.min(...userResults.map(r => r.placement)) : null;
+  const rosterSnapshot = (state.players || []).filter(p => p.teamId === state.userTeamId).map(p => ({ id: p.id, name: p.name, overall: p.overall, primary: p.primary }));
+  const archive = {
+    eraId: state.currentEraId,
+    gameTitle: state.currentGameTitle,
+    seasonLabel: state.seasonLabel,
+    standings: sorted,
+    eventResults: state.completedEvents || [],
+    eventWinners: (state.completedEvents || []).map(ev => ({ eventId: ev.eventId, eventName: ev.eventName, champion: ev.champion })),
+    userTeamId: state.userTeamId,
+    userProPoints: userStanding?.proPoints || 0,
+    userEventWins: userStanding?.eventWins || 0,
+    userBestFinish: bestFinish,
+    userRoster: rosterSnapshot,
+    archivedAt: Date.now(),
+  };
+  return {
+    ...state,
+    seasonHistory: [...(state.seasonHistory || []), archive],
+    archivedStandings: { ...(state.archivedStandings || {}), [state.currentEraId]: sorted },
+    archivedEventResults: { ...(state.archivedEventResults || {}), [state.currentEraId]: state.completedEvents || [] },
+  };
+}
+
+export function buildAdvancedWarfareTransition(state) {
+  const fromEraId = state.currentEraId || "ghosts";
+  const nextEra = getEra("advanced_warfare");
+  const userRosterIds = new Set((state.players || []).filter(p => p.teamId === state.userTeamId).map(p => p.id));
+  const userTeamExists = AW_TEAMS.some(t => t.id === state.userTeamId);
+  const userTeamId = userTeamExists ? state.userTeamId : AW_TEAMS[0]?.id;
+  const oldTeamIds = new Set((state.teams || []).map(t => t.id));
+  const awTeamIds = new Set(AW_TEAMS.map(t => t.id));
+  const newTeams = AW_TEAMS.filter(t => !oldTeamIds.has(t.id));
+  const departedTeams = (state.teams || []).filter(t => !awTeamIds.has(t.id));
+  const playersByName = new Map((state.players || []).map(p => [String(p.name).toLowerCase(), { ...p }]));
+  const majorRosterChanges = [];
+  for (const rowPlayer of AW_PLAYERS) {
+    const key = String(rowPlayer.name).toLowerCase();
+    const existing = playersByName.get(key);
+    if (!existing) {
+      const protectedTarget = userTeamExists && rowPlayer.teamId === userTeamId;
+      playersByName.set(key, { ...rowPlayer, teamId: protectedTarget ? null : rowPlayer.teamId, debutEraId: "advanced_warfare", firstActiveSeason: nextEra.seasonLabel, currentStatus: protectedTarget ? "freeAgent" : "active", status: protectedTarget ? "freeAgent" : "active", historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined });
+      continue;
+    }
+    if (userRosterIds.has(existing.id)) continue;
+    if (existing.teamId !== rowPlayer.teamId) {
+      majorRosterChanges.push(`${existing.name}: ${existing.teamId || "Free Agent"} → ${rowPlayer.teamId}`);
+      const protectedTarget = userTeamExists && rowPlayer.teamId === userTeamId;
+      playersByName.set(key, { ...existing, previousTeamId: existing.teamId, teamId: protectedTarget ? null : rowPlayer.teamId, historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined, eraId: existing.eraId || rowPlayer.eraId, currentStatus: protectedTarget ? "freeAgent" : "active", status: protectedTarget ? "freeAgent" : "active", contractYears: protectedTarget ? 0 : Math.max(existing.contractYears || 0, 1) });
+    }
+  }
+  const awNames = new Set(AW_PLAYERS.map(p => String(p.name).toLowerCase()));
+  const activeTeamIds = new Set(AW_TEAMS.map(t => t.id));
+  const players = [...playersByName.values()].map(p => {
+    if (userRosterIds.has(p.id)) return { ...p, teamId: userTeamId, currentStatus: "active", status: "active" };
+    if (p.teamId && !activeTeamIds.has(p.teamId)) return { ...p, previousTeamId: p.teamId, teamId: null, currentStatus: "freeAgent", status: "freeAgent", contractYears: 0 };
+    if (!awNames.has(String(p.name).toLowerCase()) && p.debutEraId && p.debutEraId !== "ghosts" && p.debutEraId !== "advanced_warfare") return { ...p, teamId: null, currentStatus: "inactive", status: "inactive" };
+    return { ...p, currentStatus: p.teamId ? "active" : "freeAgent", status: p.teamId ? "active" : "freeAgent" };
+  });
+  const freeAgents = players.filter(p => !p.teamId && p.currentStatus !== "inactive" && ["ghosts", "advanced_warfare", undefined].includes(p.debutEraId || p.eraId));
+  const teams = AW_TEAMS.map(t => ({ ...t }));
+  const historicalTeamRegistry = { ...(state.historicalTeamRegistry || {}) };
+  for (const team of state.teams || []) historicalTeamRegistry[team.id] ||= { ...team, activeEraIds: [fromEraId] };
+  for (const team of AW_TEAMS) historicalTeamRegistry[team.id] = { ...(historicalTeamRegistry[team.id] || team), ...team, activeEraIds: [...new Set([...(historicalTeamRegistry[team.id]?.activeEraIds || []), "advanced_warfare"])] };
+  const playerRegistry = Object.fromEntries(players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || (awNames.has(String(p.name).toLowerCase()) ? "advanced_warfare" : "ghosts"), firstActiveSeason: p.firstActiveSeason || (p.debutEraId === "advanced_warfare" ? nextEra.seasonLabel : "2013/14"), currentStatus: p.currentStatus, currentTeamId: p.teamId || null }]));
+  const summary = {
+    fromEraId,
+    toEraId: "advanced_warfare",
+    title: "Welcome to Call of Duty: Advanced Warfare",
+    newTeams: newTeams.map(t => t.name),
+    departedTeams: departedTeams.map(t => t.name),
+    majorRosterChanges: majorRosterChanges.slice(0, 16),
+    newPlayers: getNewAWEntrants(),
+    movedToFreeAgency: freeAgents.filter(p => p.previousTeamId).map(p => p.name).slice(0, 20),
+    userTeamStatus: userTeamExists ? "preserved" : "requires_team_selection",
+    previousUserTeamId: state.userTeamId,
+    userTeamId,
+    userRosterProtected: true,
+  };
+  return {
+    ...state,
+    currentEraId: "advanced_warfare",
+    currentGameTitle: nextEra.gameTitle,
+    seasonLabel: nextEra.seasonLabel,
+    currentSeasonLabel: nextEra.seasonLabel,
+    currentSeasonIndex: (state.currentSeasonIndex || 0) + 1,
+    completedEraIds: [...new Set([...(state.completedEraIds || []), fromEraId])],
+    userTeamId,
+    teams,
+    activeTeams: teams.map(t => t.id),
+    inactiveTeams: departedTeams.map(t => t.id),
+    historicalTeamRegistry,
+    players,
+    playerRegistry,
+    freeAgents,
+    eventCalendar: ADVANCED_WARFARE_EVENTS.map(e => ({ ...e, teamCount: teams.length })),
+    completedEvents: [],
+    completedEventIds: [],
+    eventProgress: {},
+    activeEventId: null,
+    currentEventId: ADVANCED_WARFARE_EVENTS[0]?.id || null,
+    currentEventIndex: 0,
+    standings: createInitialStandings(teams),
+    liveHistoricalMatch: null,
+    pendingSeasonComplete: false,
+    transitionSummary: summary,
+  };
+}
+
+export function dynastyReducer(state, action) {
   switch (action.type) {
     case "NEW_GAME":
       return createNewGame(action.teamId);
@@ -220,6 +366,16 @@ function dynastyReducer(state, action) {
 
     case "CLEAR_NOTIF":
       return { ...state, notifications: [] };
+
+    case "ADVANCE_TO_ADVANCED_WARFARE": {
+      if (!state || state.currentEraId !== "ghosts") return state;
+      if ((state.completedEventIds || []).length < (state.eventCalendar || []).length) return addNotif(state, "Complete the Ghosts season before advancing eras.");
+      const archived = archiveCurrentSeason(state);
+      return addNotif(buildAdvancedWarfareTransition(archived), "Advanced Warfare 2014/15 is ready.");
+    }
+
+    case "ACK_TRANSITION_SUMMARY":
+      return state ? { ...state, transitionSummary: null } : state;
 
 
     case "OPEN_EVENT": {
@@ -322,6 +478,8 @@ function dynastyReducer(state, action) {
         completedEvents: [...state.completedEvents, result],
         completedEventIds: newCompletedIds,
         currentEventIndex: idx + 1,
+        currentEventId: state.eventCalendar[idx + 1]?.id || null,
+        pendingSeasonComplete: idx + 1 >= state.eventCalendar.length,
         inboxEvents: [...(state.inboxEvents || []), inboxEntry],
       }, `${result.champion.teamName} win ${event.name}!${userResult ? ` You placed #${userResult.placement}.` : ""}`);
     }

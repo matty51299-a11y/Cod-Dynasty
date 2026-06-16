@@ -28,6 +28,43 @@ export default function Home({ setScreen }) {
   }
 
   const tierInfo = eventInfo?.currentEvent ? EVENT_TIERS[eventInfo.currentEvent.tier] : null;
+  const previousSeason = state.seasonHistory?.[state.seasonHistory.length - 1];
+  const userResults = state.completedEvents.map(ev => ev.results?.find(r => r.teamId === state.userTeamId)).filter(Boolean);
+  const bestFinish = userResults.length ? Math.min(...userResults.map(r => r.placement)) : "—";
+
+  if (state.transitionSummary) {
+    const summary = state.transitionSummary;
+    return (
+      <div className="dynasty-home">
+        <div className="home-card transition-summary-card">
+          <h2>{summary.title}</h2>
+          <p className="dim-text">{state.currentSeasonLabel || state.seasonLabel} season transition summary</p>
+          <div className="home-grid">
+            <div className="home-card"><h3>New teams</h3><p>{summary.newTeams.length ? summary.newTeams.join(", ") : "No new teams."}</p></div>
+            <div className="home-card"><h3>Departed teams</h3><p>{summary.departedTeams.length ? summary.departedTeams.join(", ") : "No departed teams."}</p></div>
+            <div className="home-card"><h3>New players</h3><p>{summary.newPlayers.slice(0, 12).join(", ")}</p></div>
+            <div className="home-card"><h3>Your team</h3><p>{summary.userTeamStatus === "preserved" ? "Your organisation and roster were preserved." : "Your Ghosts team was not active in AW; you have been safely assigned to an AW team while career history remains archived."}</p></div>
+          </div>
+          <div className="home-card"><h3>Major roster changes</h3><p>{summary.majorRosterChanges.length ? summary.majorRosterChanges.slice(0, 10).join(" · ") : "No major AI changes recorded."}</p></div>
+          <button className="btn-primary" onClick={() => dispatch({ type: "ACK_TRANSITION_SUMMARY" })}>Continue to 2014/15 Season</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (eventInfo?.allComplete && state.currentEraId === "ghosts") {
+    return (
+      <div className="dynasty-home">
+        <div className="home-header"><div><h2>Season Complete</h2><div className="home-meta"><span className="home-chip">{state.currentGameTitle}</span><span className="home-chip">{state.seasonLabel}</span></div></div></div>
+        <div className="home-grid">
+          <div className="home-card"><h3>Final Standing</h3><p>Rank <strong>#{userStanding?.rank || "—"}</strong></p><p>Pro Points <strong>{(userStanding?.proPoints || 0).toLocaleString()}</strong></p><p>Event wins <strong>{userStanding?.eventWins || 0}</strong></p><p>Best finish <strong>#{bestFinish}</strong></p></div>
+          <div className="home-card"><h3>Event Winners</h3>{state.completedEvents.map(ev => <div key={ev.eventId} className="home-stat-row"><span>{ev.eventName}</span><strong>{ev.champion?.teamName}</strong></div>)}</div>
+          <div className="home-card"><h3>Roster Summary</h3>{roster.map(p => <div key={p.id} className="home-roster-row"><span className="player-name">{p.name}</span><span className="player-ovr">OVR {p.overall}</span></div>)}</div>
+          <div className="home-card"><h3>Advance Era</h3><p>Archive Ghosts and begin Call of Duty: Advanced Warfare 2014/15 with new teams, rosters, maps, and a reset Pro Circuit table.</p><button className="btn-primary" onClick={() => dispatch({ type: "ADVANCE_TO_ADVANCED_WARFARE" })}>Advance to Advanced Warfare</button></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dynasty-home">
@@ -138,6 +175,7 @@ export default function Home({ setScreen }) {
             <strong>{state.eventCalendar.length - state.currentEventIndex}</strong>
           </div>
           <button className="btn-link" onClick={() => setScreen("events")}>View Calendar →</button>
+          {previousSeason && <p className="dim-text">Previous season archived: {previousSeason.gameTitle} {previousSeason.seasonLabel}</p>}
         </div>
       </div>
     </div>
