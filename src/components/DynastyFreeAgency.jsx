@@ -4,7 +4,7 @@ export default function DynastyFreeAgency() {
   const { state, dispatch } = useDynasty();
   if (!state) return null;
 
-  const freeAgents = state.players.filter(p => !p.teamId && p.eraId === state.currentEraId);
+  const freeAgents = (state.freeAgents?.length ? state.freeAgents : state.players.filter(p => !p.teamId)).filter(p => !p.teamId && (p.eraId === state.currentEraId || p.debutEraId === state.currentEraId || (state.currentEraId === "advanced_warfare" && ["ghosts", "advanced_warfare", undefined].includes(p.debutEraId || p.eraId))));
   const userRosterCount = state.players.filter(p => p.teamId === state.userTeamId).length;
   const canSign = userRosterCount < 4;
 
@@ -15,7 +15,8 @@ export default function DynastyFreeAgency() {
   return (
     <div className="dynasty-fa">
       <h2>Free Agency</h2>
-      <p className="dim-text">{state.currentGameTitle} · {state.seasonLabel}</p>
+      <p className="dim-text">{state.currentGameTitle} · {state.seasonLabel} · Your roster: {userRosterCount}/4</p>
+      {userRosterCount < 4 && <div className="roster-warning"><strong>Roster incomplete: {userRosterCount}/4 players</strong><span>Signing is enabled until your active roster reaches 4.</span></div>}
 
       {freeAgents.length === 0 ? (
         <div className="empty-state">
@@ -29,9 +30,7 @@ export default function DynastyFreeAgency() {
               <span className="player-role">{p.primary}</span>
               <span className="player-ovr">OVR {p.overall}</span>
               <span className="player-age">Age {p.age}</span>
-              {canSign && (
-                <button className="btn-primary-sm" onClick={() => handleSign(p.id)}>Sign</button>
-              )}
+              <button className="btn-primary-sm" disabled={!canSign} onClick={() => handleSign(p.id)}>{canSign ? "Sign" : "Roster Full"}</button>
             </div>
           ))}
         </div>

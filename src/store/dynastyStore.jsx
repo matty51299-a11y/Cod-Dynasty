@@ -6,6 +6,7 @@ import { getEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { simulateEvent } from "../engine/eventSim.js";
 import { createInitialStandings, updateStandings, getSortedStandings } from "../engine/standingsEngine.js";
 import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult, createHistoricalLiveMatch, playHistoricalLiveMap, advanceHistoricalLiveMap, applyPlayedMatchResult } from "../engine/historicalEventEngine.js";
+import { ensureFourPlayerRosters, getControlledTeamId } from "../engine/rosterIntegrity.js";
 
 const SAVE_KEY = "cod_dynasty_save";
 
@@ -83,7 +84,7 @@ export function createNewGame(userTeamId) {
   const freeAgents = players.filter(p => !p.teamId);
   const standings = createInitialStandings(teams);
 
-  return {
+  return ensureFourPlayerRosters({
     gameName: "Cod Dynasty",
     currentEraId: era.id,
     currentGameTitle: era.gameTitle,
@@ -117,7 +118,7 @@ export function createNewGame(userTeamId) {
     pendingSeasonComplete: false,
     transitionSummary: null,
     saveExists: true,
-  };
+  }, era.id);
 }
 
 export function isValidDynastyState(state) {
@@ -152,14 +153,15 @@ function migrateState(state) {
   state.archivedStandings ||= {};
   state.archivedEventResults ||= {};
   state.pendingSeasonComplete ||= false;
-  return state;
+  return ensureFourPlayerRosters(state, state.currentEraId || era.id);
 }
 
 
 function completeHistoricalEvent(state, event, eventState) {
   if (state.completedEvents.some(e => e.eventId === event.id)) return state;
   const result = toEventResult(eventState, event);
-  const userResult = result.results.find(r => r.teamId === state.userTeamId);
+  const controlledTeamId = getControlledTeamId(state);
+  const userResult = result.results.find(r => r.teamId === controlledTeamId);
   const newStandings = updateStandings(state.standings, result);
   const idx = state.eventCalendar.findIndex(e => e.id === event.id);
   const inboxEntry = {
@@ -189,28 +191,30 @@ function completeHistoricalEvent(state, event, eventState) {
 }
 
 function simulateHistoricalEventAction(state, mode) {
+  state = ensureFourPlayerRosters(state, state.currentEraId);
+  const controlledTeamId = getControlledTeamId(state);
   const eventId = state.activeEventId || state.eventCalendar[state.currentEventIndex]?.id;
   const event = state.eventCalendar.find(e => e.id === eventId);
   if (!event) return addNotif(state, "No active event to simulate.");
-  let eventState = state.eventProgress?.[eventId] || createHistoricalEventState(event, state.teams, state.players, state.standings, state.userTeamId, Date.now());
+  let eventState = state.eventProgress?.[eventId] || createHistoricalEventState(event, state.teams, state.players, state.standings, controlledTeamId, Date.now());
   if (eventState.status === "completed") return completeHistoricalEvent({ ...state, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } }, event, eventState);
 
   if (mode === "user") {
-    const userMatch = getUserPendingMatch(eventState, state.userTeamId);
+    const userMatch = getUserPendingMatch(eventState, controlledTeamId);
     if (!userMatch) {
       const userStatus = eventState.teamStates?.[state.userTeamId];
       return addNotif({ ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } }, userStatus?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other matches to finish.");
     }
-    eventState = simulateMatch(eventState, userMatch.id, event, state.userTeamId);
+    eventState = simulateMatch(eventState, userMatch.id, event, controlledTeamId);
   } else if (mode === "round") {
     const round = getNextPendingMatch(eventState)?.round;
     if (!round) return addNotif(state, "No pending matches in this event.");
     let ids = eventState.matches.filter(m => m.status === "pending" && m.round === round).map(m => m.id);
-    for (const id of ids) eventState = simulateMatch(eventState, id, event, state.userTeamId);
+    for (const id of ids) eventState = simulateMatch(eventState, id, event, controlledTeamId);
   } else {
     const match = getNextPendingMatch(eventState);
     if (!match) return addNotif(state, "No pending matches in this event.");
-    eventState = simulateMatch(eventState, match.id, event, state.userTeamId);
+    eventState = simulateMatch(eventState, match.id, event, controlledTeamId);
   }
 
   let nextState = { ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } };
@@ -224,7 +228,7 @@ function commitPlayedHistoricalMatch(state) {
   const event = state.eventCalendar.find(e => e.id === live.eventId);
   const eventState = state.eventProgress?.[live.eventId];
   if (!event || !eventState) return addNotif(state, "Live match event was not found.");
-  const nextEventState = applyPlayedMatchResult(eventState, live, event, state.userTeamId);
+  const nextEventState = applyPlayedMatchResult(eventState, live, event, getControlledTeamId(state));
   const winner = live.winnerId === live.teamA.teamId ? live.teamA : live.teamB;
   const loser = live.winnerId === live.teamA.teamId ? live.teamB : live.teamA;
   const report = {
@@ -271,62 +275,78 @@ function archiveCurrentSeason(state) {
 export function buildAdvancedWarfareTransition(state) {
   const fromEraId = state.currentEraId || "ghosts";
   const nextEra = getEra("advanced_warfare");
-  const userRosterIds = new Set((state.players || []).filter(p => p.teamId === state.userTeamId).map(p => p.id));
+  const previousPlayers = (state.players || []).map(p => ({ ...p }));
+  const userRosterIds = new Set(previousPlayers.filter(p => p.teamId === state.userTeamId).map(p => p.id));
   const userTeamExists = AW_TEAMS.some(t => t.id === state.userTeamId);
   const userTeamId = userTeamExists ? state.userTeamId : AW_TEAMS[0]?.id;
   const oldTeamIds = new Set((state.teams || []).map(t => t.id));
   const awTeamIds = new Set(AW_TEAMS.map(t => t.id));
   const newTeams = AW_TEAMS.filter(t => !oldTeamIds.has(t.id));
   const departedTeams = (state.teams || []).filter(t => !awTeamIds.has(t.id));
-  const playersByName = new Map((state.players || []).map(p => [String(p.name).toLowerCase(), { ...p }]));
+  const consumed = new Set();
+  const transitionRows = [];
+  const players = [];
   const majorRosterChanges = [];
+
   for (const rowPlayer of AW_PLAYERS) {
     const key = String(rowPlayer.name).toLowerCase();
-    const existing = playersByName.get(key);
-    if (!existing) {
-      const protectedTarget = rowPlayer.teamId === userTeamId;
-      playersByName.set(key, { ...rowPlayer, teamId: protectedTarget ? null : rowPlayer.teamId, debutEraId: "advanced_warfare", firstActiveSeason: nextEra.seasonLabel, currentStatus: protectedTarget ? "freeAgent" : "active", status: protectedTarget ? "freeAgent" : "active", historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined });
-      continue;
-    }
-    if (userRosterIds.has(existing.id)) {
-      playersByName.set(key, { ...existing, ...rowPlayer, id: existing.id, teamId: userTeamId, previousTeamId: existing.teamId, currentStatus: "active", status: "active", contractYears: Math.max(existing.contractYears || 0, 1) });
-      continue;
-    }
-    if (existing.teamId !== rowPlayer.teamId) {
-      majorRosterChanges.push(`${existing.name}: ${existing.teamId || "Free Agent"} → ${rowPlayer.teamId}`);
-      const protectedTarget = rowPlayer.teamId === userTeamId;
-      playersByName.set(key, { ...existing, ...rowPlayer, id: existing.id, previousTeamId: existing.teamId, teamId: protectedTarget ? null : rowPlayer.teamId, historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined, eraId: rowPlayer.eraId || existing.eraId, currentStatus: protectedTarget ? "freeAgent" : "active", status: protectedTarget ? "freeAgent" : "active", contractYears: protectedTarget ? 0 : Math.max(existing.contractYears || 0, 1) });
+    const existing = previousPlayers.find(p => !consumed.has(p.id) && String(p.name).toLowerCase() === key && !userRosterIds.has(p.id));
+    const protectedTarget = rowPlayer.teamId === userTeamId;
+    if (existing) {
+      consumed.add(existing.id);
+      if (existing.teamId !== rowPlayer.teamId) majorRosterChanges.push(`${existing.name}: ${existing.teamId || "Free Agent"} → ${rowPlayer.teamId}`);
+      players.push({
+        ...existing,
+        ...rowPlayer,
+        id: existing.id,
+        previousTeamId: existing.teamId,
+        teamId: protectedTarget ? null : rowPlayer.teamId,
+        historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined,
+        debutEraId: existing.debutEraId || existing.eraId || "ghosts",
+        eraId: rowPlayer.eraId || "advanced_warfare",
+        firstActiveSeason: existing.firstActiveSeason || "2013/14",
+        currentStatus: protectedTarget ? "freeAgent" : "active",
+        status: protectedTarget ? "freeAgent" : "active",
+        contractYears: protectedTarget ? 0 : Math.max(existing.contractYears || 0, 1),
+      });
+      transitionRows.push({ playerId: existing.id, displayName: existing.displayName || existing.name, previousTeam: existing.teamId || "Free Agency", newTeam: protectedTarget ? "Free Agency" : rowPlayer.teamId, status: protectedTarget ? "moved_to_free_agency" : "assigned_to_aw_team", reason: protectedTarget ? "AW target roster belongs to controlled org; user roster is preserved" : "matched Advanced Warfare sheet by player name" });
+    } else {
+      const protectedExisting = protectedTarget ? previousPlayers.find(p => userRosterIds.has(p.id) && String(p.name).toLowerCase() === key) : null;
+      if (protectedExisting) {
+        transitionRows.push({ playerId: protectedExisting.id, displayName: protectedExisting.displayName || protectedExisting.name, previousTeam: protectedExisting.teamId || "", newTeam: userTeamId, status: "preserved_on_user_roster", reason: "controlled roster protected; duplicate AW sheet row skipped" });
+      } else {
+        players.push({
+          ...rowPlayer,
+          debutEraId: "advanced_warfare",
+          firstActiveSeason: nextEra.seasonLabel,
+          teamId: protectedTarget ? null : rowPlayer.teamId,
+          historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined,
+          currentStatus: protectedTarget ? "freeAgent" : "active",
+          status: protectedTarget ? "freeAgent" : "active",
+          contractYears: protectedTarget ? 0 : Math.max(rowPlayer.contractYears || 0, 1),
+        });
+        transitionRows.push({ playerId: rowPlayer.id, displayName: rowPlayer.displayName || rowPlayer.name, previousTeam: "", newTeam: protectedTarget ? "Free Agency" : rowPlayer.teamId, status: protectedTarget ? "moved_to_free_agency" : "assigned_to_aw_team", reason: "new Advanced Warfare-era entrant" });
+      }
     }
   }
-  const awNames = new Set(AW_PLAYERS.map(p => String(p.name).toLowerCase()));
-  const activeTeamIds = new Set(AW_TEAMS.map(t => t.id));
-  const players = [...playersByName.values()].map(p => {
-    if (userRosterIds.has(p.id)) return { ...p, teamId: userTeamId, currentStatus: "active", status: "active" };
-    if (p.teamId && !activeTeamIds.has(p.teamId)) return { ...p, previousTeamId: p.teamId, teamId: null, currentStatus: "freeAgent", status: "freeAgent", contractYears: 0 };
-    if (!awNames.has(String(p.name).toLowerCase()) && p.debutEraId && p.debutEraId !== "ghosts" && p.debutEraId !== "advanced_warfare") return { ...p, teamId: null, currentStatus: "inactive", status: "inactive" };
-    return { ...p, currentStatus: p.teamId ? "active" : "freeAgent", status: p.teamId ? "active" : "freeAgent" };
-  });
-  const freeAgents = players.filter(p => !p.teamId && p.currentStatus !== "inactive" && ["ghosts", "advanced_warfare", undefined].includes(p.debutEraId || p.eraId));
+
+  for (const oldPlayer of previousPlayers) {
+    if (consumed.has(oldPlayer.id)) continue;
+    if (userRosterIds.has(oldPlayer.id)) {
+      players.push({ ...oldPlayer, previousTeamId: oldPlayer.teamId, teamId: userTeamId, currentStatus: "active", status: "active", contractYears: Math.max(oldPlayer.contractYears || 0, 1) });
+      transitionRows.push({ playerId: oldPlayer.id, displayName: oldPlayer.displayName || oldPlayer.name, previousTeam: oldPlayer.teamId || "Free Agency", newTeam: userTeamId, status: "preserved_on_user_roster", reason: "save-controlled roster is protected from real-history roster changes" });
+    } else {
+      players.push({ ...oldPlayer, previousTeamId: oldPlayer.teamId || oldPlayer.previousTeamId, teamId: null, currentStatus: "freeAgent", status: "freeAgent", contractYears: 0 });
+      transitionRows.push({ playerId: oldPlayer.id, displayName: oldPlayer.displayName || oldPlayer.name, previousTeam: oldPlayer.teamId || oldPlayer.previousTeamId || "Free Agency", newTeam: "Free Agency", status: "moved_to_free_agency", reason: "not assigned to an active Advanced Warfare roster" });
+    }
+  }
+
   const teams = AW_TEAMS.map(t => ({ ...t }));
   const historicalTeamRegistry = { ...(state.historicalTeamRegistry || {}) };
   for (const team of state.teams || []) historicalTeamRegistry[team.id] ||= { ...team, activeEraIds: [fromEraId] };
   for (const team of AW_TEAMS) historicalTeamRegistry[team.id] = { ...(historicalTeamRegistry[team.id] || team), ...team, activeEraIds: [...new Set([...(historicalTeamRegistry[team.id]?.activeEraIds || []), "advanced_warfare"])] };
-  const playerRegistry = Object.fromEntries(players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || (awNames.has(String(p.name).toLowerCase()) ? "advanced_warfare" : "ghosts"), firstActiveSeason: p.firstActiveSeason || (p.debutEraId === "advanced_warfare" ? nextEra.seasonLabel : "2013/14"), currentStatus: p.currentStatus, currentTeamId: p.teamId || null }]));
-  const summary = {
-    fromEraId,
-    toEraId: "advanced_warfare",
-    title: "Welcome to Call of Duty: Advanced Warfare",
-    newTeams: newTeams.map(t => t.name),
-    departedTeams: departedTeams.map(t => t.name),
-    majorRosterChanges: majorRosterChanges.slice(0, 16),
-    newPlayers: getNewAWEntrants(),
-    movedToFreeAgency: freeAgents.filter(p => p.previousTeamId).map(p => p.name).slice(0, 20),
-    userTeamStatus: userTeamExists ? "preserved" : "requires_team_selection",
-    previousUserTeamId: state.userTeamId,
-    userTeamId,
-    userRosterProtected: true,
-  };
-  return {
+
+  let next = ensureFourPlayerRosters({
     ...state,
     currentEraId: "advanced_warfare",
     currentGameTitle: nextEra.gameTitle,
@@ -335,13 +355,13 @@ export function buildAdvancedWarfareTransition(state) {
     currentSeasonIndex: (state.currentSeasonIndex || 0) + 1,
     completedEraIds: [...new Set([...(state.completedEraIds || []), fromEraId])],
     userTeamId,
+    currentUserTeamId: userTeamId,
+    controlledTeamId: userTeamId,
     teams,
     activeTeams: teams.map(t => t.id),
     inactiveTeams: departedTeams.map(t => t.id),
     historicalTeamRegistry,
     players,
-    playerRegistry,
-    freeAgents,
     eventCalendar: ADVANCED_WARFARE_EVENTS.map(e => ({ ...e, teamCount: teams.length })),
     completedEvents: [],
     completedEventIds: [],
@@ -352,10 +372,43 @@ export function buildAdvancedWarfareTransition(state) {
     standings: createInitialStandings(teams),
     liveHistoricalMatch: null,
     pendingSeasonComplete: false,
-    transitionSummary: summary,
-  };
-}
+  }, "advanced_warfare");
 
+  const activeIds = new Set(next.activeTeams);
+  const missing = previousPlayers.filter(p => !next.players.some(np => np.id === p.id));
+  for (const p of missing) transitionRows.push({ playerId: p.id, displayName: p.displayName || p.name, previousTeam: p.teamId || "", newTeam: "", status: "missing_error", reason: "player missing after transition" });
+  const seenActive = new Set();
+  for (const p of next.players) {
+    if (!p.teamId || !activeIds.has(p.teamId)) continue;
+    if (seenActive.has(p.id)) transitionRows.push({ playerId: p.id, displayName: p.displayName || p.name, previousTeam: p.previousTeamId || "", newTeam: p.teamId, status: "duplicate_resolved", reason: "duplicate active player detected" });
+    seenActive.add(p.id);
+  }
+  const summary = {
+    fromEraId,
+    toEraId: "advanced_warfare",
+    title: "Welcome to Call of Duty: Advanced Warfare",
+    newTeams: newTeams.map(t => t.name),
+    departedTeams: departedTeams.map(t => t.name),
+    majorRosterChanges: majorRosterChanges.slice(0, 16),
+    newPlayers: getNewAWEntrants(),
+    movedToFreeAgency: next.freeAgents.filter(p => p.previousTeamId).map(p => p.name).slice(0, 20),
+    userTeamStatus: userTeamExists ? "preserved" : "mapped_to_active_aw_org",
+    previousUserTeamId: state.userTeamId,
+    userTeamId,
+    userRosterProtected: true,
+    audit: {
+      totalGhostsPlayersBeforeTransition: previousPlayers.length,
+      assignedToAwTeams: transitionRows.filter(r => r.status === "assigned_to_aw_team").length,
+      preservedOnUserRoster: transitionRows.filter(r => r.status === "preserved_on_user_roster").length,
+      movedToFreeAgency: transitionRows.filter(r => r.status === "moved_to_free_agency").length,
+      inactiveOrRetired: transitionRows.filter(r => r.status === "moved_inactive" || r.status === "retired").length,
+      missingAfterTransition: transitionRows.filter(r => r.status === "missing_error").length,
+      duplicateActivePlayers: transitionRows.filter(r => r.status === "duplicate_resolved").length,
+    },
+  };
+  const playerRegistry = Object.fromEntries(next.players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || "ghosts", firstActiveSeason: p.firstActiveSeason || (p.debutEraId === "advanced_warfare" ? nextEra.seasonLabel : "2013/14"), currentStatus: p.teamId ? "active" : (p.currentStatus || "freeAgent"), currentTeamId: p.teamId || null }]));
+  return { ...next, playerRegistry, transitionSummary: summary, transitionAuditRows: transitionRows };
+}
 export function dynastyReducer(state, action) {
   switch (action.type) {
     case "NEW_GAME":
@@ -390,19 +443,25 @@ export function dynastyReducer(state, action) {
       const status = getEventStatus(state, eventId);
       if (status === "locked") return addNotif(state, `${event.name} is not yet available. Complete earlier events first.`);
       if (state.eventProgress?.[eventId]) return { ...state, activeEventId: eventId };
+      const repaired = ensureFourPlayerRosters(state, state.currentEraId);
+      const problems = (repaired.rosterIntegrityWarnings || []).filter(w => w.includes("Emergency replacement"));
       const seed = Date.now() ^ ((idx + 1) * 7919);
-      const eventState = createHistoricalEventState(event, state.teams, state.players, state.standings, state.userTeamId, seed);
-      return { ...state, activeEventId: eventId, eventProgress: { ...(state.eventProgress || {}), [eventId]: eventState } };
+      const controlledTeamId = getControlledTeamId(repaired);
+      const eventState = createHistoricalEventState(event, repaired.teams, repaired.players, repaired.standings, controlledTeamId, seed);
+      const next = { ...repaired, activeEventId: eventId, eventProgress: { ...(repaired.eventProgress || {}), [eventId]: eventState } };
+      return problems.length ? addNotif(next, `Roster integrity repaired before ${event.name}.`) : next;
     }
 
 
     case "START_PLAY_MATCH": {
       if (!state) return state;
+      state = ensureFourPlayerRosters(state, state.currentEraId);
+      const controlledTeamId = getControlledTeamId(state);
       const eventId = state.activeEventId || state.eventCalendar[state.currentEventIndex]?.id;
       const event = state.eventCalendar.find(e => e.id === eventId);
       const eventState = state.eventProgress?.[eventId];
       if (!event || !eventState) return addNotif(state, "Open an event before playing a match.");
-      const userMatch = getUserPendingMatch(eventState, state.userTeamId);
+      const userMatch = getUserPendingMatch(eventState, controlledTeamId);
       if (!userMatch) return addNotif(state, eventState.teamStates?.[state.userTeamId]?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other event matches to finish.");
       const live = createHistoricalLiveMatch(eventState, userMatch.id, state.players, getEra(state.currentEraId), Date.now());
       return { ...state, liveHistoricalMatch: live };
@@ -461,7 +520,8 @@ export function dynastyReducer(state, action) {
       const event = state.eventCalendar[idx];
       const seed = Date.now() ^ (idx * 7919);
       const result = simulateEvent(event, state.teams, state.players, state.standings, seed);
-      const userResult = result.results.find(r => r.teamId === state.userTeamId);
+      const controlledTeamId = getControlledTeamId(state);
+  const userResult = result.results.find(r => r.teamId === controlledTeamId);
       const newStandings = updateStandings(state.standings, result);
       const inboxEntry = {
         id: `event_${event.id}`,
@@ -496,13 +556,14 @@ export function dynastyReducer(state, action) {
       if (player.teamId) return addNotif(state, `${player.name} is not available.`);
       const rosterCount = state.players.filter(p => p.teamId === state.userTeamId).length;
       if (rosterCount >= 4) return addNotif(state, "Roster is full (4/4). Release a player first.");
-      return addNotif({
+      const signed = ensureFourPlayerRosters({
         ...state,
         players: state.players.map(p =>
-          p.id === playerId ? { ...p, teamId: state.userTeamId } : p
+          p.id === playerId ? { ...p, teamId: state.userTeamId, status: "active", currentStatus: "active", contractYears: Math.max(p.contractYears || 0, 1) } : p
         ),
         freeAgents: state.freeAgents.filter(p => p.id !== playerId),
-      }, `${player.name} signed!`);
+      }, state.currentEraId);
+      return addNotif(signed, `${player.name} signed!`);
     }
 
     case "RELEASE_PLAYER": {
@@ -510,13 +571,13 @@ export function dynastyReducer(state, action) {
       const { playerId } = action;
       const player = state.players.find(p => p.id === playerId);
       if (!player || player.teamId !== state.userTeamId) return addNotif(state, "Cannot release this player.");
-      return addNotif({
+      const released = ensureFourPlayerRosters({
         ...state,
         players: state.players.map(p =>
-          p.id === playerId ? { ...p, teamId: null } : p
+          p.id === playerId ? { ...p, teamId: null, previousTeamId: state.userTeamId, status: "freeAgent", currentStatus: "freeAgent", contractYears: 0 } : p
         ),
-        freeAgents: [...state.freeAgents, { ...player, teamId: null }],
-      }, `${player.name} released.`);
+      }, state.currentEraId);
+      return addNotif(released, `${player.name} released.`);
     }
 
     default:
