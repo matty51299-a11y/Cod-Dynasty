@@ -6,6 +6,14 @@ function slug(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function playerName(player) {
+  return player?.displayName || player?.name || player?.id || "";
+}
+
+function normalizedIdentity(player) {
+  return slug(playerName(player));
+}
+
 function hashString(str) {
   let h = 2166136261;
   for (const ch of String(str || "")) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
@@ -92,15 +100,62 @@ export function ensureFourPlayerRosters(state, eraId = state?.currentEraId || "g
   const activeIds = teamActiveIds(state);
   let players = (state.players || []).map(p => ({ ...p }));
   const diagnostics = [];
+  const duplicateResolutionRows = [...(state.duplicatePlayerResolutionRows || [])];
+  const controlledTeamId = getControlledTeamId(state);
+  const teamName = (teamId) => (state.teams || []).find(t => t.id === teamId)?.name || teamId || "Free Agency";
 
-  // De-duplicate active player ids by keeping the first active assignment.
-  const activeSeen = new Set();
-  players = players.map(p => {
-    if (!p.teamId || !activeIds.has(p.teamId)) return p;
-    if (!activeSeen.has(p.id)) { activeSeen.add(p.id); return { ...p, status: "active", currentStatus: "active" }; }
-    diagnostics.push(`Duplicate active assignment resolved for ${p.name || p.id}`);
-    return { ...p, previousTeamId: p.teamId, teamId: null, status: "freeAgent", currentStatus: "freeAgent" };
-  });
+  const chooseKeeper = (group) => {
+    const userOwned = group.find(p => p.teamId === controlledTeamId);
+    if (userOwned) return userOwned;
+    return [...group].sort((a,b) => {
+      const aEra = Number((a.eraId || a.debutEraId) === eraId);
+      const bEra = Number((b.eraId || b.debutEraId) === eraId);
+      return bEra - aEra || (b.overall || 0) - (a.overall || 0) || String(a.teamId).localeCompare(String(b.teamId));
+    })[0];
+  };
+
+  const resolveActiveGroup = (key, group, reason) => {
+    const activeGroup = group.filter(p => p.teamId && activeIds.has(p.teamId));
+    const uniqueTeams = [...new Set(activeGroup.map(p => p.teamId))];
+    if (activeGroup.length <= 1 || uniqueTeams.length <= 1) return;
+    const kept = chooseKeeper(activeGroup);
+    const removed = activeGroup.filter(p => p !== kept);
+    const replacements = [];
+    duplicateResolutionRows.push({
+      eraId,
+      playerId: kept.id,
+      displayName: playerName(kept),
+      conflictingTeams: uniqueTeams.map(teamName).join("; "),
+      keptTeam: teamName(kept.teamId),
+      removedFromTeams: [...new Set(removed.map(p => p.teamId))].map(teamName).join("; "),
+      resolutionReason: kept.teamId === controlledTeamId ? "preserved_on_user_roster" : reason,
+      replacementPlayersAdded: replacements,
+      needsManualReview: false,
+    });
+    diagnostics.push(`Duplicate active ${reason} resolved for ${playerName(kept)} (${key}); kept ${teamName(kept.teamId)}`);
+    const removedObjects = new Set(removed);
+    players = players.map(p => removedObjects.has(p)
+      ? { ...p, previousTeamId: p.teamId, teamId: null, status: "freeAgent", currentStatus: "freeAgent", contractYears: 0, duplicateResolvedFromTeamId: p.teamId }
+      : p.teamId && activeIds.has(p.teamId) ? { ...p, status: "active", currentStatus: "active" } : p);
+  };
+
+  // De-duplicate active player ids and suspicious display-name/alias clones.
+  const byId = new Map();
+  for (const p of players) {
+    if (!p.teamId || !activeIds.has(p.teamId)) continue;
+    byId.set(p.id, [...(byId.get(p.id) || []), p]);
+  }
+  for (const [id, group] of byId) resolveActiveGroup(id, group, "duplicate_player_id");
+
+  const byName = new Map();
+  for (const p of players) {
+    if (!p.teamId || !activeIds.has(p.teamId)) continue;
+    const keys = new Set([normalizedIdentity(p), ...(p.aliases || []).map(slug)].filter(Boolean));
+    for (const key of keys) byName.set(key, [...(byName.get(key) || []), p]);
+  }
+  for (const [key, group] of byName) {
+    if (new Set(group.map(p => p.id)).size > 1) resolveActiveGroup(key, group, "duplicate_display_name_or_alias");
+  }
 
   let replacementOrdinal = 1;
   for (const teamId of activeIds) {
@@ -112,7 +167,11 @@ export function ensureFourPlayerRosters(state, eraId = state?.currentEraId || "g
     }
     while (players.filter(p => p.teamId === teamId).length < REQUIRED_PLAYERS) {
       const fa = players
-        .filter(p => !p.teamId && eraAllowed(p, eraId) && p.status !== "retired" && p.currentStatus !== "inactive")
+        .filter(p => {
+          if (p.teamId || !eraAllowed(p, eraId) || p.status === "retired" || p.currentStatus === "inactive") return false;
+          const candidateName = normalizedIdentity(p);
+          return !players.some(active => active.teamId && activeIds.has(active.teamId) && active.id !== p.id && normalizedIdentity(active) === candidateName);
+        })
         .sort((a,b) => {
           const sameEra = Number((b.eraId || b.debutEraId) === eraId) - Number((a.eraId || a.debutEraId) === eraId);
           const displaced = Number(Boolean(b.previousTeamId)) - Number(Boolean(a.previousTeamId));
@@ -120,17 +179,25 @@ export function ensureFourPlayerRosters(state, eraId = state?.currentEraId || "g
         })[0];
       if (fa) {
         players = players.map(p => p.id === fa.id ? { ...p, teamId, status: "active", currentStatus: "active", contractYears: Math.max(p.contractYears || 0, 1) } : p);
+        const latest = duplicateResolutionRows[duplicateResolutionRows.length - 1];
+        if (latest && !latest.replacementPlayersAdded.includes(fa.id)) latest.replacementPlayersAdded.push(fa.id);
       } else {
         const replacement = makeReplacement(teamId, eraId, replacementOrdinal++);
         diagnostics.push(`Emergency replacement created for ${teamId}: ${replacement.name}`);
         players = [...players, replacement];
+        const latest = duplicateResolutionRows[duplicateResolutionRows.length - 1];
+        if (latest) latest.replacementPlayersAdded.push(replacement.id);
       }
     }
   }
   const freeAgents = rebuildFreeAgents(players, eraId);
   const playerRegistry = { ...(state.playerRegistry || {}) };
   for (const p of players) playerRegistry[p.id] = { ...(playerRegistry[p.id] || {}), ...p, currentStatus: p.teamId ? "active" : (p.currentStatus || p.status || "freeAgent"), currentTeamId: p.teamId || null };
-  return { ...state, players, freeAgents, playerRegistry, rosterIntegrityWarnings: diagnostics };
+  return { ...state, players, freeAgents, playerRegistry, duplicatePlayerResolutionRows: duplicateResolutionRows, rosterIntegrityWarnings: diagnostics };
+}
+
+export function validateUniqueActivePlayers(state, eraId = state?.currentEraId || "ghosts") {
+  return getRosterIntegrityProblems(state, eraId).length === 0;
 }
 
 export function getRosterIntegrityProblems(state, eraId = state?.currentEraId || "ghosts") {
@@ -141,10 +208,14 @@ export function getRosterIntegrityProblems(state, eraId = state?.currentEraId ||
     if (count !== REQUIRED_PLAYERS) problems.push(`${teamId} has ${count}/${REQUIRED_PLAYERS} players`);
   }
   const seen = new Set();
+  const names = new Map();
   for (const p of state.players || []) {
     if (!p.teamId || !activeIds.has(p.teamId)) continue;
     if (seen.has(p.id)) problems.push(`duplicate active player ${p.id}`);
     seen.add(p.id);
+    const nameKey = normalizedIdentity(p);
+    if (nameKey && names.has(nameKey) && names.get(nameKey).id !== p.id) problems.push(`suspicious duplicate active display name ${playerName(p)} on ${names.get(nameKey).teamId} and ${p.teamId}`);
+    if (nameKey) names.set(nameKey, p);
   }
   for (const p of state.freeAgents || []) if (!eraAllowed(p, eraId)) problems.push(`future player in FA ${p.id}`);
   return problems;

@@ -4,7 +4,7 @@ import { GHOSTS_TEAMS, GHOSTS_PLAYERS } from "../src/data/historicalRosters.js";
 import { GHOSTS_EVENTS } from "../src/data/ghostsEventCalendar.js";
 import { getEra } from "../src/data/codEras.js";
 import { createInitialStandings } from "../src/engine/standingsEngine.js";
-import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, createHistoricalLiveMatch, playHistoricalLiveMap, advanceHistoricalLiveMap, applyPlayedMatchResult } from "../src/engine/historicalEventEngine.js";
+import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, createHistoricalLiveMatch, playHistoricalLiveMap, advanceHistoricalLiveMap, applyPlayedMatchResult, validateHistoricalMatchRosters } from "../src/engine/historicalEventEngine.js";
 
 let pass = 0;
 function check(name, condition, detail = "") { assert.ok(condition, `${name}${detail ? ` — ${detail}` : ""}`); pass++; console.log(`✓ ${name}${detail ? ` (${detail})` : ""}`); }
@@ -29,6 +29,9 @@ check("Event screen exposes Play Match when user match is pending", eventUi.incl
 const completedBeforeLive = state.matches.filter(m => m.status === "completed").length;
 let live = createHistoricalLiveMatch(state, userMatch.id, GHOSTS_PLAYERS, era, 1111);
 check("Play Match creates an interactive live match state", !!live && live.status === "in_progress" && live.scoreA === 0 && live.scoreB === 0);
+let rosterValidation = validateHistoricalMatchRosters(live, GHOSTS_PLAYERS);
+check("Play Match rosters have 4 unique players each", rosterValidation.valid && new Set(rosterValidation.idsA).size === 4 && new Set(rosterValidation.idsB).size === 4);
+check("Team A and Team B share zero players", rosterValidation.overlap.length === 0);
 check("Play Match does not instantly resolve the full event", state.status === "in_progress" && state.matches.filter(m => m.status === "completed").length === completedBeforeLive);
 check("Live match uses Ghosts modes", live.mapSet.every(m => ["Domination", "Search and Destroy", "Blitz"].includes(m.mode)), live.mapSet.map(m => m.mode).join(" / "));
 check("Live match does not use Hardpoint", live.mapSet.every(m => m.mode !== "Hardpoint"));
@@ -36,6 +39,7 @@ live = playHistoricalLiveMap(live, GHOSTS_PLAYERS, era);
 check("One Play Map action completes only one map", live.mapResults.length === 1 && live.scoreA + live.scoreB === 1);
 check("Map index stays for review after Play Map", live.currentMapIndex === 0 && live.mapResults.length === 1);
 check("Player K/Ds are generated for both teams", live.mapResults[0].playerStats.teamA.length === 4 && live.mapResults[0].playerStats.teamB.length === 4 && live.mapResults[0].playerStats.teamA.every(p => p.kills > 0 && p.deaths > 0 && p.kd > 0));
+check("Match stats are generated from current roster only", [...live.mapResults[0].playerStats.teamA, ...live.mapResults[0].playerStats.teamB].every(row => GHOSTS_PLAYERS.some(p => p.id === row.playerId && (p.teamId === live.teamA.teamId || p.teamId === live.teamB.teamId))));
 live = advanceHistoricalLiveMap(live);
 check("Advance moves to next map", live.currentMapIndex === 1);
 while (live.status !== "completed") live = playHistoricalLiveMap(live, GHOSTS_PLAYERS, era);

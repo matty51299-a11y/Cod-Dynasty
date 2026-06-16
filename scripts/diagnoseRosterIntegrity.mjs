@@ -12,8 +12,10 @@ check("Fresh Ghosts dynasty has all active teams at 4 players", state.activeTeam
 check("User team has 4 players", state.players.filter(p=>p.teamId===userTeamId).length===4);
 check("No active team has fewer than 4", !state.activeTeams.some(id=>state.players.filter(p=>p.teamId===id).length<4));
 const activeIds=state.players.filter(p=>p.teamId).map(p=>p.id); check("No player is active on multiple teams", activeIds.length===new Set(activeIds).size);
+check("No roster has duplicate player IDs internally", state.activeTeams.every(id=>{const ids=state.players.filter(p=>p.teamId===id).map(p=>p.id); return ids.length===new Set(ids).size;}));
 const eventState=createHistoricalEventState(GHOSTS_EVENTS[0],state.teams,state.players,state.standings,userTeamId,1234);
 check("Every first event team has 4 players", eventState.field.every(t=>state.players.filter(p=>p.teamId===t.teamId).length===4));
+check("No event match contains the same player on both teams", eventState.matches.every(m=>{if(!m.teamA||!m.teamB)return true; const a=state.players.filter(p=>p.teamId===m.teamA.teamId).map(p=>p.id); const b=new Set(state.players.filter(p=>p.teamId===m.teamB.teamId).map(p=>p.id)); return !a.some(id=>b.has(id));}));
 const released=state.players.find(p=>p.teamId!==userTeamId); let thin={...state,players:state.players.map(p=>p.id===released.id?{...p,teamId:null,previousTeamId:p.teamId,status:"freeAgent",currentStatus:"freeAgent"}:p)}; thin=ensureFourPlayerRosters(thin,"ghosts");
 check("Free Agency contains valid unsigned players if displaced players exist", thin.freeAgents.every(p=>!p.teamId));
 const userDrop=state.players.find(p=>p.teamId===userTeamId); const fa=state.players.find(p=>p.teamId!==userTeamId); let signState={...state,players:state.players.map(p=>p.id===userDrop.id?{...p,teamId:null,status:"freeAgent",currentStatus:"freeAgent"}:p.id===fa.id?{...p,teamId:null,status:"freeAgent",currentStatus:"freeAgent"}:p),freeAgents:[{...userDrop,teamId:null},{...fa,teamId:null}]};

@@ -290,7 +290,14 @@ export function buildAdvancedWarfareTransition(state) {
 
   for (const rowPlayer of AW_PLAYERS) {
     const key = String(rowPlayer.name).toLowerCase();
-    const existing = previousPlayers.find(p => !consumed.has(p.id) && String(p.name).toLowerCase() === key && !userRosterIds.has(p.id));
+    const protectedExisting = previousPlayers.find(p => userRosterIds.has(p.id) && String(p.name).toLowerCase() === key);
+    if (protectedExisting) {
+      consumed.add(protectedExisting.id);
+      players.push({ ...protectedExisting, previousTeamId: protectedExisting.teamId, teamId: userTeamId, currentStatus: "active", status: "active", contractYears: Math.max(protectedExisting.contractYears || 0, 1) });
+      transitionRows.push({ playerId: protectedExisting.id, displayName: protectedExisting.displayName || protectedExisting.name, previousTeam: protectedExisting.teamId || "", newTeam: userTeamId, status: "preserved_on_user_roster", reason: "controlled roster protected; duplicate AW sheet row skipped" });
+      continue;
+    }
+    const existing = previousPlayers.find(p => !consumed.has(p.id) && String(p.name).toLowerCase() === key);
     const protectedTarget = rowPlayer.teamId === userTeamId;
     if (existing) {
       consumed.add(existing.id);
@@ -311,10 +318,7 @@ export function buildAdvancedWarfareTransition(state) {
       });
       transitionRows.push({ playerId: existing.id, displayName: existing.displayName || existing.name, previousTeam: existing.teamId || "Free Agency", newTeam: protectedTarget ? "Free Agency" : rowPlayer.teamId, status: protectedTarget ? "moved_to_free_agency" : "assigned_to_aw_team", reason: protectedTarget ? "AW target roster belongs to controlled org; user roster is preserved" : "matched Advanced Warfare sheet by player name" });
     } else {
-      const protectedExisting = protectedTarget ? previousPlayers.find(p => userRosterIds.has(p.id) && String(p.name).toLowerCase() === key) : null;
-      if (protectedExisting) {
-        transitionRows.push({ playerId: protectedExisting.id, displayName: protectedExisting.displayName || protectedExisting.name, previousTeam: protectedExisting.teamId || "", newTeam: userTeamId, status: "preserved_on_user_roster", reason: "controlled roster protected; duplicate AW sheet row skipped" });
-      } else {
+      {
         players.push({
           ...rowPlayer,
           debutEraId: "advanced_warfare",
@@ -404,6 +408,7 @@ export function buildAdvancedWarfareTransition(state) {
       inactiveOrRetired: transitionRows.filter(r => r.status === "moved_inactive" || r.status === "retired").length,
       missingAfterTransition: transitionRows.filter(r => r.status === "missing_error").length,
       duplicateActivePlayers: transitionRows.filter(r => r.status === "duplicate_resolved").length,
+      duplicateResolutionRows: (next.duplicatePlayerResolutionRows || []).length,
     },
   };
   const playerRegistry = Object.fromEntries(next.players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || "ghosts", firstActiveSeason: p.firstActiveSeason || (p.debutEraId === "advanced_warfare" ? nextEra.seasonLabel : "2013/14"), currentStatus: p.teamId ? "active" : (p.currentStatus || "freeAgent"), currentTeamId: p.teamId || null }]));
@@ -464,6 +469,7 @@ export function dynastyReducer(state, action) {
       const userMatch = getUserPendingMatch(eventState, controlledTeamId);
       if (!userMatch) return addNotif(state, eventState.teamStates?.[state.userTeamId]?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other event matches to finish.");
       const live = createHistoricalLiveMatch(eventState, userMatch.id, state.players, getEra(state.currentEraId), Date.now());
+      if (live?.status === "blocked") return addNotif({ ...state, liveHistoricalMatch: null }, `Play Match blocked: ${live.rosterValidationProblems.join("; ")}`);
       return { ...state, liveHistoricalMatch: live };
     }
 

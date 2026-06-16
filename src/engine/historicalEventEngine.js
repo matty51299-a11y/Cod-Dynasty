@@ -146,11 +146,39 @@ function playerPower(player, teamStrength, rng) {
   return (player.overall || player.ovr || 65) * 0.72 + teamStrength * 0.28 + roleBonus + (rng() * 8 - 4);
 }
 
+export function getCurrentMatchRosters(liveMatch, players) {
+  const teamAPlayers = (players || []).filter(p => p.teamId === liveMatch?.teamA?.teamId).slice(0, 4);
+  const teamBPlayers = (players || []).filter(p => p.teamId === liveMatch?.teamB?.teamId).slice(0, 4);
+  return { teamAPlayers, teamBPlayers };
+}
+
+export function validateHistoricalMatchRosters(liveMatch, players) {
+  const { teamAPlayers, teamBPlayers } = getCurrentMatchRosters(liveMatch, players);
+  const idsA = teamAPlayers.map(p => p.id);
+  const idsB = teamBPlayers.map(p => p.id);
+  const overlap = idsA.filter(id => idsB.includes(id));
+  const wrongTeamA = teamAPlayers.filter(p => p.teamId !== liveMatch?.teamA?.teamId);
+  const wrongTeamB = teamBPlayers.filter(p => p.teamId !== liveMatch?.teamB?.teamId);
+  return {
+    valid: idsA.length === 4 && idsB.length === 4 && new Set(idsA).size === 4 && new Set(idsB).size === 4 && overlap.length === 0 && wrongTeamA.length === 0 && wrongTeamB.length === 0,
+    idsA,
+    idsB,
+    overlap,
+    problems: [
+      idsA.length !== 4 ? `teamA has ${idsA.length}/4 players` : null,
+      idsB.length !== 4 ? `teamB has ${idsB.length}/4 players` : null,
+      new Set(idsA).size !== idsA.length ? "teamA has duplicate player ids" : null,
+      new Set(idsB).size !== idsB.length ? "teamB has duplicate player ids" : null,
+      overlap.length ? `match rosters overlap: ${overlap.join(", ")}` : null,
+      wrongTeamA.length || wrongTeamB.length ? "match roster contains player owned by another team" : null,
+    ].filter(Boolean),
+  };
+}
+
 export function generateHistoricalMapResult(liveMatch, players, era, seedOffset = 0) {
   const map = liveMatch.mapSet[liveMatch.currentMapIndex];
   const rng = seededRandom((liveMatch.seed || 1) + ((liveMatch.mapResults.length + 1 + seedOffset) * 1319));
-  const teamAPlayers = players.filter(p => p.teamId === liveMatch.teamA.teamId).slice(0, 4);
-  const teamBPlayers = players.filter(p => p.teamId === liveMatch.teamB.teamId).slice(0, 4);
+  const { teamAPlayers, teamBPlayers } = getCurrentMatchRosters(liveMatch, players);
   const strengthA = liveMatch.teamA.ovr || teamOvr(players, liveMatch.teamA.teamId);
   const strengthB = liveMatch.teamB.ovr || teamOvr(players, liveMatch.teamB.teamId);
   const aPower = strengthA + rng() * 18 + (liveMatch.scoreA - liveMatch.scoreB) * -1.5;
@@ -179,11 +207,14 @@ export function generateHistoricalMapResult(liveMatch, players, era, seedOffset 
 export function createHistoricalLiveMatch(eventState, matchId, players, era, seed = Date.now()) {
   const match = eventState.matches.find(m => m.id === matchId);
   if (!match || match.status !== "pending" || !match.teamA || !match.teamB) return null;
-  return { id: `live_${match.id}_${seed}`, eventId: eventState.eventId, eventName: eventState.eventName, matchId, roundLabel: match.roundLabel, gameTitle: era?.gameTitle || eventState.gameTitle, teamA: match.teamA, teamB: match.teamB, scoreA: 0, scoreB: 0, currentMapIndex: 0, mapSet: getHistoricalSeriesMapSet(era), mapResults: [], status: "in_progress", winnerId: null, seed };
+  const live = { id: `live_${match.id}_${seed}`, eventId: eventState.eventId, eventName: eventState.eventName, matchId, roundLabel: match.roundLabel, gameTitle: era?.gameTitle || eventState.gameTitle, teamA: match.teamA, teamB: match.teamB, scoreA: 0, scoreB: 0, currentMapIndex: 0, mapSet: getHistoricalSeriesMapSet(era), mapResults: [], status: "in_progress", winnerId: null, seed };
+  const validation = validateHistoricalMatchRosters(live, players);
+  return validation.valid ? live : { ...live, status: "blocked", rosterValidationProblems: validation.problems };
 }
 
 export function playHistoricalLiveMap(liveMatch, players, era) {
   if (!liveMatch || liveMatch.status === "completed") return liveMatch;
+  if (liveMatch.status === "blocked") return liveMatch;
   const mapIndex = liveMatch.mapResults.length;
   if (mapIndex >= liveMatch.mapSet.length) return liveMatch;
   const result = generateHistoricalMapResult({ ...liveMatch, currentMapIndex: mapIndex }, players, era);
