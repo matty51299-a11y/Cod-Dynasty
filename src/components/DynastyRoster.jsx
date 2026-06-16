@@ -15,6 +15,7 @@ export default function DynastyRoster() {
     <div className="dynasty-roster">
       <h2>Roster — {team?.name || "My Team"}</h2>
       <p className="dim-text">{state.currentGameTitle} · {state.seasonLabel} · {roster.length}/4 players</p>
+      {roster.length < 4 && <div className="roster-warning"><strong>Roster incomplete: {roster.length}/4 players</strong><span>Sign a free agent before entering the next event.</span></div>}
 
       <div className="roster-grid">
         {roster.map(p => (
@@ -39,7 +40,7 @@ export default function DynastyRoster() {
             </div>
           </div>
         ))}
-        {roster.length === 0 && <p className="dim-text">No players on roster.</p>}
+        {Array.from({ length: Math.max(0, 4 - roster.length) }).map((_, idx) => <div key={`missing-${idx}`} className="roster-card missing-slot"><div className="roster-card-header"><span className="player-name-lg">Open active slot</span><span className="player-ovr-badge">Needed</span></div><p>Missing player slot — sign a Free Agent to restore a legal 4-player roster.</p></div>)}
       </div>
     </div>
   );

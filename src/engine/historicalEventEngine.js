@@ -212,7 +212,10 @@ export function getNextPendingMatch(eventState) {
 }
 
 export function getUserPendingMatch(eventState, userTeamId) {
-  return eventState.matches.find(m => m.status === "pending" && m.userInvolved && [m.teamA?.teamId, m.teamB?.teamId].includes(userTeamId)) || null;
+  if (!eventState || !userTeamId || eventState.status === "completed") return null;
+  const userStatus = eventState.teamStates?.[userTeamId];
+  if (userStatus?.eliminated) return null;
+  return eventState.matches.find(m => m.status === "pending" && m.teamA?.teamId && m.teamB?.teamId && [m.teamA.teamId, m.teamB.teamId].includes(userTeamId)) || null;
 }
 
 function completePlacements(state, event) {

@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { useDynasty } from "../store/dynastyStore.jsx";
+import { getUserPendingMatch } from "../engine/historicalEventEngine.js";
+import { getControlledTeamId } from "../engine/rosterIntegrity.js";
 
 function score(match) {
   if (match.status !== "completed") return "vs";
@@ -54,7 +56,7 @@ function MatchCard({ match, userTeamId, isCurrent, onSelect }) {
   return (
     <button
       type="button"
-      className={`event-match-card ${match.status} ${match.userInvolved ? "user-match" : ""} ${isCurrent ? "current-match" : ""}`}
+      className={`event-match-card ${match.status} ${[match.teamA?.teamId, match.teamB?.teamId].includes(userTeamId) ? "user-match" : ""} ${isCurrent ? "current-match" : ""}`}
       onClick={() => onSelect(match)}
     >
       <div className="event-match-card-top">
@@ -179,13 +181,14 @@ export default function EventDetail({ setScreen }) {
     return <div className="event-detail"><button className="btn-secondary" onClick={() => setScreen("events")}>Back to Calendar</button></div>;
   }
 
-  const userTeam = state.teams.find(t => t.id === state.userTeamId);
-  const userStatus = progress.teamStates?.[state.userTeamId];
+  const controlledTeamId = getControlledTeamId(state);
+  const userTeam = state.teams.find(t => t.id === controlledTeamId);
+  const userStatus = progress.teamStates?.[controlledTeamId];
   const pending = progress.matches.filter(m => m.status === "pending");
   const completed = progress.matches.filter(m => m.status === "completed");
   const nextMatch = pending[0];
-  const userMatch = pending.find(m => m.userInvolved);
-  const completedUserMatches = completed.filter(m => m.userInvolved);
+  const userMatch = getUserPendingMatch(progress, controlledTeamId);
+  const completedUserMatches = completed.filter(m => [m.teamA?.teamId, m.teamB?.teamId].includes(controlledTeamId));
   const alive = Object.values(progress.teamStates || {}).filter(t => !t.eliminated);
   const favourite = [...progress.field].sort((a, b) => b.ovr - a.ovr)[0];
   const currentRoundLabel = nextMatch?.roundLabel || (progress.status === "completed" ? "Event Complete" : "Awaiting next round");
@@ -195,7 +198,7 @@ export default function EventDetail({ setScreen }) {
     : [["overview", "Overview"], ["bracket", "Bracket"], ["matches", "Matches"], ["results", "Results"], ["placements", "Placements"]];
   const rows = placementRows(progress);
   const currentMatches = nextMatch ? progress.matches.filter(m => m.round === nextMatch.round && m.roundLabel === nextMatch.roundLabel) : [];
-  const userResult = rows.find(r => r.teamId === state.userTeamId);
+  const userResult = rows.find(r => r.teamId === controlledTeamId);
   const nextEvent = state.eventCalendar[state.currentEventIndex];
 
   function playMatch() { dispatch({ type: "START_PLAY_MATCH" }); }
@@ -235,7 +238,7 @@ export default function EventDetail({ setScreen }) {
           <button className="btn-secondary-sm" disabled={progress.status === "completed"} onClick={() => sim("SIM_ROUND")}>Sim Round</button>
           <button className="btn-secondary-sm" disabled={progress.status === "completed"} onClick={() => sim("SIM_EVENT")}>Sim Event</button>
           <span className="event-command-note">
-            {userMatch ? `Your match is ready vs ${userMatch.teamA?.teamId === state.userTeamId ? userMatch.teamB?.teamName : userMatch.teamA?.teamName}.` : userStatus?.eliminated ? "Your team is out; finish the event when ready." : "Waiting for your next bracket match."}
+            {userMatch ? `Your match is ready vs ${userMatch.teamA?.teamId === controlledTeamId ? userMatch.teamB?.teamName : userMatch.teamA?.teamName}.` : userStatus?.eliminated ? "Your team is out; finish the event when ready." : "Waiting for your next bracket match."}
           </span>
         </div>
       </div>
@@ -281,14 +284,14 @@ export default function EventDetail({ setScreen }) {
               </section>
               <section className="event-section-card">
                 <h3>Current Matches</h3>
-                {currentMatches.length ? currentMatches.map(m => <MatchCard key={m.id} match={m} userTeamId={state.userTeamId} isCurrent={nextMatch?.id === m.id} onSelect={setSelectedMatch} />) : <p className="dim-text">No current matches. The event is complete.</p>}
+                {currentMatches.length ? currentMatches.map(m => <MatchCard key={m.id} match={m} userTeamId={controlledTeamId} isCurrent={nextMatch?.id === m.id} onSelect={setSelectedMatch} />) : <p className="dim-text">No current matches. The event is complete.</p>}
               </section>
               <section className="event-section-card">
                 <h3>Event Field</h3>
                 <div className="event-field-grid">
                   {progress.field.map(t => {
                     const teamState = progress.teamStates?.[t.teamId];
-                    return <span key={t.teamId} className={t.teamId === state.userTeamId ? "user-chip" : "team-chip"}>#{t.seed} {t.teamName} <small>{teamState?.wins || 0}-{teamState?.losses || 0} · OVR {Math.round(t.ovr)}</small></span>;
+                    return <span key={t.teamId} className={t.teamId === controlledTeamId ? "user-chip" : "team-chip"}>#{t.seed} {t.teamName} <small>{teamState?.wins || 0}-{teamState?.losses || 0} · OVR {Math.round(t.ovr)}</small></span>;
                   })}
                 </div>
               </section>
@@ -309,7 +312,7 @@ export default function EventDetail({ setScreen }) {
               {Object.entries(grouped).map(([label, matches]) => (
                 <section className="event-bracket-column" key={label}>
                   <h3>{label}</h3>
-                  {matches.map(m => <MatchCard key={m.id} match={m} userTeamId={state.userTeamId} isCurrent={nextMatch?.id === m.id} onSelect={setSelectedMatch} />)}
+                  {matches.map(m => <MatchCard key={m.id} match={m} userTeamId={controlledTeamId} isCurrent={nextMatch?.id === m.id} onSelect={setSelectedMatch} />)}
                 </section>
               ))}
             </div>
@@ -319,12 +322,12 @@ export default function EventDetail({ setScreen }) {
             <div className="event-match-list-panel">
               <h3>All Matches</h3>
               <div className="event-match-list">
-                {progress.matches.map(m => <MatchCard key={m.id} match={m} userTeamId={state.userTeamId} isCurrent={nextMatch?.id === m.id} onSelect={setSelectedMatch} />)}
+                {progress.matches.map(m => <MatchCard key={m.id} match={m} userTeamId={controlledTeamId} isCurrent={nextMatch?.id === m.id} onSelect={setSelectedMatch} />)}
               </div>
               {selectedMatch && (
                 <div className="event-match-detail-panel">
                   <h4>{selectedMatch.roundLabel}</h4>
-                  <p>{matchTeamLabel(selectedMatch.teamA, selectedMatch.teamA?.teamId === state.userTeamId)} vs {matchTeamLabel(selectedMatch.teamB, selectedMatch.teamB?.teamId === state.userTeamId)}</p>
+                  <p>{matchTeamLabel(selectedMatch.teamA, selectedMatch.teamA?.teamId === controlledTeamId)} vs {matchTeamLabel(selectedMatch.teamB, selectedMatch.teamB?.teamId === controlledTeamId)}</p>
                   <p>Status: <strong>{selectedMatch.status}</strong> · Score: <strong>{score(selectedMatch)}</strong></p>
                   <p>{selectedMatch.status === "completed" ? resultText(selectedMatch) : selectedMatch.mapSummary}</p>
                 </div>
@@ -336,7 +339,7 @@ export default function EventDetail({ setScreen }) {
             <section className="event-section-card">
               <h3>Completed Results</h3>
               {completed.length ? completed.map((m, i) => (
-                <div key={m.id} className={`event-result-row ${m.userInvolved ? "user-row" : ""}`}>
+                <div key={m.id} className={`event-result-row ${[m.teamA?.teamId, m.teamB?.teamId].includes(controlledTeamId) ? "user-row" : ""}`}>
                   <span>#{i + 1}</span>
                   <strong>{m.roundLabel}</strong>
                   <span>{resultText(m)}</span>
@@ -348,7 +351,7 @@ export default function EventDetail({ setScreen }) {
           {tab === "placements" && (
             <section className="event-section-card">
               <h3>{progress.status === "completed" ? "Final Placements" : "Elimination Tracker"}</h3>
-              {rows.length ? rows.map(p => <div key={p.teamId} className={p.teamId === state.userTeamId ? "event-placement-row user-row" : "event-placement-row"}>
+              {rows.length ? rows.map(p => <div key={p.teamId} className={p.teamId === controlledTeamId ? "event-placement-row user-row" : "event-placement-row"}>
                 <span>{typeof p.placement === "number" ? `#${p.placement}` : p.placement}</span>
                 <strong>{p.teamName}</strong>
                 <span>{p.wins}-{p.losses}</span>
@@ -360,7 +363,7 @@ export default function EventDetail({ setScreen }) {
 
         <UserTracker
           progress={progress}
-          userTeamId={state.userTeamId}
+          userTeamId={controlledTeamId}
           userTeam={userTeam}
           userStatus={userStatus}
           userMatch={userMatch}
