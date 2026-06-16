@@ -68,7 +68,7 @@ function createMatch(eventId, roundNumber, matchIndex, teamA, teamB, format, use
     loserId: null,
     status: "pending",
     userInvolved: [teamA?.teamId, teamB?.teamId].includes(userTeamId),
-    mapSummary: "Best of 5 · Domination / Search and Destroy / Blitz",
+    mapSummary: "Best of 5",
   };
 }
 
@@ -110,7 +110,7 @@ export function createHistoricalEventState(event, teams, players, standings, use
     eventName: event.name,
     eventType: event.type,
     dateLabel: event.dateLabel,
-    gameTitle: "Call of Duty: Ghosts",
+    gameTitle: event.gameTitle || "Call of Duty: Ghosts",
     format,
     displayFormat: format.replaceAll("_", " "),
     status: "in_progress",
