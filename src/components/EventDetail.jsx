@@ -120,29 +120,46 @@ function UserTracker({ progress, userTeamId, userTeam, userStatus, userMatch, co
 function LiveMatchModal({ live, dispatch }) {
   if (!live) return null;
   const current = live.mapSet[live.currentMapIndex];
-  const last = live.mapResults[live.mapResults.length - 1];
+  const nextMapIndex = live.mapResults.length;
+  const nextMap = live.mapSet[nextMapIndex];
+  const reviewing = live.status !== "completed" && live.mapResults.length > live.currentMapIndex;
   const canPlay = live.status !== "completed" && live.mapResults.length === live.currentMapIndex;
-  const stats = last?.playerStats;
-  const row = (p) => <div key={p.playerId} className={last?.bestPerformer?.playerId === p.playerId ? "live-stat-row best" : "live-stat-row"}><span>{p.name}</span><span>{p.kills}</span><span>{p.deaths}</span><strong>{p.kd.toFixed(2)}</strong></div>;
+  const lastResult = live.mapResults[live.mapResults.length - 1];
+  const stats = lastResult?.playerStats;
+  const row = (p) => <div key={p.playerId} className={lastResult?.bestPerformer?.playerId === p.playerId ? "live-stat-row best" : "live-stat-row"}><span>{p.name}</span><span>{p.kills}</span><span>{p.deaths}</span><strong>{p.kd.toFixed(2)}</strong></div>;
   return (
     <div className="live-match-backdrop">
       <div className="live-match-modal">
         <div className="live-match-header">
-          <div><div className="panel-kicker">{live.eventName} · {live.roundLabel}</div><h2>{live.teamA.teamName} vs {live.teamB.teamName}</h2><p>{live.gameTitle}</p></div>
+          <div>
+            <div className="panel-kicker">{live.eventName} · {live.roundLabel}</div>
+            <h2>{live.teamA.teamName} vs {live.teamB.teamName}</h2>
+            <p>{live.gameTitle}</p>
+          </div>
           <strong className="live-series-score">{live.scoreA}-{live.scoreB}</strong>
         </div>
         <section className="live-current-map">
-          <span>Map {live.status === "completed" ? live.mapResults.length : current.mapNumber} of 5</span>
-          <h3>{live.status === "completed" ? "Series Complete" : `${current.mapName} ${current.mode}`}</h3>
-          {last && <p>Last map: {last.mapName} {last.mode} · {last.scoreA}-{last.scoreB} · Best performer: {last.bestPerformer.name} ({last.bestPerformer.kills}/{last.bestPerformer.deaths}, {last.bestPerformer.kd.toFixed(2)} K/D)</p>}
+          {live.status === "completed" ? <>
+            <span className="live-phase-badge completed">Series Complete</span>
+            <h3>{live.winnerId === live.teamA.teamId ? live.teamA.teamName : live.teamB.teamName} wins {Math.max(live.scoreA, live.scoreB)}-{Math.min(live.scoreA, live.scoreB)}</h3>
+          </> : reviewing ? <>
+            <span className="live-phase-badge reviewing">Map {lastResult.mapNumber} Complete</span>
+            <h3>{lastResult.mapName} — {lastResult.mode}</h3>
+            <p className="live-map-result-line">{lastResult.winnerId === live.teamA.teamId ? live.teamA.teamName : live.teamB.teamName} wins {lastResult.scoreA}-{lastResult.scoreB}</p>
+            <p className="live-best-performer">Best performer: <strong>{lastResult.bestPerformer.name}</strong> — {lastResult.bestPerformer.kills}/{lastResult.bestPerformer.deaths} ({lastResult.bestPerformer.kd.toFixed(2)} K/D)</p>
+          </> : <>
+            <span className="live-phase-badge upcoming">Map {current.mapNumber} of 5 — Upcoming</span>
+            <h3>{current.mapName} — {current.mode}</h3>
+            {lastResult && <p>Previous: {lastResult.mapName} {lastResult.mode} · {lastResult.winnerId === live.teamA.teamId ? live.teamA.teamName : live.teamB.teamName} won {lastResult.scoreA}-{lastResult.scoreB}</p>}
+          </>}
         </section>
-        <div className="live-map-history">{live.mapResults.map(m => <div key={m.mapNumber} className="live-map-chip"><strong>Map {m.mapNumber}</strong><span>{m.mapName}</span><span>{m.mode}</span><b>{m.scoreA}-{m.scoreB}</b></div>)}</div>
-        {stats && <div className="live-stats-grid"><section><h4>{live.teamA.teamName}</h4><div className="live-stat-head"><span>Player</span><span>K</span><span>D</span><span>K/D</span></div>{stats.teamA.map(row)}</section><section><h4>{live.teamB.teamName}</h4><div className="live-stat-head"><span>Player</span><span>K</span><span>D</span><span>K/D</span></div>{stats.teamB.map(row)}</section></div>}
+        <div className="live-map-history">{live.mapResults.map(m => <div key={m.mapNumber} className={`live-map-chip ${m.winnerId === live.teamA.teamId ? "team-a-win" : "team-b-win"}`}><strong>Map {m.mapNumber}</strong><span>{m.mapName}</span><span>{m.mode}</span><b>{m.scoreA}-{m.scoreB}</b></div>)}</div>
+        {stats && reviewing && <div className="live-stats-grid"><section><h4>{live.teamA.teamName}</h4><div className="live-stat-head"><span>Player</span><span>K</span><span>D</span><span>K/D</span></div>{stats.teamA.map(row)}</section><section><h4>{live.teamB.teamName}</h4><div className="live-stat-head"><span>Player</span><span>K</span><span>D</span><span>K/D</span></div>{stats.teamB.map(row)}</section></div>}
         <div className="live-match-actions">
-          {canPlay && <button className="btn-primary" onClick={() => dispatch({ type: "PLAY_HISTORICAL_MAP" })}>Play Map</button>}
-          {live.status !== "completed" && !canPlay && <button className="btn-primary" onClick={() => dispatch({ type: "PLAY_HISTORICAL_MAP" })}>Continue / Next Map</button>}
+          {canPlay && <button className="btn-primary" onClick={() => dispatch({ type: "PLAY_HISTORICAL_MAP" })}>▶ Play Map</button>}
+          {reviewing && <button className="btn-primary" onClick={() => dispatch({ type: "ADVANCE_HISTORICAL_MAP" })}>Next Map →</button>}
           {live.status === "completed" && <button className="btn-primary" onClick={() => dispatch({ type: "FINISH_PLAY_MATCH" })}>Finish Match</button>}
-          <button className="btn-secondary" onClick={() => dispatch({ type: "CANCEL_PLAY_MATCH" })}>Cancel / Back</button>
+          {live.mapResults.length === 0 && <button className="btn-secondary" onClick={() => dispatch({ type: "CANCEL_PLAY_MATCH" })}>Cancel / Back</button>}
         </div>
       </div>
     </div>

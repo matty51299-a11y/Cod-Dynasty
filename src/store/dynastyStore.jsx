@@ -4,7 +4,7 @@ import { GHOSTS_EVENTS } from "../data/ghostsEventCalendar.js";
 import { getEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { simulateEvent } from "../engine/eventSim.js";
 import { createInitialStandings, updateStandings } from "../engine/standingsEngine.js";
-import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult, createHistoricalLiveMatch, playHistoricalLiveMap, applyPlayedMatchResult } from "../engine/historicalEventEngine.js";
+import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult, createHistoricalLiveMatch, playHistoricalLiveMap, advanceHistoricalLiveMap, applyPlayedMatchResult } from "../engine/historicalEventEngine.js";
 
 const SAVE_KEY = "cod_dynasty_save";
 
@@ -191,6 +191,11 @@ function dynastyReducer(state, action) {
     case "PLAY_HISTORICAL_MAP": {
       if (!state?.liveHistoricalMatch) return state;
       return { ...state, liveHistoricalMatch: playHistoricalLiveMap(state.liveHistoricalMatch, state.players, getEra(state.currentEraId)) };
+    }
+
+    case "ADVANCE_HISTORICAL_MAP": {
+      if (!state?.liveHistoricalMatch) return state;
+      return { ...state, liveHistoricalMatch: advanceHistoricalLiveMap(state.liveHistoricalMatch) };
     }
 
     case "CANCEL_PLAY_MATCH":

@@ -184,11 +184,18 @@ export function createHistoricalLiveMatch(eventState, matchId, players, era, see
 
 export function playHistoricalLiveMap(liveMatch, players, era) {
   if (!liveMatch || liveMatch.status === "completed") return liveMatch;
-  const result = generateHistoricalMapResult(liveMatch, players, era);
+  const mapIndex = liveMatch.mapResults.length;
+  if (mapIndex >= liveMatch.mapSet.length) return liveMatch;
+  const result = generateHistoricalMapResult({ ...liveMatch, currentMapIndex: mapIndex }, players, era);
   const scoreA = liveMatch.scoreA + (result.winnerSide === "A" ? 1 : 0);
   const scoreB = liveMatch.scoreB + (result.winnerSide === "B" ? 1 : 0);
   const completed = scoreA === 3 || scoreB === 3;
-  return { ...liveMatch, scoreA, scoreB, mapResults: [...liveMatch.mapResults, result], currentMapIndex: Math.min(liveMatch.currentMapIndex + 1, liveMatch.mapSet.length - 1), status: completed ? "completed" : "in_progress", winnerId: completed ? (scoreA > scoreB ? liveMatch.teamA.teamId : liveMatch.teamB.teamId) : null };
+  return { ...liveMatch, scoreA, scoreB, mapResults: [...liveMatch.mapResults, result], status: completed ? "completed" : "in_progress", winnerId: completed ? (scoreA > scoreB ? liveMatch.teamA.teamId : liveMatch.teamB.teamId) : null };
+}
+
+export function advanceHistoricalLiveMap(liveMatch) {
+  if (!liveMatch || liveMatch.status === "completed") return liveMatch;
+  return { ...liveMatch, currentMapIndex: liveMatch.mapResults.length };
 }
 
 export function applyPlayedMatchResult(eventState, liveMatch, event, userTeamId) {
