@@ -10,6 +10,7 @@ import EventCalendar from "./components/EventCalendar.jsx";
 import EventResult from "./components/EventResult.jsx";
 import EventDetail from "./components/EventDetail.jsx";
 import DynastyStandings from "./components/DynastyStandings.jsx";
+import LeagueRosters from "./components/LeagueRosters.jsx";
 
 export default function App() {
   const { state, dispatch } = useDynasty();
@@ -105,6 +106,7 @@ export default function App() {
           {screen === "home" && <Home setScreen={setScreen} />}
           {screen === "standings" && <DynastyStandings />}
           {screen === "roster" && <DynastyRoster />}
+          {screen === "league" && <LeagueRosters />}
           {screen === "fa" && <DynastyFreeAgency />}
           {screen === "amateurs" && <AmateurPool />}
           {screen === "events" && <EventCalendar setScreen={setScreen} />}
