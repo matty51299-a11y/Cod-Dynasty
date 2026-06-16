@@ -99,7 +99,7 @@ export function createNewGame(userTeamId) {
     inactiveTeams: [],
     historicalTeamRegistry: Object.fromEntries(teams.map(t => [t.id, { ...t, activeEraIds: [era.id] }])),
     players,
-    playerRegistry: Object.fromEntries(players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || era.id, currentStatus: p.teamId ? "active" : "freeAgent", currentTeamId: p.teamId || null }])),
+    playerRegistry: Object.fromEntries(players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || era.id, currentStatus: p.teamId ? "active" : "free_agent", currentTeamId: p.teamId || null }])),
     freeAgents,
     amateurPool: [],
     eventCalendar: [...GHOSTS_EVENTS],
@@ -148,7 +148,7 @@ function migrateState(state) {
   state.activeTeams ||= (state.teams || []).map(t => t.id);
   state.inactiveTeams ||= [];
   state.historicalTeamRegistry ||= Object.fromEntries((state.teams || []).map(t => [t.id, { ...t, activeEraIds: [state.currentEraId || "ghosts"] }]));
-  state.playerRegistry ||= Object.fromEntries((state.players || []).map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || "ghosts", currentStatus: p.teamId ? "active" : "freeAgent", currentTeamId: p.teamId || null }]));
+  state.playerRegistry ||= Object.fromEntries((state.players || []).map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || "ghosts", currentStatus: p.teamId ? "active" : "free_agent", currentTeamId: p.teamId || null }]));
   state.seasonHistory ||= [];
   state.archivedStandings ||= {};
   state.archivedEventResults ||= {};
@@ -312,8 +312,8 @@ export function buildAdvancedWarfareTransition(state) {
         debutEraId: existing.debutEraId || existing.eraId || "ghosts",
         eraId: rowPlayer.eraId || "advanced_warfare",
         firstActiveSeason: existing.firstActiveSeason || "2013/14",
-        currentStatus: protectedTarget ? "freeAgent" : "active",
-        status: protectedTarget ? "freeAgent" : "active",
+        currentStatus: protectedTarget ? "free_agent" : "active",
+        status: protectedTarget ? "free_agent" : "active",
         contractYears: protectedTarget ? 0 : Math.max(existing.contractYears || 0, 1),
       });
       transitionRows.push({ playerId: existing.id, displayName: existing.displayName || existing.name, previousTeam: existing.teamId || "Free Agency", newTeam: protectedTarget ? "Free Agency" : rowPlayer.teamId, status: protectedTarget ? "moved_to_free_agency" : "assigned_to_aw_team", reason: protectedTarget ? "AW target roster belongs to controlled org; user roster is preserved" : "matched Advanced Warfare sheet by player name" });
@@ -325,8 +325,8 @@ export function buildAdvancedWarfareTransition(state) {
           firstActiveSeason: nextEra.seasonLabel,
           teamId: protectedTarget ? null : rowPlayer.teamId,
           historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined,
-          currentStatus: protectedTarget ? "freeAgent" : "active",
-          status: protectedTarget ? "freeAgent" : "active",
+          currentStatus: protectedTarget ? "free_agent" : "active",
+          status: protectedTarget ? "free_agent" : "active",
           contractYears: protectedTarget ? 0 : Math.max(rowPlayer.contractYears || 0, 1),
         });
         transitionRows.push({ playerId: rowPlayer.id, displayName: rowPlayer.displayName || rowPlayer.name, previousTeam: "", newTeam: protectedTarget ? "Free Agency" : rowPlayer.teamId, status: protectedTarget ? "moved_to_free_agency" : "assigned_to_aw_team", reason: "new Advanced Warfare-era entrant" });
@@ -340,7 +340,7 @@ export function buildAdvancedWarfareTransition(state) {
       players.push({ ...oldPlayer, previousTeamId: oldPlayer.teamId, teamId: userTeamId, currentStatus: "active", status: "active", contractYears: Math.max(oldPlayer.contractYears || 0, 1) });
       transitionRows.push({ playerId: oldPlayer.id, displayName: oldPlayer.displayName || oldPlayer.name, previousTeam: oldPlayer.teamId || "Free Agency", newTeam: userTeamId, status: "preserved_on_user_roster", reason: "save-controlled roster is protected from real-history roster changes" });
     } else {
-      players.push({ ...oldPlayer, previousTeamId: oldPlayer.teamId || oldPlayer.previousTeamId, teamId: null, currentStatus: "freeAgent", status: "freeAgent", contractYears: 0 });
+      players.push({ ...oldPlayer, previousTeamId: oldPlayer.teamId || oldPlayer.previousTeamId, teamId: null, currentStatus: "free_agent", status: "free_agent", contractYears: 0 });
       transitionRows.push({ playerId: oldPlayer.id, displayName: oldPlayer.displayName || oldPlayer.name, previousTeam: oldPlayer.teamId || oldPlayer.previousTeamId || "Free Agency", newTeam: "Free Agency", status: "moved_to_free_agency", reason: "not assigned to an active Advanced Warfare roster" });
     }
   }
@@ -411,7 +411,7 @@ export function buildAdvancedWarfareTransition(state) {
       duplicateResolutionRows: (next.duplicatePlayerResolutionRows || []).length,
     },
   };
-  const playerRegistry = Object.fromEntries(next.players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || "ghosts", firstActiveSeason: p.firstActiveSeason || (p.debutEraId === "advanced_warfare" ? nextEra.seasonLabel : "2013/14"), currentStatus: p.teamId ? "active" : (p.currentStatus || "freeAgent"), currentTeamId: p.teamId || null }]));
+  const playerRegistry = Object.fromEntries(next.players.map(p => [p.id, { ...p, debutEraId: p.debutEraId || p.eraId || "ghosts", firstActiveSeason: p.firstActiveSeason || (p.debutEraId === "advanced_warfare" ? nextEra.seasonLabel : "2013/14"), currentStatus: p.teamId ? "active" : (p.currentStatus || "free_agent"), currentTeamId: p.teamId || null }]));
   return { ...next, playerRegistry, transitionSummary: summary, transitionAuditRows: transitionRows };
 }
 export function dynastyReducer(state, action) {
@@ -580,7 +580,7 @@ export function dynastyReducer(state, action) {
       const released = ensureFourPlayerRosters({
         ...state,
         players: state.players.map(p =>
-          p.id === playerId ? { ...p, teamId: null, previousTeamId: state.userTeamId, status: "freeAgent", currentStatus: "freeAgent", contractYears: 0 } : p
+          p.id === playerId ? { ...p, teamId: null, previousTeamId: state.userTeamId, status: "free_agent", currentStatus: "free_agent", contractYears: 0 } : p
         ),
       }, state.currentEraId);
       return addNotif(released, `${player.name} released.`);

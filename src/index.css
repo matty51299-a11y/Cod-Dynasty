@@ -11751,3 +11751,29 @@ body { background: #111317; }
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* League Rosters */
+.screen-padded { padding: 24px; }
+.league-header { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; margin-bottom:16px; }
+.league-stats { display:flex; gap:10px; flex-wrap:wrap; }
+.league-stats span, .finder-card, .team-detail-panel, .player-list-panel { background:var(--surface-glass); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow); }
+.finder-card { margin-bottom:14px; display:flex; flex-direction:column; gap:8px; }
+.finder-card label { font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); font-size:12px; }
+.finder-card input { background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px 12px; }
+.finder-results { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
+.finder-result { display:flex; flex-direction:column; gap:3px; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:10px; padding:10px; }
+.finder-result.warn, .team-directory-row.warn, .roster-warning { border-color:var(--yellow); background:rgba(251,191,60,.12); }
+.league-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.league-filters button { background:var(--bg3); color:var(--text-dim); border:1px solid var(--border); border-radius:999px; padding:7px 12px; cursor:pointer; }
+.league-filters button.active { color:white; border-color:var(--accent); background:rgba(91,157,255,.18); }
+.league-grid { display:grid; grid-template-columns:minmax(360px,1fr) minmax(360px,1fr); gap:16px; align-items:start; }
+.team-directory { display:flex; flex-direction:column; gap:8px; }
+.team-directory-row { width:100%; display:grid; grid-template-columns:1.5fr .6fr .4fr .5fr .7fr; gap:8px; align-items:center; text-align:left; background:var(--surface-glass); border:1px solid var(--border); border-radius:10px; padding:10px; color:var(--text); cursor:pointer; }
+.team-directory-row.selected { border-color:var(--accent); box-shadow:var(--shadow-glow); }
+.team-directory-row small { display:block; color:var(--text-dim); margin-top:2px; }
+.team-directory-row em { color:var(--accent); font-style:normal; font-weight:700; }
+.team-player-row { display:grid; grid-template-columns:1.1fr .8fr .5fr .5fr .7fr 1fr .5fr; gap:8px; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); }
+.team-player-row:last-child { border-bottom:0; }
+.team-player-row small { color:var(--text-dim); overflow-wrap:anywhere; }
+.roster-warning { color:var(--yellow); padding:8px; border-radius:8px; margin:10px 0; }
+@media (max-width: 900px) { .league-grid { grid-template-columns:1fr; } .team-directory-row, .team-player-row { grid-template-columns:1fr 1fr; } }

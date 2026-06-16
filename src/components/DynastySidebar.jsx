@@ -4,6 +4,7 @@ const NAV_ITEMS = [
   { id: "home",       icon: "⌂",  label: "Home" },
   { id: "standings",  icon: "≡",  label: "Standings" },
   { id: "roster",     icon: "♟",  label: "Roster" },
+  { id: "league",     icon: "◎",  label: "League Rosters" },
   { id: "fa",         icon: "$",  label: "Free Agency" },
   { id: "amateurs",   icon: "◉",  label: "Amateur Pool" },
   { id: "events",     icon: "◫",  label: "Event Calendar" },

@@ -36,3 +36,16 @@ mkdirSync("data/research",{recursive:true}); if(!existsSync("data/research/dupli
 check("Duplicate resolution report is created when conflicts exist", existsSync("data/research/duplicate_player_resolution_report.csv"));
 check("No Modern CDL or Challengers are required", !JSON.stringify(aw).toLowerCase().includes("challenger") && !aw.teams.some(t=>/breach|surge|koi|optic texas|atlanta faze/i.test(t.name)));
 console.log(`\nDuplicate player diagnostic passed (${pass} checks).`);
+
+console.log("\nActive assignment report:");
+for (const state of [{label:"Ghosts",state:ghosts},{label:"Advanced Warfare",state:aw}]) {
+  const byId = new Map();
+  for (const p of state.state.players.filter(p => p.teamId)) {
+    const team = state.state.teams.find(t => t.id === p.teamId)?.name || p.teamId;
+    if (!byId.has(p.id)) byId.set(p.id, []);
+    byId.get(p.id).push(`${p.displayName || p.name} @ ${team} (${p.teamId})`);
+  }
+  const dupes = [...byId.entries()].filter(([, rows]) => rows.length > 1);
+  if (!dupes.length) console.log(`- ${state.label}: no duplicate active playerIds`);
+  for (const [playerId, rows] of dupes) console.log(`- ${state.label}: ${playerId} => ${rows.join("; ")}`);
+}
