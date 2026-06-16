@@ -1,6 +1,8 @@
 // src/data/historicalRosters.js
 // Historical starting data for Cod Dynasty.
-// Source of truth: data/import/cod_manager_rosters_database.xlsx, Ghosts sheet.
+// Source of truth: rosters from data/import/cod_manager_rosters_database.xlsx plus ratings from cod_dynasty_historical_player_ratings_v2_fixed.xlsx.
+
+import { createFallbackHistoricalRating, getHistoricalPlayerRating, getHistoricalPlayerRatingByName, normalizeHistoricalRatingKey } from "./historicalPlayerRatings.js";
 
 function slug(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -17,6 +19,49 @@ function hashString(str) {
 
 function clamp(v, min = 58, max = 94) { return Math.max(min, Math.min(max, Math.round(v))); }
 function attr(base, salt) { return clamp(base + ((salt % 13) - 6), 45, 99); }
+
+function findRatingForRosterPlayer(eraId, name) {
+  return getHistoricalPlayerRating(eraId, normalizeHistoricalRatingKey(name)) || getHistoricalPlayerRatingByName(eraId, name);
+}
+
+function applyHistoricalRating(basePlayer, eraId, teamName) {
+  const rating = findRatingForRosterPlayer(eraId, basePlayer.name) || createFallbackHistoricalRating(eraId, basePlayer.playerId || basePlayer.name, basePlayer.name, teamName);
+  if (rating.confidence === "Low" && rating.researchNotes === "Missing from ratings workbook") {
+    console.warn(`[Cod Dynasty] Missing historical rating for ${eraId}/${basePlayer.name}; using conservative fallback.`);
+  }
+  const attrs = rating.attributes || {};
+  return {
+    ...basePlayer,
+    playerId: rating.playerId,
+    displayName: rating.displayName || basePlayer.name,
+    aliases: rating.aliases || [],
+    primary: rating.role || basePlayer.primary || "Unknown",
+    role: rating.role || basePlayer.role || "Unknown",
+    overall: rating.overall,
+    potential: rating.potential,
+    gunny: attrs.gunny ?? basePlayer.gunny,
+    awareness: attrs.awareness ?? basePlayer.awareness,
+    objective: attrs.objective ?? basePlayer.objective,
+    searchIQ: attrs.sndIQ ?? basePlayer.searchIQ,
+    sndIQ: attrs.sndIQ ?? basePlayer.sndIQ,
+    clutch: attrs.clutch ?? basePlayer.clutch,
+    teamwork: attrs.teamwork ?? basePlayer.teamwork,
+    composure: attrs.composure ?? basePlayer.composure,
+    adaptability: attrs.adaptability ?? basePlayer.adaptability,
+    pace: attrs.pace ?? basePlayer.pace,
+    movement: attrs.movement ?? basePlayer.movement,
+    consistency: attrs.consistency ?? basePlayer.consistency,
+    leadership: attrs.leadership ?? basePlayer.leadership,
+    workRate: attrs.workRate ?? basePlayer.workRate,
+    personalityTraits: rating.personalityTraits || [],
+    eraFitTraits: rating.eraFitTraits || [],
+    confidence: rating.confidence,
+    researchNotes: rating.researchNotes,
+    sourceLinks: rating.sourceLinks,
+    ratingSource: rating.confidence === "Low" && rating.researchNotes === "Missing from ratings workbook" ? "fallback" : "historical_workbook",
+  };
+}
+
 function teamTag(name) {
   const words = String(name).match(/[A-Za-z0-9]+/g) || [];
   const initials = words.map(w => w[0]).join("").slice(0, 4).toUpperCase();
@@ -69,14 +114,14 @@ export const GHOSTS_TEAMS = GHOSTS_TEAM_ROWS.map((row, index) => ({
   roster: row.players,
 }));
 
-export function makeGhostsPlayer(name, teamId, slot = 0) {
+export function makeGhostsPlayer(name, teamId, slot = 0, teamName = "") {
   const h = hashString(`${teamId}|${name}`);
   const base = 70 + (h % 17);
   const roles = ["Main AR", "Slayer SMG", "Objective", "Flex"];
   const primary = roles[slot % roles.length];
   const secondary = roles[(slot + 1) % roles.length];
   const overall = clamp(base + (slot === 0 ? 2 : 0), 60, 94);
-  return {
+  const basePlayer = {
     id: `${teamId}_${slug(name)}`,
     name,
     teamId,
@@ -106,11 +151,12 @@ export function makeGhostsPlayer(name, teamId, slot = 0) {
     contractYears: 1 + (h % 3),
     eraId: "ghosts",
   };
+  return applyHistoricalRating(basePlayer, "ghosts", teamName);
 }
 
 export const GHOSTS_PLAYERS = GHOSTS_TEAM_ROWS.flatMap((row) => {
   const teamId = slug(row.name);
-  return row.players.map((name, index) => makeGhostsPlayer(name, teamId, index));
+  return row.players.map((name, index) => makeGhostsPlayer(name, teamId, index, row.name));
 });
 
 export function getGhostsRosterForTeam(teamId) {
@@ -153,13 +199,13 @@ export const AW_TEAMS = AW_TEAM_ROWS.map((row, index) => ({
   roster: row.players,
 }));
 
-export function makeAWPlayer(name, teamId, slot = 0) {
+export function makeAWPlayer(name, teamId, slot = 0, teamName = "") {
   const h = hashString(`${teamId}|${name}`);
   const base = 70 + (h % 17);
   const roles = ["Main AR", "Slayer SMG", "Objective", "Flex"];
   const primary = roles[slot % roles.length];
   const overall = clamp(base + (slot === 0 ? 2 : 0), 60, 94);
-  return {
+  const basePlayer = {
     id: `${teamId}_${slug(name)}`,
     name,
     teamId,
@@ -189,11 +235,12 @@ export function makeAWPlayer(name, teamId, slot = 0) {
     contractYears: 1 + (h % 3),
     eraId: "advanced_warfare",
   };
+  return applyHistoricalRating(basePlayer, "advanced_warfare", teamName);
 }
 
 export const AW_PLAYERS = AW_TEAM_ROWS.flatMap((row) => {
   const teamId = slug(row.name);
-  return row.players.map((name, index) => makeAWPlayer(name, teamId, index));
+  return row.players.map((name, index) => makeAWPlayer(name, teamId, index, row.name));
 });
 
 // Get the historical AW target roster for a given team

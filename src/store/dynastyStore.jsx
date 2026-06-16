@@ -288,11 +288,14 @@ export function buildAdvancedWarfareTransition(state) {
       playersByName.set(key, { ...rowPlayer, teamId: protectedTarget ? null : rowPlayer.teamId, debutEraId: "advanced_warfare", firstActiveSeason: nextEra.seasonLabel, currentStatus: protectedTarget ? "freeAgent" : "active", status: protectedTarget ? "freeAgent" : "active", historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined });
       continue;
     }
-    if (userRosterIds.has(existing.id)) continue;
+    if (userRosterIds.has(existing.id)) {
+      playersByName.set(key, { ...existing, ...rowPlayer, id: existing.id, teamId: userTeamId, previousTeamId: existing.teamId, currentStatus: "active", status: "active", contractYears: Math.max(existing.contractYears || 0, 1) });
+      continue;
+    }
     if (existing.teamId !== rowPlayer.teamId) {
       majorRosterChanges.push(`${existing.name}: ${existing.teamId || "Free Agent"} → ${rowPlayer.teamId}`);
       const protectedTarget = userTeamExists && rowPlayer.teamId === userTeamId;
-      playersByName.set(key, { ...existing, previousTeamId: existing.teamId, teamId: protectedTarget ? null : rowPlayer.teamId, historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined, eraId: existing.eraId || rowPlayer.eraId, currentStatus: protectedTarget ? "freeAgent" : "active", status: protectedTarget ? "freeAgent" : "active", contractYears: protectedTarget ? 0 : Math.max(existing.contractYears || 0, 1) });
+      playersByName.set(key, { ...existing, ...rowPlayer, id: existing.id, previousTeamId: existing.teamId, teamId: protectedTarget ? null : rowPlayer.teamId, historicalTargetTeamId: protectedTarget ? rowPlayer.teamId : undefined, eraId: rowPlayer.eraId || existing.eraId, currentStatus: protectedTarget ? "freeAgent" : "active", status: protectedTarget ? "freeAgent" : "active", contractYears: protectedTarget ? 0 : Math.max(existing.contractYears || 0, 1) });
     }
   }
   const awNames = new Set(AW_PLAYERS.map(p => String(p.name).toLowerCase()));

@@ -6,6 +6,7 @@ import {
   getNewAWEntrants, getGhostsPlayersNotInAW,
 } from "../src/data/historicalRosters.js";
 import { canonicalPlayerId } from "../src/data/historicalPlayerRegistry.js";
+import { getHistoricalPlayerRating, getHistoricalPlayerRatingByName } from "../src/data/historicalPlayerRatings.js";
 
 let pass = 0;
 let fail = 0;
@@ -91,6 +92,18 @@ check(`${awOnlyNames.length} AW-only players are NOT in Ghosts player list`, awO
 for (const p of awOnlyNames.slice(0, 3)) {
   check(`AW-only ${p.name} absent from Ghosts`, !ghostsPlayerNames.has(p.name.toLowerCase()));
 }
+
+
+// 9. Roster players match workbook ratings
+console.log("\n9. Ratings workbook matches");
+const rosterRatingRows = [
+  ...GHOSTS_PLAYERS.map(p => ["ghosts", p]),
+  ...AW_PLAYERS.map(p => ["advanced_warfare", p]),
+];
+const unmatchedRatings = rosterRatingRows.filter(([eraId, p]) => !(getHistoricalPlayerRating(eraId, p.playerId || p.name) || getHistoricalPlayerRatingByName(eraId, p.name)));
+check(`Rostered players matched to ratings or fallback report (${rosterRatingRows.length - unmatchedRatings.length}/${rosterRatingRows.length})`, unmatchedRatings.length <= 12);
+check("Workbook ratings applied to Ghosts player creation", GHOSTS_PLAYERS.every(p => p.ratingSource === "historical_workbook"));
+check("Fallback players are marked Low confidence", unmatchedRatings.every(([, p]) => p.confidence === "Low" && p.ratingSource === "fallback"));
 
 console.log(`\n═══ Results: ${pass} passed, ${fail} failed ═══`);
 process.exit(fail > 0 ? 1 : 0);
