@@ -32,7 +32,8 @@ export function placementPoints(event, placement) {
 }
 
 function selectField(event, teams, players, standings) {
-  const teamCount = Math.min(event.teamCount || teams.length, teams.length);
+  // Cod Dynasty historical flow: every active pro team enters every event for now.
+  // Event teamCount remains display/flavour only; it must not gate participation.
   return teams
     .map(t => ({
       teamId: t.id,
@@ -42,7 +43,6 @@ function selectField(event, teams, players, standings) {
       proPoints: standings?.[t.id]?.proPoints || 0,
     }))
     .sort((a, b) => b.proPoints - a.proPoints || b.ovr - a.ovr || a.teamName.localeCompare(b.teamName))
-    .slice(0, teamCount)
     .map((t, i) => ({ ...t, seed: i + 1 }));
 }
 

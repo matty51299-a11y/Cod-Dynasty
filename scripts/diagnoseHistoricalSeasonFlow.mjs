@@ -71,6 +71,9 @@ const eventState = createHistoricalEventState(
 );
 check("Event state created successfully", !!eventState);
 check("Event has matches", eventState.matches.length > 0);
+check("User team is entered in current event", eventState.field.some(t => t.teamId === userTeamId));
+check("All active pro teams are entered in current event", eventState.field.length === GHOSTS_TEAMS.length);
+check("Event screen has current matchups", eventState.matches.some(m => m.teamA?.teamName && m.teamB?.teamName));
 check("Event status is in_progress", eventState.status === "in_progress");
 state = { ...state, activeEventId: currentEventId, eventProgress: { [currentEventId]: eventState } };
 
@@ -102,7 +105,8 @@ completedState = {
   completedEvents: [result],
   completedEventIds: [ev.id],
   currentEventIndex: 1,
-  activeEventId: null,
+  activeEventId: ev.id,
+  eventProgress: { ...completedState.eventProgress, [ev.id]: es },
 };
 check("Completed event is in completedEventIds", completedState.completedEventIds.includes(ev.id));
 const completedStatus = completedState.completedEventIds.includes(ev.id) ? "completed" : "current";
@@ -130,6 +134,7 @@ const lanEvents = GHOSTS_EVENTS.filter(e => e.type === "open" || e.tier === "ope
 const max2kFirst = Math.max(...online2kEvents.map(e => e.proPoints[1]));
 const minLanFirst = Math.min(...lanEvents.map(e => e.proPoints[1]));
 check("2K first place points less than LAN first place", max2kFirst < minLanFirst);
+check("Online 2Ks do not block future entries", online2kEvents.every(e => createHistoricalEventState(e, GHOSTS_TEAMS, GHOSTS_PLAYERS, state.standings, userTeamId, 99).field.length === GHOSTS_TEAMS.length));
 console.log(`    2K max 1st: ${max2kFirst}, LAN min 1st: ${minLanFirst}`);
 
 // 9. World Championship awards more than 2Ks
@@ -153,7 +158,7 @@ const deserialized = JSON.parse(serialized);
 check("Serialized state round-trips", deserialized.currentEventIndex === completedState.currentEventIndex);
 check("completedEventIds preserved", deserialized.completedEventIds.length === completedState.completedEventIds.length);
 check("completedEvents preserved", deserialized.completedEvents.length === completedState.completedEvents.length);
-check("activeEventId preserved", deserialized.activeEventId === completedState.activeEventId);
+check("completed activeEventId preserves viewable summary", deserialized.activeEventId === ev.id && !!deserialized.eventProgress[ev.id]);
 
 // 12. Team selection supports all Ghosts teams
 console.log("\n12. Team selection");
