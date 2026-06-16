@@ -4,6 +4,7 @@ import { getEra, HISTORICAL_START_ERA_ID, COD_ERAS } from "../src/data/codEras.j
 import { simulateEvent } from "../src/engine/eventSim.js";
 import { createHistoricalEventState, getNextPendingMatch, simulateMatch } from "../src/engine/historicalEventEngine.js";
 import { createInitialStandings, updateStandings, getSortedStandings } from "../src/engine/standingsEngine.js";
+import { getHistoricalPlayerRating } from "../src/data/historicalPlayerRatings.js";
 
 const MODERN_CDL_TEAMS = [
   "Boston Breach", "Carolina Royal Ravens", "Cloud9 New York",
@@ -145,7 +146,13 @@ const oneAfter = oneAfterState.matches.filter(m => m.status === "completed").len
 check("Game is not only full-event simulation", oneAfter - oneBefore === 1 && oneAfterState.status === "in_progress");
 
 // 18. Build check (deferred — run npm run build separately)
-console.log("\n18. Build check");
+console.log("\n18. Workbook ratings replace placeholders");
+const ratedGhosts = GHOSTS_PLAYERS.filter(p => getHistoricalPlayerRating("ghosts", p.playerId || p.name));
+check("Ghosts workbook-rated players do not use fallback source", ratedGhosts.every(p => p.ratingSource === "historical_workbook"));
+check("Scump Ghosts OVR comes from workbook", GHOSTS_PLAYERS.find(p => p.name === "Scump")?.overall === getHistoricalPlayerRating("ghosts", "scump")?.overall);
+check("ACHES Ghosts OVR comes from workbook", GHOSTS_PLAYERS.find(p => p.name === "ACHES")?.overall === getHistoricalPlayerRating("ghosts", "aches")?.overall);
+
+console.log("\n19. Build check");
 console.log("  ⓘ Run 'npm run build' separately to verify build passes.");
 
 console.log(`\n═══ Results: ${pass} passed, ${fail} failed ═══`);
