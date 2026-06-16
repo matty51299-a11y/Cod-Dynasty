@@ -151,7 +151,7 @@ function completeHistoricalEvent(state, event, eventState) {
     completedEvents: [...state.completedEvents, result],
     completedEventIds: newCompletedIds,
     currentEventIndex: Math.max(state.currentEventIndex, idx + 1),
-    activeEventId: null,
+    activeEventId: event.id,
     inboxEvents: [...(state.inboxEvents || []), inboxEntry],
   }, `${result.champion?.teamName} win ${event.name}!${userResult ? ` You placed #${userResult.placement}.` : ""}`);
 }

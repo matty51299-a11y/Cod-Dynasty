@@ -194,6 +194,9 @@ export default function EventDetail({ setScreen }) {
     ? [["overview", "Overview"], ["bracket", "Fixtures"], ["matches", "Matches"], ["results", "Results"], ["placements", "Placements"]]
     : [["overview", "Overview"], ["bracket", "Bracket"], ["matches", "Matches"], ["results", "Results"], ["placements", "Placements"]];
   const rows = placementRows(progress);
+  const currentMatches = nextMatch ? progress.matches.filter(m => m.round === nextMatch.round && m.roundLabel === nextMatch.roundLabel) : [];
+  const userResult = rows.find(r => r.teamId === state.userTeamId);
+  const nextEvent = state.eventCalendar[state.currentEventIndex];
 
   function playMatch() { dispatch({ type: "START_PLAY_MATCH" }); }
 
@@ -215,13 +218,14 @@ export default function EventDetail({ setScreen }) {
           <div>
             <div className="panel-kicker">Historical Event Hub</div>
             <h2>{event.name}</h2>
-            <p>{event.type} · {event.dateLabel} · {progress.displayFormat} · {event.teamCount} invited teams</p>
+            <p>{event.type} · {event.dateLabel} · {progress.gameTitle} · {progress.displayFormat} · {progress.field.length} entered teams</p>
           </div>
           <div className="event-hero-metrics">
             <div><span>Phase</span><strong>{currentRoundLabel}</strong></div>
             <div><span>Teams Alive</span><strong>{alive.length}</strong></div>
             <div><span>Top Seed</span><strong>{favourite?.teamTag || favourite?.teamName}</strong></div>
             <div><span>Champion PP</span><strong>+{(event.proPoints?.[1] || 100).toLocaleString()}</strong></div>
+            <div><span>Status</span><strong>{progress.status === "completed" ? "Complete" : progress.status === "in_progress" ? "In Progress" : "Not Started"}</strong></div>
           </div>
         </div>
         <div className="event-command-deck">
@@ -236,6 +240,23 @@ export default function EventDetail({ setScreen }) {
         </div>
       </div>
 
+      {progress.status === "completed" && (
+        <section className="event-section-card event-complete-summary">
+          <div className="panel-kicker">Event Complete</div>
+          <h3>{event.name}</h3>
+          <div className="event-control-room-grid">
+            <div><span>Champion</span><strong>{progress.champion?.teamName || "TBD"}</strong></div>
+            <div><span>Your Finish</span><strong>{userResult?.placement ? `#${userResult.placement}` : "—"}</strong></div>
+            <div><span>Pro Points Earned</span><strong>+{(userResult?.proPointsAwarded || progress.userProPointsAwarded || 0).toLocaleString()}</strong></div>
+          </div>
+          <div className="event-your-match-actions">
+            <button className="btn-primary" onClick={() => setScreen("home")}>Continue to Home</button>
+            {nextEvent && nextEvent.id !== event.id && <button className="btn-secondary-sm" onClick={() => { dispatch({ type: "OPEN_EVENT", eventId: nextEvent.id }); setScreen("eventdetail"); }}>Start Next Event</button>}
+            <button className="btn-secondary-sm" onClick={() => setScreen("events")}>View Calendar</button>
+          </div>
+        </section>
+      )}
+
       <div className="event-tabs event-hub-tabs">
         {tabs.map(([id, label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
       </div>
@@ -246,11 +267,21 @@ export default function EventDetail({ setScreen }) {
             <div className="event-overview-grid">
               <section className="event-section-card event-your-match-panel">
                 <h3>Your Match</h3>
-                {userMatch ? <>
+                {progress.status === "completed" ? <>
+                  <p><strong>Event Complete</strong></p>
+                  <p>Champion: {progress.champion?.teamName || "TBD"} · Your finish: {userResult?.placement ? `#${userResult.placement}` : "—"}</p>
+                  <div className="event-your-match-actions"><button className="btn-primary" onClick={() => setScreen("home")}>Continue to Home</button><button className="btn-secondary-sm" onClick={() => setScreen("events")}>View Calendar</button></div>
+                </> : userMatch ? <>
                   <p><strong>{userMatch.teamA?.teamName}</strong> vs <strong>{userMatch.teamB?.teamName}</strong></p>
-                  <p>{userMatch.roundLabel} · Best of 5 · {progress.gameTitle}</p>
+                  <p>{userMatch.roundLabel} · Best of 5 · Status: Ready</p>
                   <div className="event-your-match-actions"><button className="btn-primary event-play-match-btn" onClick={playMatch}>▶ Play Match</button><button className="btn-secondary-sm" onClick={() => sim("SIM_USER_MATCH")}>Sim User Match</button></div>
-                </> : <p className="dim-text">{userStatus?.eliminated ? "Your team has been eliminated from this event." : "Waiting for other event matches to finish."}</p>}
+                </> : userStatus?.eliminated ? <>
+                  <p><strong>Eliminated</strong></p><p>Final placement {userResult?.placement ? `#${userResult.placement}` : "pending"}</p><button className="btn-secondary-sm" onClick={() => sim("SIM_EVENT")}>Sim Rest of Event</button>
+                </> : <p className="dim-text">Waiting for other matches to finish. Current bracket position: {userStatus?.losses > 0 ? "Losers Bracket" : progress.format === "single_elimination" ? "Single Elimination" : "Winners Bracket"}.</p>}
+              </section>
+              <section className="event-section-card">
+                <h3>Current Matches</h3>
+                {currentMatches.length ? currentMatches.map(m => <MatchCard key={m.id} match={m} userTeamId={state.userTeamId} isCurrent={nextMatch?.id === m.id} onSelect={setSelectedMatch} />) : <p className="dim-text">No current matches. The event is complete.</p>}
               </section>
               <section className="event-section-card">
                 <h3>Event Field</h3>
