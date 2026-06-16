@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useDynasty, saveGame, loadGame, deleteSave, isValidDynastyState } from "./store/dynastyStore.jsx";
+import { useDynasty, saveGame, loadGame, deleteSave, isValidDynastyState, getCurrentEventInfo } from "./store/dynastyStore.jsx";
 import StartScreen from "./components/StartScreen.jsx";
 import DynastySidebar from "./components/DynastySidebar.jsx";
 import Home from "./components/Home.jsx";
@@ -44,12 +44,24 @@ export default function App() {
 
   const team = state.teams.find(t => t.id === state.userTeamId);
   const notification = state.notifications?.[0];
+  const eventInfo = getCurrentEventInfo(state);
 
   function handleNewGame() {
     deleteSave();
     dispatch({ type: "RESET" });
     setScreen("home");
     setConfirmNew(false);
+  }
+
+  function handleTopbarAction() {
+    if (!eventInfo) return;
+    const { buttonAction, currentEvent } = eventInfo;
+    if (buttonAction === "play_match" || buttonAction === "start_event") {
+      dispatch({ type: "OPEN_EVENT", eventId: currentEvent.id });
+      setScreen("eventdetail");
+    } else if (buttonAction === "continue_event") {
+      setScreen("eventdetail");
+    }
   }
 
   return (
@@ -66,6 +78,11 @@ export default function App() {
           )}
         </div>
         <div className="topbar-right">
+          {eventInfo?.buttonLabel && eventInfo.buttonAction && (
+            <button className="btn-primary topbar-play-btn" onClick={handleTopbarAction}>
+              {eventInfo.buttonLabel === "Play Match" ? "▶ " : ""}{eventInfo.buttonLabel}
+            </button>
+          )}
           {!confirmNew ? (
             <button className="btn-new-game" onClick={() => setConfirmNew(true)}>
               New Game

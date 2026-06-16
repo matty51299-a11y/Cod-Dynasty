@@ -9,12 +9,12 @@ The game has been rebuilt from the ground up as a clean historical COD dynasty. 
 ### What works now
 
 - **Start screen**: Cod Dynasty branding with "Start Dynasty" button. No modern CDL mode. No Challenger mode.
-- **Team selection**: 28 Ghosts-era teams from the spreadsheet. No modern CDL franchise teams.
-- **Home screen**: Shows team name, game title (Call of Duty: Ghosts), season (2013/14), Pro Points, event record, roster summary, next/last event.
+- **Team selection**: 28 Ghosts-era teams from the spreadsheet. No modern CDL franchise teams. Scrollable team grid (fixed scroll bug).
+- **Home screen**: Shows team name, game title (Call of Duty: Ghosts), season (2013/14), Pro Points, event record, roster summary, next/last event. Primary action button (Start Next Event / Continue Event / Play Match) in header and current event banner. Topbar also has persistent play button.
 - **Roster screen**: 4 active players per team with OVR, role, age, potential, attributes, contract years. Release player support.
 - **Free Agency**: Shows Ghosts-era free agents only. Currently empty (all players assigned to teams).
 - **Amateur Pool**: Empty at Ghosts start. Shows "New players will emerge as later titles begin."
-- **Event Calendar**: 12 Ghosts-era historical events (UMG Philly, CoD Champs, MLG League, Anaheim, ESWC, etc.)
+- **Event Calendar**: 19 Ghosts-era historical events including 12 original LANs/majors plus 7 online 2K/5K events. Event tier system (Online 2K, Qualifier, Regional, LAN, Invitational, Playoffs, Championship). Future events locked until earlier events completed. Completed events view-only.
 - **Historical Event Hub**: Events can be opened from the calendar into a full control-room screen with Overview / Bracket or Fixtures / Matches / Results / Placements tabs, user-team tracking, match details, and controls to sim the next match, user match, current round, or full event.
 - **Historical Event Simulation**: Generic Ghosts-era event engine creates bracket/match state, uses simple OVR + randomness best-of-5 match results, advances rounds, records results, and awards Pro Points based on placement.
 - **Play Match flow**: Interactive map-by-map matchday experience. Play Match button appears in event hero, Your Match panel, and user tracker when a user match is pending. Opens a live match modal with two-step flow: Play Map → review results/K/Ds → Next Map → repeat until series ends → Finish Match updates the bracket. Separate from Sim User Match (instant quick-sim). Uses Ghosts modes (Domination, Search and Destroy, Blitz — no Hardpoint) with era map pools. Player K/Ds generated using OVR, role, team strength, and randomness. Best performer highlighted. Match report added to inbox.
@@ -40,7 +40,7 @@ src/
     historicalPlayers.js            — unified player universe builder
     historicalPlayerRegistry.js     — canonical player ID system
     historicalEvents.js             — era transition event data
-    ghostsEventCalendar.js          — 12 Ghosts-era tournament events
+    ghostsEventCalendar.js          — 19 Ghosts-era tournament events + EVENT_TIERS system
 
   engine/
     eventSim.js                     — legacy/simple full-event simulation
@@ -83,11 +83,12 @@ The following CDL Manager systems are **not imported** by the active game. Old f
 - **Ghosts teams/players**: 28 teams, 112 players from `data/import/cod_manager_rosters_database.xlsx` Ghosts sheet
 - **AW teams/players**: 12 teams, 48 players parsed and stored, not active at Ghosts start
 - **AW-only entrants**: 9 players (ZooMaa, Attach, Slasher, Enable, Huke, etc.) identified and blocked from Ghosts
-- **Event calendar**: 12 historical Ghosts events with Pro Points payouts
+- **Event calendar**: 19 historical Ghosts events (12 original + 7 online 2K/5K events) with Pro Points payouts and event tier system
 
 ### Diagnostics
 
 - `scripts/diagnoseCodDynastyCleanCore.mjs` — 58 tests, all pass
+- `scripts/diagnoseHistoricalSeasonFlow.mjs` — 45 tests, all pass (event flow, locking, 2K events, tier system, save/load)
 - `scripts/diagnoseHistoricalPlayMatch.mjs` — 19 tests, all pass (live match flow, map-by-map advance, K/Ds, Ghosts modes, bracket integration)
 - `scripts/diagnoseHistoricalEvents.mjs` — verifies event opening, user-match sim, next-match sim, round sim, full-event completion, placements, Pro Points, standings, save/load, and historical terminology
 - `scripts/diagnoseHistoricalRosterImport.mjs` — 33 tests, all pass
