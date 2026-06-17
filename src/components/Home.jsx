@@ -12,6 +12,9 @@ export default function Home({ setScreen }) {
   const userStanding = sorted.find(s => s.teamId === state.userTeamId);
   const eventInfo = getCurrentEventInfo(state);
   const lastEvent = state.completedEvents[state.completedEvents.length - 1];
+  const activeProgress = eventInfo?.activeProgress;
+  const activeUserStatus = activeProgress?.teamStates?.[state.userTeamId];
+  const lastTopPerformer = lastEvent ? Object.values(lastEvent.playerEventStats || {}).sort((a, b) => (b.kd || 0) - (a.kd || 0))[0] : null;
 
   function handlePrimaryAction() {
     if (!eventInfo) return;
@@ -119,11 +122,9 @@ export default function Home({ setScreen }) {
               <span>{eventInfo.currentEvent.teamCount} teams</span>
               <span>1st: +{(eventInfo.currentEvent.proPoints?.[1] || 0).toLocaleString()} PP</span>
             </div>
-            {eventInfo.userMatch && (
-              <div className="home-event-banner-match">
-                Your Match: <strong>{eventInfo.userMatch.teamA?.teamName}</strong> vs <strong>{eventInfo.userMatch.teamB?.teamName}</strong>
-              </div>
-            )}
+            <div className="home-event-banner-match">
+              User status: <strong>{activeUserStatus?.eliminated ? "Eliminated" : eventInfo.isEventInProgress ? "Alive" : "Ready to start"}</strong>{eventInfo.userMatch ? <> · Next match: <strong>{eventInfo.userMatch.teamA?.teamName}</strong> vs <strong>{eventInfo.userMatch.teamB?.teamName}</strong></> : activeProgress ? <> · Next match: <strong>Waiting</strong></> : null}
+            </div>
           </div>
           <div className="home-event-banner-actions">
             <button className="btn-primary" onClick={handlePrimaryAction}>
@@ -177,6 +178,7 @@ export default function Home({ setScreen }) {
                 const userResult = lastEvent.results.find(r => r.teamId === state.userTeamId);
                 return userResult ? <p>Your finish: <strong>#{userResult.placement}</strong> (+{userResult.proPointsAwarded.toLocaleString()} PP)</p> : null;
               })()}
+              {lastTopPerformer && <p>Top performer: <strong>{lastTopPerformer.name}</strong> ({lastTopPerformer.kd} K/D)</p>}
             </>
           ) : (
             <p className="dim-text">No events completed yet.</p>

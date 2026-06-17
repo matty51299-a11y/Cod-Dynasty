@@ -121,6 +121,9 @@ export function createHistoricalEventState(event, teams, players, standings, use
     teamStates,
     matches: [],
     latestResults: [],
+    userEventPath: [],
+    playerEventStats: {},
+    lastPostMatchSummary: null,
     champion: null,
     placements: [],
     userPlacement: null,
@@ -300,8 +303,32 @@ function applyMatchResult(eventState, matchId, event, userTeamId, scoreA, scoreB
   const loserState = { ...teamStates[loser.teamId], losses: teamStates[loser.teamId].losses + 1 };
   if (loserState.losses >= maxLosses) { loserState.eliminated = true; loserState.eliminatedOrder = Object.values(teamStates).filter(t => t.eliminated).length + 1; }
   teamStates[loser.teamId] = loserState;
-  const latest = `${winner.teamName} def. ${loser.teamName} ${aWins ? scoreA : scoreB}-${aWins ? scoreB : scoreA}`;
-  const next = { ...eventState, rngStep: (eventState.rngStep || 0) + 1, teamStates, matches: eventState.matches.map(m => m.id === matchId ? completed : m), latestResults: [latest, ...(eventState.latestResults || [])].slice(0, 8) };
+  const winnerScore = aWins ? scoreA : scoreB;
+  const loserScore = aWins ? scoreB : scoreA;
+  const latest = `${winner.teamName} def. ${loser.teamName} ${winnerScore}-${loserScore}`;
+  const userInvolved = [match.teamA?.teamId, match.teamB?.teamId].includes(userTeamId);
+  const userWon = winner.teamId === userTeamId;
+  const userEventPath = userInvolved
+    ? [...(eventState.userEventPath || []), { matchId, roundLabel: match.roundLabel, result: userWon ? "beat" : "lost to", opponentName: userWon ? loser.teamName : winner.teamName, score: `${userWon ? winnerScore : loserScore}-${userWon ? loserScore : winnerScore}`, placement: loser.teamId === userTeamId && teamStates[loser.teamId]?.eliminated ? "pending" : null }]
+    : (eventState.userEventPath || []);
+  const playerEventStats = { ...(eventState.playerEventStats || {}) };
+  if (Array.isArray(mapResults)) {
+    for (const map of mapResults) {
+      for (const side of ["teamA", "teamB"]) {
+        for (const row of map.playerStats?.[side] || []) {
+          const teamWonMap = map.winnerId === (side === "teamA" ? match.teamA.teamId : match.teamB.teamId);
+          const current = playerEventStats[row.playerId] || { playerId: row.playerId, name: row.name, role: row.role, mapsPlayed: 0, kills: 0, deaths: 0, seriesPlayed: 0, wins: 0, losses: 0 };
+          playerEventStats[row.playerId] = { ...current, mapsPlayed: current.mapsPlayed + 1, kills: current.kills + row.kills, deaths: current.deaths + row.deaths, kd: Number(((current.kills + row.kills) / Math.max(1, current.deaths + row.deaths)).toFixed(2)), wins: current.wins + (teamWonMap ? 1 : 0), losses: current.losses + (teamWonMap ? 0 : 1) };
+        }
+      }
+    }
+    for (const playerId of new Set(mapResults.flatMap(map => [ ...(map.playerStats?.teamA || []), ...(map.playerStats?.teamB || []) ].map(r => r.playerId)))) {
+      playerEventStats[playerId] = { ...playerEventStats[playerId], seriesPlayed: (playerEventStats[playerId]?.seriesPlayed || 0) + 1 };
+    }
+  }
+  const topPerformer = Array.isArray(mapResults) ? [...mapResults.flatMap(m => [ ...(m.playerStats?.teamA || []), ...(m.playerStats?.teamB || []) ])].sort((a,b)=>b.kd-a.kd||b.kills-a.kills)[0] : null;
+  const lastPostMatchSummary = { matchId, eventName: eventState.eventName, roundLabel: match.roundLabel, result: `${winner.teamName} beat ${loser.teamName} ${winnerScore}-${loserScore}`, winner, loser, score: `${winnerScore}-${loserScore}`, topPerformer, mapResults: mapResults || [] };
+  const next = { ...eventState, rngStep: (eventState.rngStep || 0) + 1, teamStates, matches: eventState.matches.map(m => m.id === matchId ? completed : m), latestResults: [latest, ...(eventState.latestResults || [])].slice(0, 8), userEventPath, playerEventStats, lastPostMatchSummary };
   return maybeAdvanceRound(next, event, userTeamId);
 }
 
@@ -318,5 +345,5 @@ export function simulateMatch(eventState, matchId, event, userTeamId) {
 }
 
 export function toEventResult(eventState, event) {
-  return { eventId: eventState.eventId, eventName: eventState.eventName, eventType: eventState.eventType, dateLabel: eventState.dateLabel, champion: eventState.champion, results: eventState.placements, teamCount: eventState.field.length };
+  return { eventId: eventState.eventId, eventName: eventState.eventName, eventType: eventState.eventType, dateLabel: eventState.dateLabel, champion: eventState.champion, results: eventState.placements, teamCount: eventState.field.length, latestResults: eventState.latestResults || [], userEventPath: eventState.userEventPath || [], playerEventStats: eventState.playerEventStats || {} };
 }
