@@ -31,6 +31,7 @@ check("Event fields contain only teams with 4 unique players", ev.field.every(t=
 let userMatch=getUserPendingMatch(ev,"denial_esports") || ev.matches.find(m=>m.teamA&&m.teamB); const live=createHistoricalLiveMatch(ev,userMatch.id,aw.players,getEra("advanced_warfare"),88); const validation=validateHistoricalMatchRosters(live,aw.players);
 check("Match team A and team B have no overlapping playerIds", validation.overlap.length===0);
 check("Live match screen uses current save rosters, not historical templates", validation.valid && live.status==="in_progress");
+check("No duplicate players appear in K/D table inputs", new Set([...validation.idsA, ...validation.idsB]).size === 8);
 check("Free Agency does not contain active rostered players", aw.freeAgents.every(f=>!aw.players.some(p=>p.id===f.id&&p.teamId)));
 mkdirSync("data/research",{recursive:true}); if(!existsSync("data/research/duplicate_player_resolution_report.csv")) writeFileSync("data/research/duplicate_player_resolution_report.csv","eraId,playerId,displayName,conflictingTeams,keptTeam,removedFromTeams,resolutionReason,replacementPlayersAdded,needsManualReview\n");
 check("Duplicate resolution report is created when conflicts exist", existsSync("data/research/duplicate_player_resolution_report.csv"));

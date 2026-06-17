@@ -569,6 +569,13 @@ export function dynastyReducer(state, action) {
       if (!state) return state;
       return commitPlayedHistoricalMatch(state);
 
+    case "ACK_POST_MATCH_SUMMARY": {
+      if (!state?.activeEventId) return state;
+      const progress = state.eventProgress?.[state.activeEventId];
+      if (!progress?.lastPostMatchSummary) return state;
+      return { ...state, eventProgress: { ...(state.eventProgress || {}), [state.activeEventId]: { ...progress, lastPostMatchSummary: null } } };
+    }
+
     case "SIM_NEXT_MATCH": {
       if (!state) return state;
       return simulateHistoricalEventAction(state, "next");

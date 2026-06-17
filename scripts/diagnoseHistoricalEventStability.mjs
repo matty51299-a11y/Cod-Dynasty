@@ -11,6 +11,8 @@ const beforeCount=state.players.length; const event=GHOSTS_EVENTS[0]; let ev=cre
 check("No event starts with a team below 4 players", ev.field.every(t=>state.players.filter(p=>p.teamId===t.teamId).length===4));
 const teamIds=new Set(ev.field.map(t=>t.teamId)); check("All event matches reference valid teams", ev.matches.every(m=>teamIds.has(m.teamA?.teamId)&&teamIds.has(m.teamB?.teamId)));
 check("All event teams have valid 4-player rosters", [...teamIds].every(id=>state.players.filter(p=>p.teamId===id).length===4));
+check("Matchday rosters have 4 unique players", ev.matches.every(m=>{const a=state.players.filter(p=>p.teamId===m.teamA?.teamId).map(p=>p.id); const b=state.players.filter(p=>p.teamId===m.teamB?.teamId).map(p=>p.id); return a.length===4 && b.length===4 && new Set(a).size===4 && new Set(b).size===4;}));
 while(ev.status!=="completed") ev=simulateMatch(ev,getNextPendingMatch(ev).id,event,state.userTeamId);
+check("Event results are not duplicated", new Set(ev.matches.map(m=>m.id)).size===ev.matches.length && ev.latestResults.length<=8);
 check("Event completion does not delete players", state.players.length===beforeCount);
 console.log(`\nHistorical event stability diagnostic passed (${pass} checks).`);
