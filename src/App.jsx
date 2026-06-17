@@ -11,6 +11,8 @@ import EventResult from "./components/EventResult.jsx";
 import EventDetail from "./components/EventDetail.jsx";
 import DynastyStandings from "./components/DynastyStandings.jsx";
 import LeagueRosters from "./components/LeagueRosters.jsx";
+import SeasonReview from "./components/SeasonReview.jsx";
+import RostermaniaHub from "./components/RostermaniaHub.jsx";
 
 export default function App() {
   const { state, dispatch } = useDynasty();
@@ -21,6 +23,7 @@ export default function App() {
     const saved = loadGame();
     if (saved && isValidDynastyState(saved)) {
       dispatch({ type: "LOAD_GAME", state: saved });
+      if (saved.rostermaniaActive) setScreen("rostermania");
     }
   }, [dispatch]);
 
@@ -79,7 +82,12 @@ export default function App() {
           )}
         </div>
         <div className="topbar-right">
-          {eventInfo?.buttonLabel && eventInfo.buttonAction && (
+          {state?.rostermaniaActive && (
+            <button className="btn-primary topbar-play-btn" onClick={() => setScreen("rostermania")}>
+              Rostermania Hub
+            </button>
+          )}
+          {!state?.rostermaniaActive && eventInfo?.buttonLabel && eventInfo.buttonAction && (
             <button className="btn-primary topbar-play-btn" onClick={handleTopbarAction}>
               {eventInfo.buttonLabel === "Play Match" ? "▶ " : ""}{eventInfo.buttonLabel}
             </button>
@@ -112,6 +120,8 @@ export default function App() {
           {screen === "events" && <EventCalendar setScreen={setScreen} />}
           {screen === "eventresult" && <EventResult setScreen={setScreen} />}
           {screen === "eventdetail" && <EventDetail setScreen={setScreen} />}
+          {screen === "seasonreview" && <SeasonReview setScreen={setScreen} />}
+          {screen === "rostermania" && <RostermaniaHub setScreen={setScreen} />}
         </main>
       </div>
     </div>

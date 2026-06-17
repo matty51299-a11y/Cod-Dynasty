@@ -25,4 +25,7 @@ check("Signing a free agent removes them from Free Agency", !signState.freeAgent
 check("Signing a free agent restores roster to 4", signState.players.filter(p=>p.teamId===userTeamId).length===4);
 const afterOvr=signState.players.filter(p=>p.teamId===userTeamId).reduce((s,p)=>s+p.overall,0)/4; check("Team OVR recalculates after signing", Number.isFinite(afterOvr) && afterOvr!==beforeOvr);
 check("Roster integrity passes", getRosterIntegrityProblems(ensureFourPlayerRosters(signState,"ghosts"),"ghosts").length===0);
+const storeSource = (await import("node:fs")).readFileSync(new URL("../src/store/dynastyStore.jsx", import.meta.url), "utf8");
+check("Roster integrity validated before AW season start in Rostermania", storeSource.includes("getRosterIntegrityProblems") && storeSource.includes("CONFIRM_AW_SEASON"));
+check("Rostermania blocks season start if roster incomplete", storeSource.includes("Your roster must have exactly 4 players"));
 console.log(`\nRoster integrity diagnostic passed (${pass} checks).`);

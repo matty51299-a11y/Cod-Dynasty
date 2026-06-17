@@ -63,6 +63,8 @@ src/
     DynastyStandings.jsx            — Pro Circuit standings
     DynastySidebar.jsx              — navigation sidebar
     PlayerCard.jsx                  — player profile card
+    SeasonReview.jsx                — end-of-season summary before Rostermania
+    RostermaniaHub.jsx              — offseason hub: Overview, My Roster, Free Agency, New Teams, Departed Teams, Roster Moves
 ```
 
 ### What was bypassed / removed from active game
@@ -92,6 +94,11 @@ The following CDL Manager systems are **not imported** by the active game. Old f
 - `scripts/diagnoseHistoricalPlayMatch.mjs` — 19 tests, all pass (live match flow, map-by-map advance, K/Ds, Ghosts modes, bracket integration)
 - `scripts/diagnoseHistoricalEvents.mjs` — verifies event opening, user-match sim, next-match sim, round sim, full-event completion, placements, Pro Points, standings, save/load, and historical terminology
 - `scripts/diagnoseHistoricalRosterImport.mjs` — 33 tests, all pass
+- `scripts/diagnoseRostermaniaHub.mjs` — 35 tests, all pass (Rostermania flow, season review, roster management, free agency, team select, validation)
+- `scripts/diagnoseEraTransition.mjs` — 36 tests, all pass (updated with Rostermania awareness)
+- `scripts/diagnoseAdvancedWarfareTransition.mjs` — 25 tests, all pass (updated with Rostermania awareness)
+- `scripts/diagnoseRosterIntegrity.mjs` — 15 tests, all pass (updated with Rostermania validation)
+- `scripts/diagnoseDuplicatePlayers.mjs` — 14 tests, all pass (updated with Rostermania validation)
 
 ### Preserved
 
@@ -102,10 +109,37 @@ The following CDL Manager systems are **not imported** by the active game. Old f
 - All old source files (kept as reference, not imported)
 - Git history
 
+## Offseason / Rostermania Hub — Complete
+
+The Ghosts → Advanced Warfare transition now passes through a proper Rostermania Hub instead of happening instantly.
+
+### Flow
+1. Ghosts final event ends → Season Complete screen on Home
+2. User clicks "View Season Review" → SeasonReview screen shows final standings, event winners, user stats, roster
+3. User clicks "Enter Rostermania" → dispatches ENTER_ROSTERMANIA, archives Ghosts season, builds AW transition data
+4. Rostermania Hub opens with 6 tabs: Overview, My Roster, Free Agency, New Teams, Departed Teams, Roster Moves
+5. User can sign/release players, inspect AW teams and free agents
+6. User clicks "Start Advanced Warfare Season" → validates all rosters (4/4, no duplicates), sets rostermaniaActive=false
+7. Home shows AW 2014/15 with first event ready
+
+### Features
+- **Season Review**: Final standings, event winners, user rank/PP/wins/best finish, roster at season end
+- **Rostermania Hub Overview**: Era transition info, team status, league summary, new entrants
+- **My Roster tab**: Player cards with OVR, potential, role, era fit, release button, empty slot indicators
+- **Free Agency tab**: Searchable list of era-valid free agents with OVR, role, potential, previous team, sign button
+- **New Teams tab**: AW teams not in Ghosts, with roster and OVR
+- **Departed Teams tab**: Ghosts teams not in AW, showing where each player went
+- **Roster Moves tab**: Major headline moves + full transition log
+- **Team Selection**: If user's Ghosts team doesn't exist in AW, team select screen lets user pick an AW team
+- **Validation**: Start season blocked unless user roster is 4/4, all teams 4/4, no duplicate active players
+- **Save/Load**: Rostermania state persists through page refresh (rostermaniaActive, rostermaniaData saved to localStorage)
+- **Sidebar**: Shows "Rostermania" badge and offseason-specific navigation during Rostermania
+- **Topbar**: Shows "Rostermania Hub" button instead of event play buttons during offseason
+
 ## Next Historical Work
 
-1. **Ghosts → Advanced Warfare transition**: Introduce AW-new players into Amateur Pool / Free Agency when era advances.
-2. **Full bracket simulation**: Improve event sim with exact historical pool play / double-elimination bracket shapes and qualification feeds.
-3. **Offseason flow**: Contract expiry, roster moves between events.
-4. **Additional eras**: Parse BO3, IW, WWII, BO4, MW2019 spreadsheet sheets.
-5. **Roster AI**: AI teams make roster moves between events/eras.
+1. **Full bracket simulation**: Improve event sim with exact historical pool play / double-elimination bracket shapes and qualification feeds.
+2. **Offseason flow**: Contract expiry, roster moves between events within a season.
+3. **Additional eras**: Parse BO3, IW, WWII, BO4, MW2019 spreadsheet sheets.
+4. **Roster AI**: AI teams make roster moves between events/eras.
+5. **AW → BO3 Rostermania**: Extend Rostermania Hub to work for all era transitions (not just Ghosts→AW).

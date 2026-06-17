@@ -32,7 +32,23 @@ export default function Home({ setScreen }) {
   const userResults = state.completedEvents.map(ev => ev.results?.find(r => r.teamId === state.userTeamId)).filter(Boolean);
   const bestFinish = userResults.length ? Math.min(...userResults.map(r => r.placement)) : "—";
 
-  if (state.transitionSummary) {
+  if (state.rostermaniaActive) {
+    return (
+      <div className="dynasty-home">
+        <div className="home-header"><div><h2>Offseason — Rostermania</h2><div className="home-meta"><span className="home-chip">{state.currentGameTitle}</span><span className="home-chip">{state.seasonLabel}</span></div></div></div>
+        <div className="home-grid">
+          <div className="home-card">
+            <h3>Rostermania In Progress</h3>
+            <p>You are managing your roster before the {state.seasonLabel} season begins.</p>
+            <p className="dim-text">Roster: {roster.length}/4 players · Team OVR: {roster.length ? Math.round(roster.reduce((s, p) => s + (p.overall || 0), 0) / roster.length) : 0}</p>
+            <button className="btn-primary" onClick={() => setScreen("rostermania")}>Continue Rostermania →</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.transitionSummary && !state.rostermaniaActive) {
     const summary = state.transitionSummary;
     return (
       <div className="dynasty-home">
@@ -60,7 +76,10 @@ export default function Home({ setScreen }) {
           <div className="home-card"><h3>Final Standing</h3><p>Rank <strong>#{userStanding?.rank || "—"}</strong></p><p>Pro Points <strong>{(userStanding?.proPoints || 0).toLocaleString()}</strong></p><p>Event wins <strong>{userStanding?.eventWins || 0}</strong></p><p>Best finish <strong>#{bestFinish}</strong></p></div>
           <div className="home-card"><h3>Event Winners</h3>{state.completedEvents.map(ev => <div key={ev.eventId} className="home-stat-row"><span>{ev.eventName}</span><strong>{ev.champion?.teamName}</strong></div>)}</div>
           <div className="home-card"><h3>Roster Summary</h3>{roster.map(p => <div key={p.id} className="home-roster-row"><span className="player-name">{p.name}</span><span className="player-ovr">OVR {p.overall}</span></div>)}</div>
-          <div className="home-card"><h3>Advance Era</h3><p>Archive Ghosts and begin Call of Duty: Advanced Warfare 2014/15 with new teams, rosters, maps, and a reset Pro Circuit table.</p><button className="btn-primary" onClick={() => dispatch({ type: "ADVANCE_TO_ADVANCED_WARFARE" })}>Advance to Advanced Warfare</button></div>
+        </div>
+        <div className="rostermania-action-bar">
+          <p className="dim-text">The {state.seasonLabel} Ghosts season is complete. Review your season before entering the offseason.</p>
+          <button className="btn-primary btn-lg" onClick={() => setScreen("seasonreview")}>View Season Review →</button>
         </div>
       </div>
     );

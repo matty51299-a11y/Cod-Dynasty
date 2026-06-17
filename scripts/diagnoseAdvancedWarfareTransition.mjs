@@ -33,4 +33,7 @@ check("Every first AW event team has 4 players", eventState.field.every(t=>aw.pl
 for (const important of ["Crimsix","FormaL","Karma","TeePee"]) { const loc=findPlayerLocation(aw, important); check(`${important} location after AW transition is clear`, loc.found && loc.status!=="missing", loc.currentTeamName || loc.status); }
 check("No missing player state after AW transition", !rows.some(r=>r[4]==="missing_error") && aw.players.every(p=>findPlayerLocation(aw,p.id).status!=="missing"));
 check("Roster integrity passes after AW transition", getRosterIntegrityProblems(aw,"advanced_warfare").length===0);
+const storeSource = (await import("node:fs")).readFileSync(new URL("../src/store/dynastyStore.jsx", import.meta.url), "utf8");
+check("AW transition now passes through Rostermania Hub", storeSource.includes("ENTER_ROSTERMANIA") && storeSource.includes("rostermaniaActive"));
+check("User must confirm AW season start via CONFIRM_AW_SEASON", storeSource.includes("CONFIRM_AW_SEASON") && storeSource.includes("rostermaniaActive: false"));
 console.log(`\nAdvanced Warfare transition diagnostic passed (${pass} checks).`);

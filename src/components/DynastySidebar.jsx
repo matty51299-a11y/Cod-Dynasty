@@ -11,6 +11,14 @@ const NAV_ITEMS = [
   { id: "eventresult", icon: "🏆", label: "Last Result" },
 ];
 
+const ROSTERMANIA_NAV = [
+  { id: "home",        icon: "⌂",  label: "Home" },
+  { id: "rostermania", icon: "↻",  label: "Rostermania Hub" },
+  { id: "roster",      icon: "♟",  label: "Roster" },
+  { id: "league",      icon: "◎",  label: "League Rosters" },
+  { id: "fa",          icon: "$",  label: "Free Agency" },
+];
+
 export default function DynastySidebar({ screen, setScreen }) {
   const { state } = useDynasty();
   if (!state) return null;
@@ -18,6 +26,8 @@ export default function DynastySidebar({ screen, setScreen }) {
   const team = state.teams.find(t => t.id === state.userTeamId);
   const nextEvent = state.eventCalendar[state.currentEventIndex];
   const eventsLeft = state.eventCalendar.length - state.currentEventIndex;
+  const isRostermania = state.rostermaniaActive;
+  const navItems = isRostermania ? ROSTERMANIA_NAV : NAV_ITEMS;
 
   return (
     <aside className="sidebar">
@@ -29,8 +39,10 @@ export default function DynastySidebar({ screen, setScreen }) {
         <span className="sb-season">{state.seasonLabel}</span>
       </div>
 
+      {isRostermania && <div className="sb-rostermania-badge">Rostermania</div>}
+
       <nav className="sb-nav">
-        {NAV_ITEMS.map(item => (
+        {navItems.map(item => (
           <button
             key={item.id}
             className={`sb-item ${screen === item.id ? "active" : ""}`}
@@ -44,9 +56,11 @@ export default function DynastySidebar({ screen, setScreen }) {
 
       <div className="sb-footer">
         <span className="sb-pill">
-          {eventsLeft > 0
-            ? `${nextEvent?.name || "Next Event"} · ${eventsLeft} left`
-            : "Season Complete"
+          {isRostermania
+            ? "Offseason — Rostermania"
+            : eventsLeft > 0
+              ? `${nextEvent?.name || "Next Event"} · ${eventsLeft} left`
+              : "Season Complete"
           }
         </span>
       </div>

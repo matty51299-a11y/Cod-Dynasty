@@ -37,6 +37,9 @@ check("Duplicate resolution report is created when conflicts exist", existsSync(
 check("No Modern CDL or Challengers are required", !JSON.stringify(aw).toLowerCase().includes("challenger") && !aw.teams.some(t=>/breach|surge|koi|optic texas|atlanta faze/i.test(t.name)));
 console.log(`\nDuplicate player diagnostic passed (${pass} checks).`);
 
+const storeSource = (await import("node:fs")).readFileSync(new URL("../src/store/dynastyStore.jsx", import.meta.url), "utf8");
+check("Rostermania validates no duplicate active players before starting AW", storeSource.includes("getRosterIntegrityProblems") && storeSource.includes("CONFIRM_AW_SEASON"));
+
 console.log("\nActive assignment report:");
 for (const state of [{label:"Ghosts",state:ghosts},{label:"Advanced Warfare",state:aw}]) {
   const byId = new Map();
