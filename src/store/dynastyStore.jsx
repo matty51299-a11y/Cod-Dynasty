@@ -380,7 +380,7 @@ export function buildAdvancedWarfareTransition(state) {
     standings: createInitialStandings(teams),
     liveHistoricalMatch: null,
     pendingSeasonComplete: false,
-  }, "advanced_warfare");
+  }, "advanced_warfare", { repairUserTeam: false });
 
   const activeIds = new Set(next.activeTeams);
   const missing = previousPlayers.filter(p => !next.players.some(np => np.id === p.id));
@@ -470,6 +470,7 @@ export function dynastyReducer(state, action) {
       return {
         ...awState,
         rostermaniaActive: true,
+        rostermaniaMoveLog: [],
         rostermaniaData: {
           seasonReview,
           userTeamPreserved: userTeamExistsInAW,
@@ -489,7 +490,6 @@ export function dynastyReducer(state, action) {
         if (p.teamId === state.userTeamId) return { ...p, previousTeamId: state.userTeamId, teamId: null, status: "free_agent", currentStatus: "free_agent", contractYears: 0 };
         return p;
       });
-      const controlledTeamId = newTeamId;
       const next = ensureFourPlayerRosters({
         ...state,
         userTeamId: newTeamId,
@@ -497,20 +497,22 @@ export function dynastyReducer(state, action) {
         controlledTeamId: newTeamId,
         players,
         rostermaniaData: { ...state.rostermaniaData, needsTeamSelect: false },
-      }, "advanced_warfare");
+      }, "advanced_warfare", { repairUserTeam: false });
       return addNotif(next, `You are now controlling ${state.teams.find(t => t.id === newTeamId)?.name || newTeamId}.`);
     }
 
     case "CONFIRM_AW_SEASON": {
       if (!state?.rostermaniaActive) return addNotif(state, "Not in Rostermania.");
-      const problems = getRosterIntegrityProblems(state, "advanced_warfare");
-      if (problems.length > 0) return addNotif(state, `Cannot start season: ${problems[0]}`);
       const userCount = state.players.filter(p => p.teamId === state.userTeamId).length;
-      if (userCount !== 4) return addNotif(state, `Your roster must have exactly 4 players (currently ${userCount}/4).`);
+      if (userCount !== 4) return addNotif(state, `Cannot start season: Your roster has ${userCount}/4 players. Sign a free agent to fill your roster.`);
+      const repaired = ensureFourPlayerRosters(state, "advanced_warfare");
+      const problems = getRosterIntegrityProblems(repaired, "advanced_warfare");
+      if (problems.length > 0) return addNotif(state, `Cannot start season: ${problems.join("; ")}`);
       return addNotif({
-        ...state,
+        ...repaired,
         rostermaniaActive: false,
         rostermaniaData: null,
+        rostermaniaMoveLog: null,
         transitionSummary: null,
       }, "Advanced Warfare 2014/15 season begins!");
     }
@@ -635,18 +637,25 @@ export function dynastyReducer(state, action) {
       const { playerId } = action;
       const player = state.players.find(p => p.id === playerId) || state.freeAgents.find(p => p.id === playerId);
       if (!player) return addNotif(state, "Player not found.");
-      if (player.teamId === state.userTeamId) return addNotif(state, `${player.name} is already on your roster.`);
-      if (player.teamId) return addNotif(state, `${player.name} is not available.`);
+      const signedPlayerName = player.displayName || player.name;
+      if (player.teamId === state.userTeamId) return addNotif(state, `${signedPlayerName} is already on your roster.`);
+      if (player.teamId) return addNotif(state, `${signedPlayerName} is not available.`);
       const rosterCount = state.players.filter(p => p.teamId === state.userTeamId).length;
       if (rosterCount >= 4) return addNotif(state, "Roster is full (4/4). Release a player first.");
+      let playersArray = state.players;
+      if (!playersArray.some(p => p.id === playerId)) playersArray = [...playersArray, player];
       const signed = ensureFourPlayerRosters({
         ...state,
-        players: state.players.map(p =>
-          p.id === playerId ? { ...p, teamId: state.userTeamId, status: "active", currentStatus: "active", contractYears: Math.max(p.contractYears || 0, 1) } : p
+        players: playersArray.map(p =>
+          p.id === playerId ? { ...p, teamId: state.userTeamId, status: "active", currentStatus: "active", contractYears: Math.max(p.contractYears || 0, 1), userReleasedDuringRostermania: false } : p
         ),
         freeAgents: state.freeAgents.filter(p => p.id !== playerId),
-      }, state.currentEraId);
-      return addNotif(signed, `${player.name} signed!`);
+      }, state.currentEraId, { repairUserTeam: false });
+      const signLog = [...(state.rostermaniaMoveLog || [])];
+      if (state.rostermaniaActive) {
+        signLog.push({ type: "user_sign", playerName: signedPlayerName, playerId, fromTeam: null, toTeam: state.userTeamId, timestamp: Date.now() });
+      }
+      return addNotif({ ...signed, rostermaniaMoveLog: signLog }, `${signedPlayerName} signed!`);
     }
 
     case "RELEASE_PLAYER": {
@@ -654,13 +663,18 @@ export function dynastyReducer(state, action) {
       const { playerId } = action;
       const player = state.players.find(p => p.id === playerId);
       if (!player || player.teamId !== state.userTeamId) return addNotif(state, "Cannot release this player.");
+      const releasedName = player.displayName || player.name;
       const released = ensureFourPlayerRosters({
         ...state,
         players: state.players.map(p =>
-          p.id === playerId ? { ...p, teamId: null, previousTeamId: state.userTeamId, status: "free_agent", currentStatus: "free_agent", contractYears: 0 } : p
+          p.id === playerId ? { ...p, teamId: null, previousTeamId: state.userTeamId, status: "free_agent", currentStatus: "free_agent", contractYears: 0, userReleasedDuringRostermania: Boolean(state.rostermaniaActive) } : p
         ),
-      }, state.currentEraId);
-      return addNotif(released, `${player.name} released.`);
+      }, state.currentEraId, { repairUserTeam: false });
+      const moveLog = [...(state.rostermaniaMoveLog || [])];
+      if (state.rostermaniaActive) {
+        moveLog.push({ type: "user_release", playerName: releasedName, playerId, fromTeam: state.userTeamId, toTeam: null, timestamp: Date.now() });
+      }
+      return addNotif({ ...released, rostermaniaMoveLog: moveLog }, `${releasedName} released to Free Agency.`);
     }
 
     default:

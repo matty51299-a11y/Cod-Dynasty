@@ -10,6 +10,25 @@ const TABS = [
   { id: "newteams", label: "New Teams" },
   { id: "departed", label: "Departed Teams" },
   { id: "moves", label: "Roster Moves" },
+  { id: "movelog", label: "Move Log" },
+];
+
+const ROLE_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "main_ar", label: "Main AR" },
+  { id: "flex", label: "Flex" },
+  { id: "smg", label: "SMG" },
+  { id: "objective", label: "Objective" },
+  { id: "support", label: "Support" },
+  { id: "new_aw", label: "New AW Players" },
+  { id: "displaced", label: "Displaced Ghosts" },
+];
+
+const SORT_OPTIONS = [
+  { id: "overall", label: "Overall" },
+  { id: "potential", label: "Potential" },
+  { id: "role", label: "Role" },
+  { id: "previous_team", label: "Previous Team" },
 ];
 
 function computeTeamOVR(players, teamId) {
@@ -18,9 +37,22 @@ function computeTeamOVR(players, teamId) {
   return Math.round(roster.reduce((sum, p) => sum + (p.overall || 0), 0) / roster.length);
 }
 
+function roleMatch(player, filterId) {
+  const role = (player.primary || player.role || "").toLowerCase();
+  switch (filterId) {
+    case "main_ar": return role.includes("ar");
+    case "flex": return role.includes("flex");
+    case "smg": return role.includes("smg") || role.includes("slayer");
+    case "objective": return role.includes("obj");
+    case "support": return role.includes("support");
+    default: return true;
+  }
+}
+
 export default function RostermaniaHub({ setScreen }) {
   const { state, dispatch } = useDynasty();
   const [tab, setTab] = useState("overview");
+  const [confirmRelease, setConfirmRelease] = useState(null);
 
   if (!state?.rostermaniaActive) {
     return (
@@ -55,8 +87,16 @@ export default function RostermaniaHub({ setScreen }) {
     dispatch({ type: "SIGN_PLAYER", playerId });
   }
 
-  function handleRelease(playerId) {
-    dispatch({ type: "RELEASE_PLAYER", playerId });
+  function handleReleaseClick(playerId) {
+    const player = userRoster.find(p => p.id === playerId);
+    if (player) setConfirmRelease(player);
+  }
+
+  function confirmReleasePlayer() {
+    if (confirmRelease) {
+      dispatch({ type: "RELEASE_PLAYER", playerId: confirmRelease.id });
+      setConfirmRelease(null);
+    }
   }
 
   function handleStartSeason() {
@@ -72,6 +112,7 @@ export default function RostermaniaHub({ setScreen }) {
   const rosterMoves = transitionRows.filter(r =>
     r.status === "assigned_to_aw_team" || r.status === "moved_to_free_agency" || r.status === "preserved_on_user_roster"
   );
+  const moveLog = state.rostermaniaMoveLog || [];
 
   const newTeamNames = new Set(summary.newTeams || []);
   const newTeams = state.teams.filter(t => newTeamNames.has(t.name));
@@ -140,7 +181,7 @@ export default function RostermaniaHub({ setScreen }) {
       <div className="rm-tabs">
         {TABS.map(t => (
           <button key={t.id} className={`rm-tab ${tab === t.id ? "rm-tab-active" : ""}`} onClick={() => setTab(t.id)}>
-            {t.label}
+            {t.label}{t.id === "movelog" && moveLog.length > 0 ? ` (${moveLog.length})` : ""}
           </button>
         ))}
       </div>
@@ -148,7 +189,7 @@ export default function RostermaniaHub({ setScreen }) {
       {!canStart && (
         <div className="rm-warnings">
           {userRosterCount !== 4 && (
-            <div className="roster-warning">Your roster has {userRosterCount}/4 players. You need exactly 4 to start the season.</div>
+            <div className="roster-warning">Your roster has {userRosterCount}/4 players. {userRosterCount < 4 ? "Sign a free agent to fill your roster." : "Release a player to reduce to 4."}</div>
           )}
           {problems.map((p, i) => (
             <div key={i} className="roster-warning">{p}</div>
@@ -156,13 +197,28 @@ export default function RostermaniaHub({ setScreen }) {
         </div>
       )}
 
+      {confirmRelease && (
+        <div className="rm-modal-overlay" onClick={() => setConfirmRelease(null)}>
+          <div className="rm-modal" onClick={e => e.stopPropagation()}>
+            <h3>Release Player</h3>
+            <p>Release <strong>{confirmRelease.displayName || confirmRelease.name}</strong> to Free Agency?</p>
+            <p className="dim-text">OVR {confirmRelease.overall} • {confirmRelease.primary || confirmRelease.role} • POT {confirmRelease.potential}</p>
+            <div className="rm-modal-actions">
+              <button className="btn-danger-sm" onClick={confirmReleasePlayer}>Confirm Release</button>
+              <button className="btn-secondary-sm" onClick={() => setConfirmRelease(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="rm-content">
         {tab === "overview" && <OverviewTab state={state} summary={summary} review={review} fromEra={fromEra} toEra={toEra} userTeam={userTeam} userRoster={userRoster} freeAgents={freeAgents} newTeams={newTeams} departedTeamNames={departedTeamNames} teamOVR={teamOVR} />}
-        {tab === "roster" && <RosterTab state={state} userRoster={userRoster} userRosterCount={userRosterCount} teamOVR={teamOVR} onRelease={handleRelease} />}
+        {tab === "roster" && <RosterTab state={state} userRoster={userRoster} userRosterCount={userRosterCount} teamOVR={teamOVR} onRelease={handleReleaseClick} />}
         {tab === "freeagency" && <FreeAgencyTab freeAgents={freeAgents} userRosterCount={userRosterCount} onSign={handleSign} />}
         {tab === "newteams" && <NewTeamsTab newTeams={newTeams} players={state.players} />}
         {tab === "departed" && <DepartedTab departedTeamNames={departedTeamNames} transitionRows={transitionRows} />}
         {tab === "moves" && <MovesTab rosterMoves={rosterMoves} summary={summary} />}
+        {tab === "movelog" && <MoveLogTab moveLog={moveLog} teams={state.teams} />}
       </div>
     </div>
   );
@@ -222,7 +278,7 @@ function RosterTab({ state, userRoster, userRosterCount, teamOVR, onRelease }) {
       {hasDuplicateWarning && <div className="roster-warning">Duplicate player detected on your roster.</div>}
       <div className="rm-roster-list">
         {userRoster.map(p => (
-          <div key={p.id} className="rm-player-card">
+          <div key={p.id} className="rm-player-card rm-player-card-detailed">
             <div className="rm-player-info">
               <strong className="player-name">{p.displayName || p.name}</strong>
               <span className="player-role">{p.primary || p.role}</span>
@@ -232,6 +288,12 @@ function RosterTab({ state, userRoster, userRosterCount, teamOVR, onRelease }) {
               <span className="dim-text">POT {p.potential}</span>
               {p.confidence && <span className="dim-text">{p.confidence}</span>}
               {p.eraFit && <span className={`rm-era-fit rm-fit-${p.eraFit}`}>{p.eraFit} fit</span>}
+            </div>
+            <div className="rm-player-extra">
+              {p.previousTeamId && p.previousTeamId !== state.userTeamId && (
+                <span className="dim-text">ex-{state.teams.find(t => t.id === p.previousTeamId)?.name || p.previousTeamId}</span>
+              )}
+              {p.personalityTraits?.length > 0 && <span className="dim-text rm-traits">{p.personalityTraits.slice(0, 2).join(", ")}</span>}
             </div>
             <button className="btn-danger-sm" onClick={() => onRelease(p.id)}>Release</button>
           </div>
@@ -249,10 +311,32 @@ function RosterTab({ state, userRoster, userRosterCount, teamOVR, onRelease }) {
 function FreeAgencyTab({ freeAgents, userRosterCount, onSign }) {
   const canSign = userRosterCount < 4;
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("overall");
+  const [filterRole, setFilterRole] = useState("all");
 
-  const filtered = search
-    ? freeAgents.filter(p => (p.displayName || p.name || "").toLowerCase().includes(search.toLowerCase()))
-    : freeAgents;
+  let filtered = freeAgents;
+
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(p => (p.displayName || p.name || "").toLowerCase().includes(q));
+  }
+
+  if (filterRole === "new_aw") {
+    filtered = filtered.filter(p => p.debutEraId === "advanced_warfare");
+  } else if (filterRole === "displaced") {
+    filtered = filtered.filter(p => p.previousTeamId);
+  } else if (filterRole !== "all") {
+    filtered = filtered.filter(p => roleMatch(p, filterRole));
+  }
+
+  filtered = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case "potential": return (b.potential || 0) - (a.potential || 0);
+      case "role": return (a.primary || a.role || "").localeCompare(b.primary || b.role || "");
+      case "previous_team": return (a.previousTeamId || "zzz").localeCompare(b.previousTeamId || "zzz");
+      default: return (b.overall || 0) - (a.overall || 0);
+    }
+  });
 
   return (
     <div className="rm-fa-section">
@@ -262,9 +346,21 @@ function FreeAgencyTab({ freeAgents, userRosterCount, onSign }) {
           Your roster: {userRosterCount}/4
         </span>
       </div>
-      {userRosterCount >= 4 && <p className="dim-text">Roster full — release a player before signing.</p>}
-      <div className="rm-search">
-        <input type="text" placeholder="Search players..." value={search} onChange={e => setSearch(e.target.value)} className="rm-search-input" />
+      {userRosterCount >= 4 && <p className="rm-full-notice">Roster full — release a player before signing.</p>}
+      <div className="rm-fa-controls">
+        <div className="rm-search">
+          <input type="text" placeholder="Search players..." value={search} onChange={e => setSearch(e.target.value)} className="rm-search-input" />
+        </div>
+        <div className="rm-fa-filters">
+          <label className="dim-text">Sort:</label>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="rm-select">
+            {SORT_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+          <label className="dim-text">Filter:</label>
+          <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="rm-select">
+            {ROLE_FILTERS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </div>
       </div>
       <div className="fa-list">
         {filtered.length === 0 ? (
@@ -272,13 +368,20 @@ function FreeAgencyTab({ freeAgents, userRosterCount, onSign }) {
         ) : (
           filtered.map(p => (
             <div key={p.id} className="fa-row rm-fa-row">
-              <span className="player-name">{p.displayName || p.name}</span>
-              {p.previousTeamId && <span className="dim-text rm-prev-team">ex-{p.previousTeamId}</span>}
-              <span className="player-role">{p.primary || p.role}</span>
-              <span className="player-ovr">OVR {p.overall}</span>
-              <span className="dim-text">POT {p.potential}</span>
-              {p.confidence && <span className="dim-text">{p.confidence}</span>}
-              {p.personalityTraits?.length > 0 && <span className="dim-text rm-traits">{p.personalityTraits.slice(0, 2).join(", ")}</span>}
+              <div className="rm-fa-player-info">
+                <span className="player-name">{p.displayName || p.name}</span>
+                <span className="player-role">{p.primary || p.role}</span>
+              </div>
+              <div className="rm-fa-player-stats">
+                <span className="player-ovr">OVR {p.overall}</span>
+                <span className="dim-text">POT {p.potential}</span>
+                {p.confidence && <span className="dim-text">{p.confidence}</span>}
+              </div>
+              <div className="rm-fa-player-meta">
+                {p.previousTeamId && <span className="dim-text rm-prev-team">ex-{p.previousTeamId}</span>}
+                {p.debutEraId === "advanced_warfare" && <span className="rm-new-badge">NEW</span>}
+                {p.personalityTraits?.length > 0 && <span className="dim-text rm-traits">{p.personalityTraits.slice(0, 2).join(", ")}</span>}
+              </div>
               <button className="btn-primary-sm" disabled={!canSign} onClick={() => onSign(p.id)}>
                 {canSign ? "Sign" : "Full"}
               </button>
@@ -396,6 +499,47 @@ function MovesTab({ rosterMoves, summary }) {
                 <span className={`rm-move-badge rm-move-${r.status}`}>
                   {r.status === "assigned_to_aw_team" ? "Signed" : r.status === "moved_to_free_agency" ? "FA" : r.status === "preserved_on_user_roster" ? "Protected" : r.status}
                 </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MoveLogTab({ moveLog, teams }) {
+  const teamName = (teamId) => teams.find(t => t.id === teamId)?.name || teamId || "Free Agency";
+
+  function formatEntry(entry) {
+    switch (entry.type) {
+      case "user_release":
+        return `You released ${entry.playerName} to Free Agency.`;
+      case "user_sign":
+        return `You signed ${entry.playerName} from Free Agency.`;
+      case "ai_repair":
+        return `${teamName(entry.toTeam)} signed ${entry.playerName} from Free Agency.`;
+      case "transition":
+        return `${entry.playerName} moved from ${teamName(entry.fromTeam)} to ${entry.toTeam ? teamName(entry.toTeam) : "Free Agency"}.`;
+      default:
+        return `${entry.playerName}: ${entry.type}`;
+    }
+  }
+
+  return (
+    <div className="rm-moves-section">
+      <h3>Rostermania Move Log</h3>
+      <div className="home-card">
+        {moveLog.length === 0 ? (
+          <p className="dim-text">No roster moves made yet. Release or sign players to see activity here.</p>
+        ) : (
+          <div className="rm-movelog-list">
+            {[...moveLog].reverse().map((entry, i) => (
+              <div key={i} className={`rm-movelog-entry rm-movelog-${entry.type}`}>
+                <span className={`rm-movelog-icon ${entry.type === "user_release" ? "rm-icon-release" : "rm-icon-sign"}`}>
+                  {entry.type === "user_release" ? "−" : "+"}
+                </span>
+                <span className="rm-movelog-text">{formatEntry(entry)}</span>
               </div>
             ))}
           </div>

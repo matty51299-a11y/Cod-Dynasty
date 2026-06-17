@@ -40,6 +40,17 @@ console.log(`\nDuplicate player diagnostic passed (${pass} checks).`);
 const storeSource = (await import("node:fs")).readFileSync(new URL("../src/store/dynastyStore.jsx", import.meta.url), "utf8");
 check("Rostermania validates no duplicate active players before starting AW", storeSource.includes("getRosterIntegrityProblems") && storeSource.includes("CONFIRM_AW_SEASON"));
 
+// ── User team 3/4 during Rostermania is not a duplicate bug ──
+{
+  const userTeamId = "denial_esports";
+  const userPlayer = aw.players.find(p => p.teamId === userTeamId);
+  let rmState = { ...aw, rostermaniaActive: true, players: aw.players.map(p => p.id === userPlayer.id ? { ...p, teamId: null, previousTeamId: p.teamId, status: "free_agent", currentStatus: "free_agent" } : p) };
+  rmState.freeAgents = rmState.players.filter(p => !p.teamId);
+  const problems = getRosterIntegrityProblems(rmState, "advanced_warfare");
+  const userDupeProblems = problems.filter(p => p.toLowerCase().includes("duplicate") && p.toLowerCase().includes(userTeamId));
+  check("User team 3/4 during Rostermania is not treated as a duplicate bug", userDupeProblems.length === 0, `user team at ${rmState.players.filter(p => p.teamId === userTeamId).length}/4, no duplicate errors for user team`);
+}
+
 console.log("\nActive assignment report:");
 for (const state of [{label:"Ghosts",state:ghosts},{label:"Advanced Warfare",state:aw}]) {
   const byId = new Map();
