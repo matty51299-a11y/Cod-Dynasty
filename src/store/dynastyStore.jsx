@@ -6,7 +6,7 @@ import { getEra, HISTORICAL_START_ERA_ID } from "../data/codEras.js";
 import { simulateEvent } from "../engine/eventSim.js";
 import { createInitialStandings, updateStandings, getSortedStandings } from "../engine/standingsEngine.js";
 import { createHistoricalEventState, getNextPendingMatch, getUserPendingMatch, simulateMatch, toEventResult, createHistoricalLiveMatch, playHistoricalLiveMap, advanceHistoricalLiveMap, applyPlayedMatchResult } from "../engine/historicalEventEngine.js";
-import { ensureFourPlayerRosters, getControlledTeamId } from "../engine/rosterIntegrity.js";
+import { ensureFourPlayerRosters, getControlledTeamId, getRosterIntegrityProblems } from "../engine/rosterIntegrity.js";
 
 const SAVE_KEY = "cod_dynasty_save";
 
@@ -117,6 +117,8 @@ export function createNewGame(userTeamId) {
     archivedEventResults: {},
     pendingSeasonComplete: false,
     transitionSummary: null,
+    rostermaniaActive: false,
+    rostermaniaData: null,
     saveExists: true,
   }, era.id);
 }
@@ -153,6 +155,8 @@ function migrateState(state) {
   state.archivedStandings ||= {};
   state.archivedEventResults ||= {};
   state.pendingSeasonComplete ||= false;
+  state.rostermaniaActive ??= false;
+  state.rostermaniaData ??= null;
   return ensureFourPlayerRosters(state, state.currentEraId || era.id);
 }
 
@@ -437,6 +441,79 @@ export function dynastyReducer(state, action) {
 
     case "ACK_TRANSITION_SUMMARY":
       return state ? { ...state, transitionSummary: null } : state;
+
+    case "ENTER_ROSTERMANIA": {
+      if (!state || state.currentEraId !== "ghosts") return state;
+      if ((state.completedEventIds || []).length < (state.eventCalendar || []).length) return addNotif(state, "Complete the Ghosts season before entering Rostermania.");
+      const ghostsStandings = getSortedStandings(state.standings || {});
+      const userStandingRM = ghostsStandings.find(s => s.teamId === state.userTeamId);
+      const userEvResults = (state.completedEvents || []).map(ev => ev.results?.find(r => r.teamId === state.userTeamId)).filter(Boolean);
+      const bestFinishRM = userEvResults.length ? Math.min(...userEvResults.map(r => r.placement)) : null;
+      const seasonReview = {
+        eraId: state.currentEraId,
+        gameTitle: state.currentGameTitle,
+        seasonLabel: state.seasonLabel,
+        standings: ghostsStandings,
+        eventWinners: (state.completedEvents || []).map(ev => ({ eventId: ev.eventId, eventName: ev.eventName, champion: ev.champion })),
+        userTeamId: state.userTeamId,
+        userTeamName: state.teams.find(t => t.id === state.userTeamId)?.name || state.userTeamId,
+        userProPoints: userStandingRM?.proPoints || 0,
+        userEventWins: userStandingRM?.eventWins || 0,
+        userRank: userStandingRM?.rank || null,
+        userBestFinish: bestFinishRM,
+        userRoster: (state.players || []).filter(p => p.teamId === state.userTeamId).map(p => ({ id: p.id, name: p.name, displayName: p.displayName, overall: p.overall, primary: p.primary })),
+        totalEvents: state.eventCalendar.length,
+      };
+      const archivedRM = archiveCurrentSeason(state);
+      const awState = buildAdvancedWarfareTransition(archivedRM);
+      const userTeamExistsInAW = AW_TEAMS.some(t => t.id === state.userTeamId);
+      return {
+        ...awState,
+        rostermaniaActive: true,
+        rostermaniaData: {
+          seasonReview,
+          userTeamPreserved: userTeamExistsInAW,
+          previousUserTeamId: state.userTeamId,
+          needsTeamSelect: !userTeamExistsInAW,
+        },
+      };
+    }
+
+    case "SELECT_ROSTERMANIA_TEAM": {
+      if (!state?.rostermaniaActive) return state;
+      const { teamId: newTeamId } = action;
+      if (!state.teams.some(t => t.id === newTeamId)) return addNotif(state, "Invalid team selection.");
+      if (newTeamId === state.userTeamId) return state;
+      const oldUserRoster = state.players.filter(p => p.teamId === state.userTeamId);
+      let players = state.players.map(p => {
+        if (p.teamId === state.userTeamId) return { ...p, previousTeamId: state.userTeamId, teamId: null, status: "free_agent", currentStatus: "free_agent", contractYears: 0 };
+        return p;
+      });
+      const controlledTeamId = newTeamId;
+      const next = ensureFourPlayerRosters({
+        ...state,
+        userTeamId: newTeamId,
+        currentUserTeamId: newTeamId,
+        controlledTeamId: newTeamId,
+        players,
+        rostermaniaData: { ...state.rostermaniaData, needsTeamSelect: false },
+      }, "advanced_warfare");
+      return addNotif(next, `You are now controlling ${state.teams.find(t => t.id === newTeamId)?.name || newTeamId}.`);
+    }
+
+    case "CONFIRM_AW_SEASON": {
+      if (!state?.rostermaniaActive) return addNotif(state, "Not in Rostermania.");
+      const problems = getRosterIntegrityProblems(state, "advanced_warfare");
+      if (problems.length > 0) return addNotif(state, `Cannot start season: ${problems[0]}`);
+      const userCount = state.players.filter(p => p.teamId === state.userTeamId).length;
+      if (userCount !== 4) return addNotif(state, `Your roster must have exactly 4 players (currently ${userCount}/4).`);
+      return addNotif({
+        ...state,
+        rostermaniaActive: false,
+        rostermaniaData: null,
+        transitionSummary: null,
+      }, "Advanced Warfare 2014/15 season begins!");
+    }
 
 
     case "OPEN_EVENT": {

@@ -11777,3 +11777,245 @@ body { background: #111317; }
 .team-player-row small { color:var(--text-dim); overflow-wrap:anywhere; }
 .roster-warning { color:var(--yellow); padding:8px; border-radius:8px; margin:10px 0; }
 @media (max-width: 900px) { .league-grid { grid-template-columns:1fr; } .team-directory-row, .team-player-row { grid-template-columns:1fr 1fr; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ROSTERMANIA HUB                                                           */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+.rostermania-action-bar {
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--surface-glass);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.rostermania-action-bar .dim-text { margin: 0; flex: 1; }
+.btn-lg { padding: 12px 28px !important; font-size: 15px !important; }
+
+.sb-rostermania-badge {
+  background: linear-gradient(135deg, rgba(251,191,60,.2), rgba(235,87,87,.2));
+  color: var(--yellow);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  margin: 4px 12px 8px;
+  border: 1px solid rgba(251,191,60,.3);
+}
+
+.rm-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rm-roster-badge {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.rm-roster-ok {
+  background: rgba(46,230,160,0.15);
+  color: var(--green);
+}
+.rm-roster-warn {
+  background: rgba(251,191,60,0.15);
+  color: var(--yellow);
+}
+
+.rm-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+.rm-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.rm-tab:hover { color: var(--text); }
+.rm-tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.rm-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.rm-content { min-height: 200px; }
+
+.rm-roster-section, .rm-fa-section, .rm-teams-section, .rm-moves-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rm-roster-header, .rm-fa-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rm-roster-header h3, .rm-fa-header h3 { margin: 0; }
+.rm-roster-ovr {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.rm-roster-list, .rm-teams-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rm-player-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-glass);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.rm-player-card.rm-empty-slot {
+  opacity: 0.5;
+  border-style: dashed;
+  justify-content: center;
+  padding: 18px;
+}
+.rm-player-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rm-player-stats {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.rm-era-fit { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.rm-fit-strong { background: rgba(46,230,160,0.15); color: var(--green); }
+.rm-fit-weak { background: rgba(235,87,87,0.15); color: var(--red); }
+.rm-fit-neutral { background: rgba(159,176,214,0.1); color: var(--text-dim); }
+
+.rm-search { margin-bottom: 10px; }
+.rm-search-input {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.rm-search-input::placeholder { color: var(--text-dim); }
+
+.rm-fa-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr .6fr .5fr .5fr .5fr .8fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.rm-prev-team { font-size: 11px; }
+.rm-traits { font-size: 11px; }
+
+.rm-team-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 12px 0;
+}
+.rm-team-card {
+  background: var(--surface-glass);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.rm-team-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-glow);
+}
+.rm-team-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rm-team-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.rm-team-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.rm-team-roster-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.rm-team-info-card { min-width: 240px; }
+
+.rm-departed-card h4 { margin: 0 0 6px; }
+.rm-departed-fates { display: flex; flex-direction: column; gap: 2px; }
+
+.rm-move-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1.5fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.rm-move-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.rm-move-assigned_to_aw_team { background: rgba(46,230,160,0.12); color: var(--green); }
+.rm-move-moved_to_free_agency { background: rgba(251,191,60,0.12); color: var(--yellow); }
+.rm-move-preserved_on_user_roster { background: rgba(91,157,255,0.12); color: var(--accent); }
+
+.sr-user-row { background: rgba(91,157,255,0.08); border-radius: 6px; }
+.sr-standings-table { max-height: 320px; overflow-y: auto; }
+
+@media (max-width: 768px) {
+  .rostermania-action-bar { flex-direction: column; text-align: center; }
+  .rm-header-actions { flex-wrap: wrap; justify-content: center; }
+  .rm-fa-row { grid-template-columns: 1fr 1fr; }
+}

@@ -68,5 +68,9 @@ check("AW event uses AW title", firstEventState.gameTitle === "Call of Duty: Adv
 const mapModes = getHistoricalSeriesMapSet(aw).map(m => m.mode);
 check("AW event uses AW modes, not Ghosts modes", mapModes.includes("Hardpoint") && mapModes.includes("Uplink") && !mapModes.includes("Blitz"), mapModes.join(", "));
 check("No Modern CDL mode or Challengers are required", !storeSource.includes("Modern CDL mode") && !storeSource.includes("Challenger"));
+check("AW transition now passes through Rostermania", storeSource.includes("ENTER_ROSTERMANIA") && storeSource.includes("rostermaniaActive"));
+check("CONFIRM_AW_SEASON action exists for post-Rostermania start", storeSource.includes("CONFIRM_AW_SEASON"));
+check("Rostermania Hub component exists", (() => { try { readFileSync(new URL("../src/components/RostermaniaHub.jsx", import.meta.url)); return true; } catch { return false; } })());
+check("Season Review component exists", (() => { try { readFileSync(new URL("../src/components/SeasonReview.jsx", import.meta.url)); return true; } catch { return false; } })());
 if (failures.length) { console.error(`\nEra transition diagnostic FAILED with ${failures.length} problem(s):`); for (const failure of failures) console.error(`- ${failure}`); process.exit(1); }
 console.log("\nEra transition diagnostic passed.");
