@@ -218,7 +218,7 @@ check("11. User can release a player", rosterAfterRelease === 3, `released ${rel
 check("12. User roster must be exactly 4 before starting AW", signState.players.filter(p => p.teamId === signState.userTeamId).length === 4);
 
 // ── TEST 13: Start AW is blocked if user roster has fewer than 4 ──
-check("13. Start AW is blocked if user roster has fewer than 4 (store code check)", storeSource.includes("Your roster must have exactly 4 players"));
+check("13. Start AW is blocked if user roster has fewer than 4 (store code check)", storeSource.includes("Your roster has") && storeSource.includes("Sign a free agent"));
 
 // ── TEST 14: Start AW is blocked if duplicate active players exist ──
 check("14. Start AW is blocked if duplicate active players exist (store code check)", storeSource.includes("getRosterIntegrityProblems") && storeSource.includes("CONFIRM_AW_SEASON"));
@@ -264,6 +264,29 @@ check("RostermaniaHub has Roster Moves tab", rmHubSource.includes("moves") && rm
 check("RostermaniaHub has Start Season button", rmHubSource.includes("Start") && rmHubSource.includes("Season"));
 check("Sidebar updated for rostermania", readFileSync(new URL("../src/components/DynastySidebar.jsx", import.meta.url), "utf8").includes("rostermania"));
 check("Home handles rostermaniaActive state", readFileSync(new URL("../src/components/Home.jsx", import.meta.url), "utf8").includes("rostermaniaActive"));
+
+// ── User-controlled roster during Rostermania checks ──
+{
+  // User roster can temporarily be 3/4 during Rostermania without auto-repair
+  let rmUserState = { ...rmState };
+  const userPlayer = rmUserState.players.find(p => p.teamId === rmUserState.userTeamId);
+  rmUserState = {
+    ...rmUserState,
+    players: rmUserState.players.map(p => p.id === userPlayer.id ? { ...p, teamId: null, status: "free_agent", currentStatus: "free_agent" } : p),
+  };
+  rmUserState = ensureFourPlayerRosters(rmUserState, "advanced_warfare", { repairUserTeam: false });
+  const userCountAfter = rmUserState.players.filter(p => p.teamId === rmUserState.userTeamId).length;
+  check("User roster can temporarily be 3/4 during Rostermania without auto-repair", userCountAfter === 3, `${userCountAfter}/4 after release with repairUserTeam: false`);
+}
+
+// Move log is initialized during Rostermania
+check("Move log is initialized during Rostermania", storeSource.includes("rostermaniaMoveLog"));
+
+// RostermaniaHub has Move Log tab
+check("RostermaniaHub has Move Log tab", rmHubSource.includes("movelog") && rmHubSource.includes("Move Log"));
+
+// RostermaniaHub has release confirmation modal
+check("RostermaniaHub has release confirmation modal", rmHubSource.includes("rm-modal") && rmHubSource.includes("confirmRelease"));
 
 console.log(`\n═══ Rostermania Hub Diagnostic Complete ═══`);
 console.log(`PASSED: ${pass}`);

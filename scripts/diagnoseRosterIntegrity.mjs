@@ -27,5 +27,24 @@ const afterOvr=signState.players.filter(p=>p.teamId===userTeamId).reduce((s,p)=>
 check("Roster integrity passes", getRosterIntegrityProblems(ensureFourPlayerRosters(signState,"ghosts"),"ghosts").length===0);
 const storeSource = (await import("node:fs")).readFileSync(new URL("../src/store/dynastyStore.jsx", import.meta.url), "utf8");
 check("Roster integrity validated before AW season start in Rostermania", storeSource.includes("getRosterIntegrityProblems") && storeSource.includes("CONFIRM_AW_SEASON"));
-check("Rostermania blocks season start if roster incomplete", storeSource.includes("Your roster must have exactly 4 players"));
+check("Rostermania blocks season start if roster incomplete", storeSource.includes("Your roster has") && storeSource.includes("Sign a free agent"));
+
+// ── repairUserTeam: false checks ──
+{
+  // ensureFourPlayerRosters respects repairUserTeam: false
+  const userPlayer = state.players.find(p => p.teamId === userTeamId);
+  let thinUser = { ...state, players: state.players.map(p => p.id === userPlayer.id ? { ...p, teamId: null, previousTeamId: p.teamId, status: "freeAgent", currentStatus: "freeAgent" } : p) };
+  thinUser = ensureFourPlayerRosters(thinUser, "ghosts", { repairUserTeam: false });
+  check("ensureFourPlayerRosters respects repairUserTeam: false", thinUser.players.filter(p => p.teamId === userTeamId).length === 3, `user team has ${thinUser.players.filter(p => p.teamId === userTeamId).length}/4`);
+
+  // AI teams are still repaired when repairUserTeam is false
+  const aiTeamId = state.activeTeams.find(id => id !== userTeamId);
+  const aiPlayer = thinUser.players.find(p => p.teamId === aiTeamId);
+  let brokenAi = { ...thinUser, players: thinUser.players.map(p => p.id === aiPlayer.id ? { ...p, teamId: null, previousTeamId: p.teamId, status: "freeAgent", currentStatus: "freeAgent" } : p) };
+  brokenAi = ensureFourPlayerRosters(brokenAi, "ghosts", { repairUserTeam: false });
+  const aiCount = brokenAi.players.filter(p => p.teamId === aiTeamId).length;
+  const userCount = brokenAi.players.filter(p => p.teamId === userTeamId).length;
+  check("AI teams are still repaired when repairUserTeam is false", aiCount === 4 && userCount === 3, `AI ${aiTeamId}: ${aiCount}/4, user: ${userCount}/4`);
+}
+
 console.log(`\nRoster integrity diagnostic passed (${pass} checks).`);

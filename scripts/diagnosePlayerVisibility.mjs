@@ -30,4 +30,15 @@ for (const p of state.players) if(!awPlayers.some(a=>String(a.name).toLowerCase(
 let aw=ensureFourPlayerRosters({...state,currentEraId:"advanced_warfare",currentGameTitle:"Call of Duty: Advanced Warfare",seasonLabel:"2014/15",teams:AW_TEAMS.map(t=>({...t})),activeTeams:AW_TEAMS.map(t=>t.id),players:awPlayers,freeAgents:awPlayers.filter(p=>!p.teamId),standings:createInitialStandings(AW_TEAMS)},"advanced_warfare");
 aw.playerRegistry=Object.fromEntries(aw.players.map(p=>[p.id,{...p,currentStatus:p.teamId?"active":(p.currentStatus||"free_agent"),currentTeamId:p.teamId||null}]));
 for (const name of ["Crimsix","FormaL","Karma","TeePee"]) check(`${name} has a clear AW transition location`, findPlayerLocation(aw,name).found && findPlayerLocation(aw,name).status!=="missing", findPlayerLocation(aw,name).currentTeamName || findPlayerLocation(aw,name).status);
+
+// ── Released user player appears as free_agent in player search ──
+{
+  const userPlayer = aw.players.find(p => p.teamId === "optic_gaming");
+  let releasedAw = { ...aw, players: aw.players.map(p => p.id === userPlayer.id ? { ...p, teamId: null, status: "free_agent", currentStatus: "free_agent" } : p) };
+  releasedAw.freeAgents = releasedAw.players.filter(p => !p.teamId);
+  releasedAw.playerRegistry = Object.fromEntries(releasedAw.players.map(p => [p.id, { ...p, currentStatus: p.teamId ? "active" : (p.currentStatus || "free_agent"), currentTeamId: p.teamId || null }]));
+  const loc = findPlayerLocation(releasedAw, userPlayer.displayName || userPlayer.name);
+  check("Released user player appears as free_agent in player search", loc.found && loc.status === "free_agent", `${userPlayer.displayName || userPlayer.name}: ${loc.status}`);
+}
+
 console.log(`\nPlayer visibility diagnostic passed (${pass} checks).`);

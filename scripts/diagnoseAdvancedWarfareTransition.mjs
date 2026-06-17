@@ -36,4 +36,18 @@ check("Roster integrity passes after AW transition", getRosterIntegrityProblems(
 const storeSource = (await import("node:fs")).readFileSync(new URL("../src/store/dynastyStore.jsx", import.meta.url), "utf8");
 check("AW transition now passes through Rostermania Hub", storeSource.includes("ENTER_ROSTERMANIA") && storeSource.includes("rostermaniaActive"));
 check("User must confirm AW season start via CONFIRM_AW_SEASON", storeSource.includes("CONFIRM_AW_SEASON") && storeSource.includes("rostermaniaActive: false"));
+
+// ── repairUserTeam: false during AW transition ──
+check("buildAdvancedWarfareTransition uses repairUserTeam: false", storeSource.includes("repairUserTeam: false"));
+
+{
+  // User team can be 3/4 during Rostermania if user releases a player
+  const userPlayer = aw.players.find(p => p.teamId === userTeamId);
+  let rmAw = { ...aw, rostermaniaActive: true, players: aw.players.map(p => p.id === userPlayer.id ? { ...p, teamId: null, previousTeamId: p.teamId, status: "free_agent", currentStatus: "free_agent" } : p) };
+  rmAw.freeAgents = rmAw.players.filter(p => !p.teamId);
+  rmAw = ensureFourPlayerRosters(rmAw, "advanced_warfare", { repairUserTeam: false });
+  const userCount = rmAw.players.filter(p => p.teamId === userTeamId).length;
+  check("User team can be 3/4 during Rostermania if user releases a player", userCount === 3, `user team: ${userCount}/4 after release with repairUserTeam: false`);
+}
+
 console.log(`\nAdvanced Warfare transition diagnostic passed (${pass} checks).`);

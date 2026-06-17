@@ -95,8 +95,9 @@ export function isUserTeamMatch(match, stateOrTeamId) {
   return match.teamA.teamId === userTeamId || match.teamB.teamId === userTeamId;
 }
 
-export function ensureFourPlayerRosters(state, eraId = state?.currentEraId || "ghosts") {
+export function ensureFourPlayerRosters(state, eraId = state?.currentEraId || "ghosts", options = {}) {
   if (!state) return state;
+  const { repairUserTeam = true } = options;
   const activeIds = teamActiveIds(state);
   let players = (state.players || []).map(p => ({ ...p }));
   const diagnostics = [];
@@ -165,6 +166,7 @@ export function ensureFourPlayerRosters(state, eraId = state?.currentEraId || "g
       players = players.map(p => p.teamId === teamId && !keep.has(p.id) ? { ...p, previousTeamId: teamId, teamId: null, status: "freeAgent", currentStatus: "freeAgent", contractYears: 0 } : p);
       diagnostics.push(`${teamId} trimmed to best 4; extras moved to Free Agency`);
     }
+    if (!repairUserTeam && teamId === controlledTeamId) continue;
     while (players.filter(p => p.teamId === teamId).length < REQUIRED_PLAYERS) {
       const fa = players
         .filter(p => {
@@ -173,6 +175,11 @@ export function ensureFourPlayerRosters(state, eraId = state?.currentEraId || "g
           return !players.some(active => active.teamId && activeIds.has(active.teamId) && active.id !== p.id && normalizedIdentity(active) === candidateName);
         })
         .sort((a,b) => {
+          if (!repairUserTeam) {
+            const aProtected = a.userReleasedDuringRostermania ? 1 : 0;
+            const bProtected = b.userReleasedDuringRostermania ? 1 : 0;
+            if (aProtected !== bProtected) return aProtected - bProtected;
+          }
           const sameEra = Number((b.eraId || b.debutEraId) === eraId) - Number((a.eraId || a.debutEraId) === eraId);
           const displaced = Number(Boolean(b.previousTeamId)) - Number(Boolean(a.previousTeamId));
           return sameEra || displaced || (b.overall || 0) - (a.overall || 0);
